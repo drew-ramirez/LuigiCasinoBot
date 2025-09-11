@@ -1,21 +1,82 @@
+###########################################################
+# File: bot.py
+
+# Description: Discord bot entry setup and command routing
+#
+###########################################################
+
+import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-import os
+from economy.bank import Bank
+bank = Bank()
 
+# Load environment variables
 load_dotenv()
-# Read token
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-# Creates bot with slash command support
+# Intents
 intents = discord.Intents.default()
+
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+###########################################################
+# Events
+###########################################################
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} is now running!")
+    # Sync commands
+    synced = await bot.tree.sync()
+    print(f"{bot.user} is online. Synced {len(synced)} command(s).")
+
+###########################################################
+# Commands
+###########################################################
+
+@bot.tree.command(name="ping", description="Check if the bot is alive")
+async def ping(interaction: discord.Interaction):
+    await interaction.response.send_message("Don't Ping Me.", ephemeral=True)
+
+
+@bot.tree.command(name="help", description="Show available commands")
+async def help_cmd(interaction: discord.Interaction):
+    msg = (
+        "``` **LuigiCasinoBot Commands** \n\n"
+        "/ping - Health check\n"
+        "/help - Show this menu\n"
+        "/rules - Show the casino rules\n"
+        "/slot_pull - Spin the slot machine \n"
+        "/pair_start - Start a Pair-a-Gone game \n"
+        "/balance - Check your coin balance\n"
+        "/grant <amount> - Add coins (admin/dev only)\n ```"
+    )
+    # Note: only the user who ran the command sees the message when its Ephmeral
+    await interaction.response.send_message(msg, ephemeral=True)
+
+@bot.tree.command(name="balance", description="Check your coin balance")
+async def balance_cmd(interaction: discord.Interaction):
+    bal = bank.balance(interaction.user.id)
+    await interaction.response.send_message(
+        f"{interaction.user.mention}, your balance is {bal} coins.", 
+        ephemeral=True
+    )
+
+@bot.tree.command(name="grant", description="grant coins")
+async def grant_cmd(interaction: discord.Interaction, amount: int):
+    new_bal = bank.grant(interaction.user.id, amount)
+    await interaction.response.send_message(
+        f"Granted {amount} coins. Your new balance is {new_bal}.", 
+        ephemeral=True
+    )
+
+###########################################################
+# Run Bot
+###########################################################
 
 def run_bot():
+    # Entrypoint for main.py
     if not TOKEN:
         raise RuntimeError("DISCORD_TOKEN not set in environment variables")
     bot.run(TOKEN)
