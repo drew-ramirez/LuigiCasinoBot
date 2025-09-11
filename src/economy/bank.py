@@ -1,3 +1,13 @@
+###########################################################
+# File: bank.py
+#
+# Description: in-memory coin bank for testing economy.
+#
+# Notes:
+# - balances are stored in a dictionary keyed by user_id.
+# - todo: hook up a database later
+###########################################################
+
 class Bank:
     def __init__(self):
         # Store balances keyed by user_id
