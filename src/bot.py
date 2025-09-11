@@ -9,6 +9,8 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+from economy.bank import Bank
+bank = Bank()
 
 # Load environment variables
 load_dotenv()
@@ -35,8 +37,7 @@ async def on_ready():
 
 @bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction):
-    """Basic connectivity check."""
-    await interaction.response.send_message("Pong!", ephemeral=True)
+    await interaction.response.send_message("Don't Ping Me.", ephemeral=True)
 
 
 @bot.tree.command(name="help", description="Show available commands")
@@ -53,6 +54,22 @@ async def help_cmd(interaction: discord.Interaction):
     )
     # Note: only the user who ran the command sees the message when its Ephmeral
     await interaction.response.send_message(msg, ephemeral=True)
+
+@bot.tree.command(name="balance", description="Check your coin balance")
+async def balance_cmd(interaction: discord.Interaction):
+    bal = bank.balance(interaction.user.id)
+    await interaction.response.send_message(
+        f"{interaction.user.mention}, your balance is {bal} coins.", 
+        ephemeral=True
+    )
+
+@bot.tree.command(name="grant", description="grant coins")
+async def grant_cmd(interaction: discord.Interaction, amount: int):
+    new_bal = bank.grant(interaction.user.id, amount)
+    await interaction.response.send_message(
+        f"Granted {amount} coins. Your new balance is {new_bal}.", 
+        ephemeral=True
+    )
 
 ###########################################################
 # Run Bot
