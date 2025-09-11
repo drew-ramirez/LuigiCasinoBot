@@ -7,4 +7,5 @@ if [ -z $PIP ]; then
     exit 1
 fi
 
+# Install dependencies.
 $PIP install -r requirements.txt

@@ -7,4 +7,5 @@ if [ -z $PYTHON ]; then
     exit 1
 fi
 
+# Start main.py.
 $PYTHON src/main.py

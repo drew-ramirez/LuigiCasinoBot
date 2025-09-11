@@ -6,4 +6,5 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
-pip install -r requirements.txt
+:: Install dependencies.
+pip3 install -r requirements.txt

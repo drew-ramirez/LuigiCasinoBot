@@ -6,4 +6,5 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+:: run the program
 python src/main.py
