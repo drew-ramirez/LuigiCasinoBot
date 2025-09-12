@@ -1,6 +1,8 @@
 import os
 from PIL import Image
 
+#Could potentially be used for sheets made with Sprite Sheet Maker for future deck styles
+#As of not probably just depreciated.
 class SpriteSheet:
     def __init__(self, path: str, sprite_width: int, sprite_height: int, num_cols: int):
         if not os.path.exists(path):

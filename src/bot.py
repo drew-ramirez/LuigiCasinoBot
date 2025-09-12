@@ -10,7 +10,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from economy.bank import Bank
-from casinogames.assetloader import load_slots_sheet
+from casinogames.assetloader import load_slots_sheet, load_memory_backs, load_memory_faces
 import io
 
 bank = Bank()
@@ -88,6 +88,32 @@ async def test_sprite(interaction: discord.Interaction, index: int):
     file = discord.File(byte_arr, filename=f"slot_{index}.png")
     await interaction.response.send_message(file=file, ephemeral=True)
 
+@bot.tree.command(name="test_memory", description="Send a memory match card by name")
+async def test_memory(interaction: discord.Interaction, name: str):
+    sheet = load_memory_faces()
+    sprite = sheet.get_face(name.lower())
+
+    byte_arr = io.BytesIO()
+    sprite.save(byte_arr, format="PNG")
+    byte_arr.seek(0)
+
+    file = discord.File(byte_arr, filename=f"memory_{name}.png")
+    await interaction.response.send_message(file=file, ephemeral=True)
+
+
+@bot.tree.command(name="test_back", description="Send a memory facedown stage")
+async def test_back(interaction: discord.Interaction, stage: str):
+    backs = load_memory_backs
+    sprite = backs.get(stage.lower())
+
+    byte_arr = io.BytesIO()
+    sprite.save(byte_arr, format="PNG")
+    byte_arr.seek(0)
+
+    file = discord.File(byte_arr, filename=f"back_{stage}.png")
+    await interaction.response.send_message(file=file, ephemeral=True)
+
+
 ###########################################################
 # Run Bot
 ###########################################################
@@ -97,3 +123,4 @@ def run_bot():
     if not TOKEN:
         raise RuntimeError("DISCORD_TOKEN not set in environment variables")
     bot.run(TOKEN)
+
