@@ -10,7 +10,11 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from economy.bank import Bank
+from casinogames.assetloader import load_slots_sheet
+import io
+
 bank = Bank()
+
 
 # Load environment variables
 load_dotenv()
@@ -70,6 +74,19 @@ async def grant_cmd(interaction: discord.Interaction, amount: int):
         f"Granted {amount} coins. Your new balance is {new_bal}.", 
         ephemeral=True
     )
+
+@bot.tree.command(name="test_sprite", description="Send a test slot icon by index")
+async def test_sprite(interaction: discord.Interaction, index: int):
+    #Send a slot icon by index (0–5).
+    sheet = load_slots_sheet()   # now returns SlotIcons
+    sprite = sheet.get_sprite(index)
+
+    byte_arr = io.BytesIO()
+    sprite.save(byte_arr, format="PNG")
+    byte_arr.seek(0)
+
+    file = discord.File(byte_arr, filename=f"slot_{index}.png")
+    await interaction.response.send_message(file=file, ephemeral=True)
 
 ###########################################################
 # Run Bot
