@@ -89,16 +89,27 @@ async def test_sprite(interaction: discord.Interaction, index: int):
     await interaction.response.send_message(file=file, ephemeral=True)
 
 @bot.tree.command(name="test_memory", description="Send a memory match card by name")
-async def test_memory(interaction: discord.Interaction, name: str):
+async def test_memory(interaction: discord.Interaction, name: str, flip: bool = False):
     sheet = load_memory_faces()
-    sprite = sheet.get_face(name.lower())
+    try:
+        sheet = load_memory_faces()
+        if flip:
+            sprite = sheet.get_flip(name.lower())
+        else:
+            sprite = sheet.get_face(name.lower())
 
-    byte_arr = io.BytesIO()
-    sprite.save(byte_arr, format="PNG")
-    byte_arr.seek(0)
+        byte_arr = io.BytesIO()
+        sprite.save(byte_arr, format="PNG")
+        byte_arr.seek(0)
 
-    file = discord.File(byte_arr, filename=f"memory_{name}.png")
-    await interaction.response.send_message(file=file, ephemeral=True)
+        suffix = "flip" if flip else "face"
+        file = discord.File(byte_arr, filename=f"memory_{name}_{suffix}.png")
+        await interaction.response.send_message(file=file, ephemeral=True)
+    except KeyError:
+        await interaction.response.send_message(
+            f"Unknown memory face: {name}. Valid options: mario, mushroom, goomba, luigi, flower, star, bowser, yoshi, lakitu.",
+            ephemeral=True
+        )
 
 
 @bot.tree.command(name="test_back", description="Send a memory facedown stage")
