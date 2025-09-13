@@ -5,17 +5,36 @@
 #
 ###########################################################
 
+# Standard library
+import asyncio
+import io
 import os
+
+# Third-party
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
-from economy.bank import Bank
-from casinogames.assetloader import load_slots_sheet, load_memory_backs, load_memory_faces
-import io
-import asyncio
 from PIL import Image
+
+# LuigiBot Library
+from economy.bank import Bank
+from casinogames.assetloader import (
+    load_memory_backs,
+    load_memory_faces,
+    load_slots_sheet,
+)
+from casinogames.memorymatch.MemoryMatch import MemoryMatch
+from casinogames.memorymatch.MemoryMatchPrint import (
+    render_board_image,
+    make_flip_gif,
+    make_board_flip_gif,
+    make_board_reverse_flip_gif,
+)
+
 bank = Bank()
 
+memory_games = {}
+memory_messages = {} 
 
 # Load environment variables
 load_dotenv()
@@ -180,6 +199,123 @@ async def flip_demo(interaction: discord.Interaction, name: str):
 
     file = discord.File(byte_arr, filename=f"{name}_flip.gif")
     await interaction.followup.send(file=file, ephemeral=True)
+
+@bot.tree.command(name="memory_start", description="Start a Memory Match game")
+async def memory_start(interaction: discord.Interaction):
+    game = MemoryMatch(interaction.user.id)
+    memory_games[interaction.user.id] = game
+
+    img_bytes = render_board_image(game)
+    file = discord.File(img_bytes, filename="board.png")
+
+    await interaction.response.send_message(
+        f"Memory Match started!\nCoins: {game.remaining_coins}",
+        file=file,
+        ephemeral=True
+    )
+
+    # Save reference to this original board message
+    msg = await interaction.original_response()
+    memory_messages[interaction.user.id] = msg
+
+@bot.tree.command(name="memory_flip", description="Flip a card by position")
+async def memory_flip(interaction: discord.Interaction, pos: int):
+    await interaction.response.send_message("Flipping...", ephemeral=True, delete_after=1)
+    game = memory_games.get(interaction.user.id)
+    board_msg = memory_messages.get(interaction.user.id)
+
+    if not game or not board_msg:
+        await interaction.response.send_message("No game running!", ephemeral=True)
+        return
+
+    if not game.flip_card(pos):
+        await interaction.response.send_message("Invalid flip.", ephemeral=True)
+        return
+
+    symbol, _, _ = game.board[pos]
+
+    # 1. Show board flip animation (only one card animates)
+    gif = make_board_flip_gif(game, pos, symbol, duration=120)
+    gif_file = discord.File(gif, filename=f"board_flip_{pos}.gif")
+    await board_msg.edit(
+        content=f"Coins: {game.remaining_coins}",
+        attachments=[gif_file]
+    )
+
+    # Wait for GIF duration to "finish"
+    await asyncio.sleep(0.6)  # adjust: (frame_count * duration)/1000
+
+    # 2. Update board with card revealed
+    img_bytes = render_board_image(game)
+    png_file = discord.File(img_bytes, filename="board.png")
+    await board_msg.edit(
+        content=f"Coins: {game.remaining_coins}",
+        attachments=[png_file]
+    )
+
+    # 3. If 2 flipped, check match
+    if len(game.revealed) % 2 == 0:
+        matched = game.check_match()
+        if not matched:
+            await asyncio.sleep(1.0)  # let the player see both revealed
+
+            # Run reverse flip gif for both revealed cards
+            a, b = game.revealed[-2], game.revealed[-1]
+            symbols = [game.board[a][0], game.board[b][0]]
+            gif = make_board_reverse_flip_gif(game, [a, b], symbols, duration=120)
+            gif_file = discord.File(gif, filename="board_unflip.gif")
+            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
+
+            await asyncio.sleep(0.6)  # wait for reverse flip to finish
+
+            # Actually hide them in the game state
+            game.hide_unmatched()
+
+            # Update board with final static PNG
+            img_bytes = render_board_image(game)
+            png_file = discord.File(img_bytes, filename="board.png")
+            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+
+@bot.tree.command(name="test_memory_all", description="Show all memory match faces and flips")
+async def test_memory_all(interaction: discord.Interaction):
+    faces = load_memory_faces()
+
+    cards = []
+    labels = []
+
+    # Iterate through all defined faces
+    for name, (col, row) in faces.faces.items():
+        face = faces.get_face(name)
+        flip = faces.get_flip(name)
+        cards.append(face)
+        cards.append(flip)
+        labels.append(f"{name}_face")
+        labels.append(f"{name}_flip")
+
+    # Layout: 2 cols (face | flip)
+    cols = 2
+    rows = len(cards) // cols
+    card_w, card_h = 133, 193  # full card size
+    margin = 10
+
+    canvas_w = cols * (card_w + margin) - margin
+    canvas_h = rows * (card_h + margin) - margin
+
+    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 128, 0, 255))
+
+    for i, sprite in enumerate(cards):
+        col = i % cols
+        row = i // cols
+        x = col * (card_w + margin)
+        y = row * (card_h + margin)
+        canvas.paste(sprite, (x, y), mask=sprite)
+
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    out.seek(0)
+
+    file = discord.File(out, filename="memory_all.png")
+    await interaction.response.send_message(file=file, ephemeral=True)
 
 ###########################################################
 # Run Bot

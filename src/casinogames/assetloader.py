@@ -49,15 +49,17 @@ class MemoryIcons:
         #  mapping of faces to grid positions (col,row)
         # col=0 always full, col=1 flip, col=2 full, col=3 flip
         self.faces = {
-            "mario":   (0, 0),
-            "mushroom":(2, 0),
-            "goomba":  (0, 1),
-            "luigi":   (2, 1),
-            "flower":  (0, 2),
-            "star":    (2, 2),
-            "bowser":  (0, 3),
-            "yoshi":   (2, 3),
-            "lakitu":  (0, 4),
+            "mario":    (0, 0),  
+            "mushroom": (2, 0),  
+            "goomba":   (4, 0),  
+
+            "luigi":    (0, 1),  
+            "flower":   (2, 1), 
+            "star":     (4, 1),  
+
+            "bowser":   (0, 2),  
+            "yoshi":    (2, 2),  
+            "cloud":    (4, 2), 
         }
 
     def _col_x(self, col_index: int) -> int:
