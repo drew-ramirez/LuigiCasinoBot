@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 from economy.bank import Bank
 from casinogames.assetloader import load_slots_sheet, load_memory_backs, load_memory_faces
 import io
-
+import asyncio
+from PIL import Image
 bank = Bank()
 
 
@@ -114,16 +115,71 @@ async def test_memory(interaction: discord.Interaction, name: str, flip: bool = 
 
 @bot.tree.command(name="test_back", description="Send a memory facedown stage")
 async def test_back(interaction: discord.Interaction, stage: str):
-    backs = load_memory_backs
-    sprite = backs.get(stage.lower())
+    # Send a memory back/flip stage (back_full, back_half, back_edge)
+    try:
+        backs = load_memory_backs()
+        sprite = backs.get(stage.lower())
 
+        byte_arr = io.BytesIO()
+        sprite.save(byte_arr, format="PNG")
+        byte_arr.seek(0)
+
+        file = discord.File(byte_arr, filename=f"back_{stage}.png")
+        await interaction.response.send_message(file=file, ephemeral=True)
+    except KeyError:
+        await interaction.response.send_message(
+            #back_full, back_half, back_edge.
+            ephemeral=True
+        )
+
+@bot.tree.command(name="flip_demo", description="Animate a card flipping over")
+async def flip_demo(interaction: discord.Interaction, name: str):
+    # Send an animated GIF of a card flipping one time only hold last frame to prevent loop
+    await interaction.response.defer(ephemeral=True)
+
+    faces = load_memory_faces()
+    backs = load_memory_backs()
+
+    # Sequence: face, flip, back_edge, back_half, back_full
+    sequence = [
+        faces.get_face(name.lower()),
+        faces.get_flip(name.lower()),
+        backs.get("back_edge"),
+        backs.get("back_half"),
+        backs.get("back_full"),
+    ]
+
+    # Centering slim frames and adding background
+    canvas_w, canvas_h = 136, 207
+    normalized = []
+    for frame in sequence:
+        new_img = Image.new("RGBA", (canvas_w, canvas_h), (255, 255, 255, 255))
+        x_offset = (canvas_w - frame.width) // 2
+        y_offset = (canvas_h - frame.height) // 2
+        new_img.paste(frame, (x_offset, y_offset), mask=frame)
+        normalized.append(new_img)
+
+    # This holds the final frame so the loop doesnt occur
+    final_frame = normalized[-1]
+    for _ in range(10):  # 1s hold (10 * 100ms)
+        normalized.append(final_frame)
+
+    # Gif Settings
+    # Best to use gif, since discord bottlenecks message editing or else the "animation"
+    # looks really slow and clunky
     byte_arr = io.BytesIO()
-    sprite.save(byte_arr, format="PNG")
+    normalized[0].save(
+        byte_arr,
+        format="GIF",
+        save_all=True,
+        append_images=normalized[1:],
+        duration=125,  # ms per frame
+        loop=1         # if loop is 0 it goes infinite, 1 = 2 flips,  final_frame above holds it
+    )
     byte_arr.seek(0)
 
-    file = discord.File(byte_arr, filename=f"back_{stage}.png")
-    await interaction.response.send_message(file=file, ephemeral=True)
-
+    file = discord.File(byte_arr, filename=f"{name}_flip.gif")
+    await interaction.followup.send(file=file, ephemeral=True)
 
 ###########################################################
 # Run Bot
