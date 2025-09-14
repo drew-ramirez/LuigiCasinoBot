@@ -26,7 +26,6 @@ from casinogames.assetloader import (
 from casinogames.memorymatch.MemoryMatch import MemoryMatch
 from casinogames.memorymatch.MemoryMatchPrint import (
     render_board_image,
-    make_flip_gif,
     make_board_flip_gif,
     make_board_reverse_flip_gif,
 )
