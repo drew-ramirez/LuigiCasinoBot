@@ -30,10 +30,17 @@ from casinogames.memorymatch.MemoryMatchPrint import (
     make_board_reverse_flip_gif,
 )
 
+from casinogames.memorymatch.MemoryMatchUI import (
+    update_controls_for_match,
+    make_flip_controls,
+    update_controls_for_unmatch,
+) 
+
 bank = Bank()
 
 memory_games = {}
 memory_messages = {} 
+memory_views = {}
 
 # Load environment variables
 load_dotenv()
@@ -207,9 +214,16 @@ async def memory_start(interaction: discord.Interaction):
     img_bytes = render_board_image(game)
     file = discord.File(img_bytes, filename="board.png")
 
+    # Makes button grid
+    viewUpdate = make_flip_controls(len(game.board))
+
+    # store the view so flips can find it later
+    memory_views[interaction.user.id] = viewUpdate
+
     await interaction.response.send_message(
         f"Memory Match started!\nCoins: {game.remaining_coins}",
         file=file,
+        view=viewUpdate, # This is the button UI feature
         ephemeral=True
     )
 
@@ -219,61 +233,7 @@ async def memory_start(interaction: discord.Interaction):
 
 @bot.tree.command(name="memory_flip", description="Flip a card by position")
 async def memory_flip(interaction: discord.Interaction, pos: int):
-    await interaction.response.send_message("Flipping...", ephemeral=True, delete_after=1)
-    game = memory_games.get(interaction.user.id)
-    board_msg = memory_messages.get(interaction.user.id)
-
-    if not game or not board_msg:
-        await interaction.response.send_message("No game running!", ephemeral=True)
-        return
-
-    if not game.flip_card(pos):
-        await interaction.response.send_message("Invalid flip.", ephemeral=True)
-        return
-
-    symbol, _, _ = game.board[pos]
-
-    # 1. Show board flip animation (only one card animates)
-    gif = make_board_flip_gif(game, pos, symbol, duration=120)
-    gif_file = discord.File(gif, filename=f"board_flip_{pos}.gif")
-    await board_msg.edit(
-        content=f"Coins: {game.remaining_coins}",
-        attachments=[gif_file]
-    )
-
-    # Wait for GIF duration to "finish"
-    await asyncio.sleep(0.6)  # adjust: (frame_count * duration)/1000
-
-    # 2. Update board with card revealed
-    img_bytes = render_board_image(game)
-    png_file = discord.File(img_bytes, filename="board.png")
-    await board_msg.edit(
-        content=f"Coins: {game.remaining_coins}",
-        attachments=[png_file]
-    )
-
-    # 3. If 2 flipped, check match
-    if len(game.revealed) % 2 == 0:
-        matched = game.check_match()
-        if not matched:
-            await asyncio.sleep(1.0)  # let the player see both revealed
-
-            # Run reverse flip gif for both revealed cards
-            a, b = game.revealed[-2], game.revealed[-1]
-            symbols = [game.board[a][0], game.board[b][0]]
-            gif = make_board_reverse_flip_gif(game, [a, b], symbols, duration=120)
-            gif_file = discord.File(gif, filename="board_unflip.gif")
-            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
-
-            await asyncio.sleep(0.6)  # wait for reverse flip to finish
-
-            # Actually hide them in the game state
-            game.hide_unmatched()
-
-            # Update board with final static PNG
-            img_bytes = render_board_image(game)
-            png_file = discord.File(img_bytes, filename="board.png")
-            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+    await handle_memory_flip(interaction, pos)
 
 @bot.tree.command(name="test_memory_all", description="Show all memory match faces and flips")
 async def test_memory_all(interaction: discord.Interaction):
@@ -315,6 +275,78 @@ async def test_memory_all(interaction: discord.Interaction):
 
     file = discord.File(out, filename="memory_all.png")
     await interaction.response.send_message(file=file, ephemeral=True)
+
+async def handle_memory_flip(interaction: discord.Interaction, pos: int):
+    game = memory_games.get(interaction.user.id)
+    board_msg = memory_messages.get(interaction.user.id)
+    view = memory_views.get(interaction.user.id)
+    
+    if not game or not board_msg or not view:
+        await interaction.response.send_message("No game running or controls missing!", ephemeral=True)
+        return
+
+    if not game.flip_card(pos):
+        await interaction.response.send_message("Invalid flip.", ephemeral=True)
+        return
+
+    
+    symbol, _, _ = game.board[pos]
+
+    # This disables buttons during animation.
+    for child in view.children:
+        child.disabled = True
+    await board_msg.edit(view=view)
+
+    # 1. Show board flip animation
+    gif = make_board_flip_gif(game, pos, symbol, duration=120)
+    gif_file = discord.File(gif, filename=f"board_flip_{pos}.gif")
+    await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
+
+    await asyncio.sleep(0.6)
+
+    # 2. Update static board
+    img_bytes = render_board_image(game)
+    png_file = discord.File(img_bytes, filename="board.png")
+    await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+
+    # 3. Check match logic
+    if len(game.revealed) % 2 == 0:
+        matched = game.check_match()
+        if not matched:
+            # No match = pause so player sees both
+            await asyncio.sleep(1.0)
+
+            a, b = game.revealed[-2], game.revealed[-1]
+            symbols = [game.board[a][0], game.board[b][0]]
+
+            # Play reverse flip GIF
+            gif = make_board_reverse_flip_gif(game, [a, b], symbols, duration=120)
+            gif_file = discord.File(gif, filename="board_unflip.gif")
+            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
+
+            await asyncio.sleep(0.6)
+
+            # Actually hide them in game state
+            game.hide_unmatched()
+
+            # Update static PNG after hiding
+            img_bytes = render_board_image(game)
+            png_file = discord.File(img_bytes, filename="board.png")
+            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+            await update_controls_for_unmatch(view, [a, b], board_msg)
+
+        else:
+            # Match = mark buttons 
+            await update_controls_for_match(view, game.revealed[-2:], board_msg)
+            
+    # Re-enable all still-active buttons
+    for i, child in enumerate(view.children):
+        if i < len(game.board):
+            symbol, flipped, matched = game.board[i]
+            child.disabled = matched  # keep disabled if matched
+        else:
+            child.disabled = True
+    await board_msg.edit(view=view)
 
 ###########################################################
 # Run Bot
