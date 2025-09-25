@@ -93,6 +93,15 @@ class MemoryMatch:
         self.stars += 1
         self.remaining_coins = self.bet_coins * 2
 
+    def is_board_cleared(self) -> bool:
+    # True if all cards matched
+        return all(m for _, _, m in self.board)
+
+    def next_level(self):
+        # Award star and generate a next board
+        self.award_star()
+        self.generate_board()
+
     def get_slot_rect(self, index: int) -> tuple[int, int, int, int]:
         # Return (x, y, w, h) pixel rect for a card position on the board
         row, col = divmod(index, self.COLS)

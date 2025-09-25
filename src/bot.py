@@ -338,7 +338,22 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
         else:
             # Match = mark buttons 
             await update_controls_for_match(view, game.revealed[-2:], board_msg)
-            
+
+            if game.is_board_cleared():
+                
+                game.next_level()
+
+                # Re-render board for the new level
+                img_bytes = render_board_image(game)
+                png_file = discord.File(img_bytes, filename="board.png")
+                await board_msg.edit(content=f"Board Cleared | Stars: {game.stars} | Coins: {game.remaining_coins}", attachments=[png_file])
+
+                # Resetting controls for the new board size incase it ups
+                new_view = make_flip_controls(len(game.board))
+                memory_views[interaction.user.id] = new_view
+                await board_msg.edit(view=new_view)
+                return
+                
     # Re-enable all still-active buttons
     for i, child in enumerate(view.children):
         if i < len(game.board):
