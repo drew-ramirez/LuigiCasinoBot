@@ -1,7 +1,9 @@
 import os
 from PIL import Image
 
+#now that imports and loaders in subfolders we need to define the base path
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 ASSETS_DIR_SLOTART = os.path.join(BASE_DIR, "assets", "slotart")
 ASSETS_DIR_CARDART = os.path.join(BASE_DIR, "assets", "cardart")
 # -------------------------------

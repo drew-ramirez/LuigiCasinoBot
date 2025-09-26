@@ -36,11 +36,22 @@ from casinogames.memorymatch.MemoryMatchUI import (
     update_controls_for_unmatch,
 ) 
 
+from casinogames.pairagone.PairAGone import PairAGone
+from casinogames.pairagone.PairAGonePrint import render_pair_board
+from casinogames.pairagone.PairAGoneUI import make_pair_controls
+
+
 bank = Bank()
 
+#MemoryMatch Globals
 memory_games = {}
 memory_messages = {} 
 memory_views = {}
+
+#PairAGone Globals
+pair_games = {}
+pair_messages = {}
+pair_views = {}
 
 # Load environment variables
 load_dotenv()
@@ -206,6 +217,16 @@ async def flip_demo(interaction: discord.Interaction, name: str):
     file = discord.File(byte_arr, filename=f"{name}_flip.gif")
     await interaction.followup.send(file=file, ephemeral=True)
 
+##################################################################################
+# MemoryMatch Section
+#
+#   Memory_Start
+#   Memory_flip
+#   test_memory_all
+#   handle_memory_flip
+#
+##################################################################################
+
 @bot.tree.command(name="memory_start", description="Start a Memory Match game")
 async def memory_start(interaction: discord.Interaction):
     game = MemoryMatch(interaction.user.id)
@@ -362,6 +383,107 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
         else:
             child.disabled = True
     await board_msg.edit(view=view)
+
+##################################################################################
+# Pair A Gone Section
+#
+##################################################################################
+@bot.tree.command(name="pair_start", description="Start a Pair-a-Gone game")
+async def pair_start(interaction: discord.Interaction):
+    game = PairAGone(interaction.user.id)
+    pair_games[interaction.user.id] = game
+
+    # Render the starting board
+    img_bytes = render_pair_board(game)
+    file = discord.File(img_bytes, filename="pair_board.png")
+
+    # Build button grid 
+    view = make_pair_controls(game.COLS * game.ROWS, game.COLS)
+    pair_views[interaction.user.id] = view
+
+    await interaction.response.send_message(
+        "Pair-a-Gone started!",
+        file=file,
+        view=view,
+        ephemeral=True
+    )
+
+    # Save reference to the message so flips can edit it
+    msg = await interaction.original_response()
+    pair_messages[interaction.user.id] = msg
+ 
+
+async def handle_pair_flip(interaction: discord.Interaction, pos: int):
+    game = pair_games.get(interaction.user.id)
+    msg = pair_messages.get(interaction.user.id)
+    view = pair_views.get(interaction.user.id)
+
+    if not game or not msg or not view:
+        await interaction.response.send_message("No Pair-a-Gone game running!", ephemeral=True)
+        return
+
+    # Collect selections
+    game.selected.append(pos)
+    if len(game.selected) < 2:
+        return  # wait for second click
+
+    # Two cards chosen capture indexes and reset selection
+    a, b = game.selected
+    game.selected = []
+
+    # Validate a real adjacent match
+    if a == b:
+        await msg.edit(content="❌ Pick two different cards.", view=view)
+        return
+
+    sa, sb = game.board[a], game.board[b]
+    ra, ca = divmod(a, game.COLS)
+    rb, cb = divmod(b, game.COLS)
+    is_adjacent = (abs(ra - rb) <= 1 and abs(ca - cb) <= 1)
+    is_match = (sa == sb and is_adjacent)
+
+    if is_match:
+        # Disable buttons during animation to prevent extra clicks
+        for child in view.children:
+            if hasattr(child, "disabled"):
+                child.disabled = True
+        await msg.edit(view=view)
+
+        from casinogames.pairagone.PairAGonePrint import make_pair_flicker_gif, render_pair_board
+        import asyncio
+
+        # Capture positions & symbols BEFORE any gravity
+        positions = [a, b]
+        symbols = [sa, sb]
+
+        # flicker on the original matched cards
+        gif = make_pair_flicker_gif(game, positions, symbols)  # this function must use the passed symbols
+        gif_file = discord.File(gif, filename="pair_flicker.gif")
+        await msg.edit(content="✅ Match!", attachments=[gif_file], view=view)
+
+        await asyncio.sleep(1.2)  # let flicker fully display
+
+        # gravity (remove + shift + refill)
+        game.remove_and_fall(positions)
+
+        # update static board and re-enable buttons
+        img_bytes = render_pair_board(game)
+        file = discord.File(img_bytes, filename="pair_board.png")
+        for child in view.children:
+            if hasattr(child, "disabled"):
+                child.disabled = False
+        await msg.edit(content="Pair-a-Gone continues", attachments=[file], view=view)
+
+        # End conditions
+        if game.is_board_cleared():
+            await msg.edit(content="Board cleared!", view=None)
+            return
+        if not game.has_possible_moves():
+            await msg.edit(content="❌ Too Bad. No moves left.", view=None)
+            return
+
+    else:
+        await msg.edit(content="❌ No match", view=view)
 
 ###########################################################
 # Run Bot
