@@ -1,8 +1,9 @@
 import os
 from PIL import Image
 
-ASSETS_DIR_SLOTART = os.path.join(os.getcwd(), "src", "assets", "slotart")
-ASSETS_DIR_CARDART = os.path.join(os.getcwd(), "src", "assets", "cardart")
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ASSETS_DIR_SLOTART = os.path.join(BASE_DIR, "assets", "slotart")
+ASSETS_DIR_CARDART = os.path.join(BASE_DIR, "assets", "cardart")
 # -------------------------------
 # Slots loader (vertical)
 # -------------------------------

@@ -1,7 +1,8 @@
 import random
 from typing import List, Tuple
+from casinogames.core.BaseGame import BaseGame
 
-class MemoryMatch:
+class MemoryMatch(BaseGame):
     # Board layout constants
     COLS = 4
     ROWS = 2
@@ -69,7 +70,6 @@ class MemoryMatch:
         sa, _, _ = self.board[a]
         sb, _, _ = self.board[b]
 
-
         # Mark matched
         if sa == sb:
             self.board[a] = (sa, True, True)
@@ -94,17 +94,10 @@ class MemoryMatch:
         self.remaining_coins = self.bet_coins * 2
 
     def is_board_cleared(self) -> bool:
-    # True if all cards matched
+        # True if all cards matched
         return all(m for _, _, m in self.board)
 
     def next_level(self):
         # Award star and generate a next board
         self.award_star()
         self.generate_board()
-
-    def get_slot_rect(self, index: int) -> tuple[int, int, int, int]:
-        # Return (x, y, w, h) pixel rect for a card position on the board
-        row, col = divmod(index, self.COLS)
-        x = self.MARGIN_X + col * (self.CARD_W + self.GAP_X)
-        y = self.MARGIN_Y + row * (self.CARD_H + self.GAP_Y)
-        return x, y, self.CARD_W, self.CARD_H   
