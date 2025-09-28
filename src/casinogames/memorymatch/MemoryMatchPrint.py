@@ -2,6 +2,7 @@ from PIL import Image
 import io
 from casinogames.assetloader import load_memory_faces, load_memory_backs
 from casinogames.memorymatch.MemoryMatch import MemoryMatch
+from casinogames.core.BoardRenderer import render_board
 
 faces = load_memory_faces()
 backs = load_memory_backs()
@@ -9,40 +10,22 @@ backs = load_memory_backs()
 def render_board_image(game, overrides=None) -> io.BytesIO:
     # Render the current board as a single PNG image
     overrides = overrides or {}
-    cards = []
-    for idx, (symbol, flipped, matched) in enumerate(game.board):
+
+    def sprite_resolver(game, idx):
+        symbol, flipped, matched = game.board[idx]
         if idx in overrides:
-            sprite = overrides[idx]
+            return overrides[idx]
         elif matched or flipped:
-            sprite = faces.get_face(symbol)
+            return faces.get_face(symbol)
         else:
-            sprite = backs.get("back_full")
-        cards.append(sprite)
+            return backs.get("back_full")
 
-    cols = game.COLS
-    rows = (len(cards) + cols - 1) // cols
-    canvas_w = cols * (game.CARD_W + game.GAP_X) - game.GAP_X + 2 * game.MARGIN_X
-    canvas_h = rows * (game.CARD_H + game.GAP_Y) - game.GAP_Y + 2 * game.MARGIN_Y
-
-    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 128, 0, 255))  # green bg
-
-    for i, card in enumerate(cards):
-        col = i % cols
-        row = i // cols
-        x = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        y = game.MARGIN_Y + row * (game.CARD_H + game.GAP_Y)
-        canvas.paste(card, (x, y), mask=card)
-
-    out = io.BytesIO()
-    canvas.save(out, format="PNG")
-    out.seek(0)
-    return out
+    return render_board(game, sprite_resolver)
 
 def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO:
     #Build a GIF of the whole board with one slot flipping
 
     # Frames of the flip: back, edge, half, face
-    
     sequence = [
         backs.get("back_full"),
         backs.get("back_half"),
