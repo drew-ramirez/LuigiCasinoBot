@@ -7,6 +7,12 @@ from casinogames.core.BoardRenderer import render_board
 faces = load_memory_faces()
 backs = load_memory_backs()
 
+def _normalize_sprite(sprite: Image.Image, game: MemoryMatch) -> Image.Image:
+    """Ensure any face/back/flip is resized to the game’s card dimensions."""
+    if sprite.size != (game.CARD_W, game.CARD_H):
+        sprite = sprite.resize((game.CARD_W, game.CARD_H), Image.NEAREST)
+    return sprite
+
 def render_board_image(game, overrides=None) -> io.BytesIO:
     # Render the current board as a single PNG image
     overrides = overrides or {}
@@ -14,16 +20,17 @@ def render_board_image(game, overrides=None) -> io.BytesIO:
     def sprite_resolver(game, idx):
         symbol, flipped, matched = game.board[idx]
         if idx in overrides:
-            return overrides[idx]
+            sprite = overrides[idx]
         elif matched or flipped:
-            return faces.get_face(symbol)
+            sprite = faces.get_face(symbol)
         else:
-            return backs.get("back_full")
+            sprite = backs.get("back_full")
+        return _normalize_sprite(sprite, game)   # ✅ resize here
 
     return render_board(game, sprite_resolver)
 
 def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO:
-    #Build a GIF of the whole board with one slot flipping
+    # Build a GIF of the whole board with one slot flipping
 
     # Frames of the flip: back, edge, half, face
     sequence = [
@@ -41,17 +48,17 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO
 
     frames = []
     for frame in sequence:
-        frame = frame.convert("RGBA")
+        frame = _normalize_sprite(frame.convert("RGBA"), game)
 
-        # Normalize frame onto white canvas same size as card
-        norm_frame = Image.new("RGBA", (game.CARD_W, game.CARD_H), (255, 255, 255, 255))
-        x_off = (game.CARD_W - frame.width) // 2
-        y_off = (game.CARD_H - frame.height) // 2
-        norm_frame.paste(frame, (x_off, y_off), mask=frame)
-
-        # Compose on board
+        # Start fresh from base
         board_img = base_board.copy()
-        board_img.paste(norm_frame, (slot_x, slot_y), mask=norm_frame)
+
+        # Blank the slot area (green background) so old images don’t overlap
+        blank = Image.new("RGBA", (slot_w, slot_h), (0, 128, 0, 255))
+        board_img.paste(blank, (slot_x, slot_y))
+
+        # Paste the current frame
+        board_img.paste(frame, (slot_x, slot_y), mask=frame)
         frames.append(board_img)
 
     out = io.BytesIO()
@@ -62,7 +69,7 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO
         append_images=frames[1:],
         duration=duration,
         loop=0,
-        disposal=2,
+        disposal=2,   
         optimize=False,
     )
     out.seek(0)
@@ -91,16 +98,8 @@ def make_board_reverse_flip_gif(game, positions: list[int], symbols: list[str], 
     for frame_idx in range(len(sequences[0])):  # all sequences have same length
         step = base_board.copy()
         for seq, (slot_x, slot_y, slot_w, slot_h) in zip(sequences, rects):
-            raw = seq[frame_idx].convert("RGBA")
-
-            # normalize to CARD_W x CARD_H with white background
-            norm_frame = Image.new("RGBA", (game.CARD_W, game.CARD_H), (255, 255, 255, 255))
-            x_off = (game.CARD_W - raw.width) // 2
-            y_off = (game.CARD_H - raw.height) // 2
-            norm_frame.paste(raw, (x_off, y_off), mask=raw)
-
-            # paste onto board
-            step.paste(norm_frame, (slot_x, slot_y), mask=norm_frame)
+            raw = _normalize_sprite(seq[frame_idx].convert("RGBA"), game)
+            step.paste(raw, (slot_x, slot_y), mask=raw)
         frames.append(step)
 
     W = max(f.width for f in frames)

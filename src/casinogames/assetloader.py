@@ -42,60 +42,57 @@ class MemoryIcons:
             raise FileNotFoundError(f"Memory sheet not found: {path}")
         self.sheet = Image.open(path).convert("RGBA")
 
-        # Heights
-        self.card_height = 193
+       
+        # Columns (x):
+        self.x0 = 7
+        self.full_w = 231  
+        self.flip_w = 121  
+        self.pair_stride = self.full_w + self.flip_w  
 
-        # Widths
-        self.full_width = 133
-        self.flip_width = 67
+        # Rows (y): 
+        self.row_tops = [0, 342, 690]
+        self.row_heights = [342, 690 - 342, 1037 - 690]
 
-        #  mapping of faces to grid positions (col,row)
-        # col=0 always full, col=1 flip, col=2 full, col=3 flip
+        # mapping of faces to grid positions (col,row)
+        # even cols are full, odd cols are flip
         self.faces = {
-            "mario":    (0, 0),  
-            "mushroom": (2, 0),  
-            "goomba":   (4, 0),  
+            "mario":    (0, 0),
+            "mushroom": (2, 0),
+            "goomba":   (4, 0),
 
-            "luigi":    (0, 1),  
-            "flower":   (2, 1), 
-            "star":     (4, 1),  
+            "luigi":    (0, 1),
+            "flower":   (2, 1),
+            "star":     (4, 1),
 
-            "bowser":   (0, 2),  
-            "yoshi":    (2, 2),  
-            "cloud":    (4, 2), 
+            "bowser":   (0, 2),
+            "yoshi":    (2, 2),
+            "cloud":    (4, 2),
         }
 
     def _col_x(self, col_index: int) -> int:
-        # Handles alternating widths (full=133, flip=67)
-        if col_index % 2 == 0:  # full card
-            return (col_index // 2) * (self.full_width + self.flip_width)
-        else:  # flip
-            return ((col_index // 2) * (self.full_width + self.flip_width)) + self.full_width
+        # even col: full 
+        # odd col: flip immediately after the full
+        base = self.x0 + (col_index // 2) * self.pair_stride
+        return base + (self.full_w if (col_index % 2 == 1) else 0)
 
-    def _crop(self, col: int, row: int, is_full: bool):
-        y1 = row * self.card_height
-        y2 = y1 + self.card_height
+    def _crop(self, col: int, row: int, is_full: bool) -> Image.Image:
+        y1 = self.row_tops[row]
+        y2 = y1 + self.row_heights[row]
         x1 = self._col_x(col)
-        if is_full:
-            x2 = x1 + self.full_width
-        else:
-            x2 = x1 + self.flip_width
+        x2 = x1 + (self.full_w if is_full else self.flip_w)
         return self.sheet.crop((x1, y1, x2, y2))
 
-    def get_face(self, name: str):
-        #Return the full card face given name
+    def get_face(self, name: str) -> Image.Image:
         if name not in self.faces:
             raise KeyError(f"Unknown memory face: {name}")
         col, row = self.faces[name]
         return self._crop(col, row, is_full=True)
 
-    def get_flip(self, name: str):
-        #Return the flip animation frame given name
+    def get_flip(self, name: str) -> Image.Image:
         if name not in self.faces:
             raise KeyError(f"Unknown memory face: {name}")
         col, row = self.faces[name]
-        flip_col = col + 1  # flipped is always immediately next to the face
-        return self._crop(flip_col, row, is_full=False)
+        return self._crop(col + 1, row, is_full=False)  # flip is right next to full
     
 class MemoryBacks:
     def __init__(self):
