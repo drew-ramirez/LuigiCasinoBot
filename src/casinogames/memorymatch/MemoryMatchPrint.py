@@ -8,7 +8,7 @@ faces = load_memory_faces()
 backs = load_memory_backs()
 
 def _normalize_sprite(sprite: Image.Image, game: MemoryMatch) -> Image.Image:
-    """Ensure any face/back/flip is resized to the game’s card dimensions."""
+    #face/back/flip is resized to the game’s card dimensions
     if sprite.size != (game.CARD_W, game.CARD_H):
         sprite = sprite.resize((game.CARD_W, game.CARD_H), Image.NEAREST)
     return sprite
@@ -25,11 +25,11 @@ def render_board_image(game, overrides=None) -> io.BytesIO:
             sprite = faces.get_face(symbol)
         else:
             sprite = backs.get("back_full")
-        return _normalize_sprite(sprite, game)   # ✅ resize here
+        return _normalize_sprite(sprite, game)   # resize here
 
     return render_board(game, sprite_resolver)
 
-def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO:
+def make_board_flip_gif(game, pos: int, symbol: str, duration=200) -> io.BytesIO:
     # Build a GIF of the whole board with one slot flipping
 
     # Frames of the flip: back, edge, half, face
@@ -75,8 +75,8 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=120) -> io.BytesIO
     out.seek(0)
     return out
 
-def make_board_reverse_flip_gif(game, positions: list[int], symbols: list[str], duration=120) -> io.BytesIO:
-    # Flip multiple cards back to facedown with white background normalization
+def make_board_reverse_flip_gif(game, positions: list[int], symbols: list[str], duration=200) -> io.BytesIO:
+    # Flip multiple cards back to facedown with green background normalization
     
     sequences = []
     for sym in symbols:
@@ -99,6 +99,12 @@ def make_board_reverse_flip_gif(game, positions: list[int], symbols: list[str], 
         step = base_board.copy()
         for seq, (slot_x, slot_y, slot_w, slot_h) in zip(sequences, rects):
             raw = _normalize_sprite(seq[frame_idx].convert("RGBA"), game)
+
+            # Blank the slot area (green background) so old images don’t overlap
+            blank = Image.new("RGBA", (slot_w, slot_h), (0, 128, 0, 255))
+            step.paste(blank, (slot_x, slot_y))
+
+            # Paste the current frame
             step.paste(raw, (slot_x, slot_y), mask=raw)
         frames.append(step)
 
