@@ -118,3 +118,40 @@ def load_memory_faces():
 
 def load_memory_backs():
     return MemoryBacks()
+
+def _recolor_to_silver(img: Image.Image) -> Image.Image:
+    #Convert a yellow star sprite into silver/gray tones.
+    gray = Image.new("RGBA", img.size)
+    src = img.load()
+    dst = gray.load()
+    for y in range(img.height):
+        for x in range(img.width):
+            r, g, b, a = src[x, y]
+            if a > 0:
+                avg = (r + g + b) // 3
+                dst[x, y] = (avg, avg, avg, a)
+    return gray
+
+
+def load_lucky_assets():
+    #Loads Lucky Stars assets (blank card and silver star) from cards.gif.
+    #Uses the card coords you confirmed work.
+    
+    path = os.path.join(ASSETS_DIR_CARDART, "cards.gif")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Lucky Stars asset sheet not found: {path}")
+
+    sheet = Image.open(path).convert("RGBA")
+    assets = {}
+
+    # --- Blank card front ---
+    blank = sheet.crop((143, 64, 176, 112))
+    assets["blank_full"] = blank.resize((136, 207), Image.NEAREST)
+
+    # --- Star icon (crop then recolor to silver) ---
+    star = sheet.crop((49, 0, 80, 32))
+    #prev sizing, working on dynamic scaling
+    #star = star.resize((32, 32), Image.NEAREST)
+    assets["star"] = _recolor_to_silver(star)
+
+    return assets

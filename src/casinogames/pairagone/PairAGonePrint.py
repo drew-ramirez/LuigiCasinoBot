@@ -20,10 +20,10 @@ def render_pair_board(game: PairAGone) -> io.BytesIO:
 
 # ---------- Render with blanks (for new cards) ----------
 def render_pair_board_with_blanks(game, blanks: list[int]) -> io.BytesIO:
-    """
-    Render the board but force given slots to be solid green blanks.
-    Used right after compaction so new cards don't spawn face-up instantly.
-    """
+    
+    #Render the board but force given slots to be solid green blanks.
+    #Used right after compaction so new cards don't spawn face-up instantly.
+    
     def sprite_resolver(game, idx):
         if idx in blanks:
             return Image.new("RGBA", (game.CARD_W, game.CARD_H), (0, 128, 0, 255))
@@ -75,11 +75,10 @@ def make_pair_flicker_gif(game, positions: list[int], symbols: list[str], durati
 
 # ---------- Dealer flip animation ----------
 def make_deal_flip_gif(game, pos: int, symbol: str, base_board: Image.Image, duration=120) -> io.BytesIO:
-    """
-    Flip a new card on top of the provided base_board.
-    base_board should already have all other slots rendered as you want
-    (e.g. old cards face up, unrevealed new cards green).
-    """
+    
+    #Flip a new card on top of the provided base_board.
+    #base_board should already have all other slots rendered as you want
+    
     from casinogames.assetloader import load_memory_backs
     backs = load_memory_backs()
 

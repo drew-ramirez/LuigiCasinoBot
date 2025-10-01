@@ -40,6 +40,13 @@ from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_controls
 
+from casinogames.luckystars.LuckyStars import LuckyStars
+from casinogames.luckystars.LuckyStarsPrint import render_lucky_board
+from casinogames.luckystars.LuckyStarsUI import (
+    make_lucky_controls,
+    reveal_lucky_cards,
+    disable_left_right_enable_next,
+)
 
 bank = Bank()
 
@@ -52,6 +59,11 @@ memory_views = {}
 pair_games = {}
 pair_messages = {}
 pair_views = {}
+
+# Per-user state for Lucky Stars
+lucky_games: dict[int, LuckyStars] = {}
+lucky_messages: dict[int, discord.Message] = {}
+lucky_views: dict[int, discord.ui.View] = {}
 
 # Load environment variables
 load_dotenv()
@@ -524,6 +536,98 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
     if not game.has_possible_moves():
         await msg.edit(content="❌ Too Bad. No moves left.", view=None)
         return
+
+###########################################################
+# Lucky Stars (Luigi’s Casino)
+###########################################################
+
+
+@bot.tree.command(name="lucky_start", description="Start a Lucky Stars game")
+async def lucky_start(interaction: discord.Interaction):
+    game = LuckyStars()
+    game.deal_round()
+
+    img_bytes = render_lucky_board(game, reveal=False)
+    file = discord.File(img_bytes, filename="lucky.png")
+
+    # Next must be disabled at the start of each round
+    view = make_lucky_controls(on_pick=handle_lucky_pick, on_next=handle_lucky_next, next_enabled=False)
+
+    await interaction.response.send_message(
+        content=f"🎲 Lucky Stars started! You have {game.coins} coins.\nPick a card!",
+        file=file,
+        view=view,
+    )
+    msg = await interaction.original_response()
+    lucky_games[interaction.user.id] = game
+    lucky_messages[interaction.user.id] = msg
+    lucky_views[interaction.user.id] = view
+
+
+async def handle_lucky_pick(interaction: discord.Interaction, pos: int):
+    uid = interaction.user.id
+    game = lucky_games.get(uid)
+    msg = lucky_messages.get(uid)
+    view = lucky_views.get(uid)
+
+    if not game or not msg or not view:
+        await interaction.response.send_message("No Lucky Stars game running!", ephemeral=True)
+        return
+
+    # Immediately freeze L/R and enable Next
+    await interaction.response.defer()  # keeps the interaction alive
+    await disable_left_right_enable_next(view, msg)
+
+    # Play animation and resolve
+    result = await reveal_lucky_cards(game, pos, msg)
+
+    outcome = result["outcome"]
+    coins = result["coins"]
+    if outcome == "win":
+        text = f"✅ You win this round! Coins: {coins}\nPress **Next** to continue."
+    elif outcome == "lose":
+        text = f"❌ You lose this round! Coins: {coins}\nPress **Next** to continue."
+    else:
+        text = f"➖ Tie! Coins: {coins}\nPress **Next** to continue."
+
+    if result["finished"]:
+        text = f"{text}\n\n💀 Game over! You ran out of coins."
+        # Hide Next and fully disable the view
+        for c in view.children:
+            if isinstance(c, discord.ui.Button):
+                c.disabled = True
+        await msg.edit(content=text, view=view)
+        # cleanup
+        lucky_games.pop(uid, None)
+        lucky_messages.pop(uid, None)
+        lucky_views.pop(uid, None)
+    else:
+        await msg.edit(content=text, view=view)
+
+
+async def handle_lucky_next(interaction: discord.Interaction):
+    """Advance to the next round when the user presses Next."""
+    uid = interaction.user.id
+    game = lucky_games.get(uid)
+    msg = lucky_messages.get(uid)
+    old_view = lucky_views.get(uid)
+
+    if not game or not msg or not old_view:
+        await interaction.response.send_message("No Lucky Stars game running!", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+
+    # Deal next round and render the facedown board
+    game.deal_round()
+    img = render_lucky_board(game, reveal=False)
+    file = discord.File(img, filename="lucky.png")
+
+    # Build a fresh view for the new round: L/R enabled, Next disabled
+    new_view = make_lucky_controls(on_pick=handle_lucky_pick, on_next=handle_lucky_next, next_enabled=False)
+    await msg.edit(content=f"Pick again! (Coins: {game.coins})", attachments=[file], view=new_view)
+
+    lucky_views[uid] = new_view
 
 ###########################################################
 # Run Bot

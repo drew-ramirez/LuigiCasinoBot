@@ -9,11 +9,11 @@ import discord
 
 class GridButton(discord.ui.Button):
     def __init__(self, pos: int, cols: int, handler_name: str):
-        """
-        :param pos: Linear position index (0..N-1)
-        :param cols: Number of columns for row calculation
-        :param handler_name: Name of the handler function in bot.py
-        """
+        
+        #:param pos: Linear position index (0..N-1)
+        #:param cols: Number of columns for row calculation
+        #:param handler_name: Name of the handler function in bot.py
+        
         row = pos // cols
         super().__init__(label=str(pos+1), style=discord.ButtonStyle.secondary, row=row)
         self.pos = pos
@@ -30,14 +30,14 @@ class GridButton(discord.ui.Button):
             await handler(interaction, self.pos)
 
 def make_controls(num_cards: int, cols: int, handler_name: str) -> discord.ui.View:
-    """
-    Factory to build a grid of GridButtons.
+    
+    #Factory to build a grid of GridButtons.
 
-    :param num_cards: Number of buttons to create
-    :param cols: Number of columns in the grid
-    :param handler_name: Name of handler function in bot.py
-    :return: discord.ui.View with the grid of buttons
-    """
+    #:param num_cards: Number of buttons to create
+    #:param cols: Number of columns in the grid
+    #:param handler_name: Name of handler function in bot.py
+    #:return: discord.ui.View with the grid of buttons
+    
     view = discord.ui.View(timeout=900)
     for pos in range(num_cards):
         view.add_item(GridButton(pos, cols, handler_name))
