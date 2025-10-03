@@ -10,6 +10,15 @@ from collections import Counter
 class PicturePoker:
     SYMBOLS = ["cloud", "mushroom", "flower", "luigi", "mario", "star"]
 
+    SYMBOL_ORDER = {
+    "cloud": 0,
+    "mushroom": 1,
+    "flower": 2,
+    "luigi": 3,
+    "mario": 4,
+    "star": 5,
+    }
+    
     #hand ranks in order (lowest to highest)
     HAND_RANKS = {
         "junk": 0,
@@ -118,50 +127,76 @@ class PicturePoker:
         return self.HAND_RANKS["junk"], "junk"
 
     def resolve_round(self):
-        #evaluate both hands and assign coins/stars
+        # evaluate both hands and assign coins/stars
         p_val, p_rank = self.evaluate_hand(self.player_hand)
         l_val, l_rank = self.evaluate_hand(self.luigi_hand)
 
         if p_val > l_val:
-            #player wins
+            # player wins
             mult = self.MULTIPLIER.get(p_rank, 0)
             winnings = self.bet * mult
             self.coins += winnings
             self.stars += 1
-            self.result = {"outcome": "win", "player_rank": p_rank, "luigi_rank": l_rank, "coins": self.coins, "stars": self.stars}
+            self.result = {
+                "outcome": "win",
+                "player_rank": p_rank,
+                "luigi_rank": l_rank,
+                "coins": self.coins,
+                "stars": self.stars,
+            }
+
         elif p_val < l_val:
-            #luigi wins
+            # luigi wins
             self.coins -= self.bet
             if self.stars > 0:
                 self.stars -= 1
-            self.result = {"outcome": "lose", "player_rank": p_rank, "luigi_rank": l_rank, "coins": self.coins, "stars": self.stars}
+            self.result = {
+                "outcome": "lose",
+                "player_rank": p_rank,
+                "luigi_rank": l_rank,
+                "coins": self.coins,
+                "stars": self.stars,
+            }
+
         else:
-            #tie returns bet
-            self.result = {"outcome": "tie", "player_rank": p_rank, "luigi_rank": l_rank, "coins": self.coins, "stars": self.stars}
+            # same category tie-break by highest symbol
+            p_high = max(self.SYMBOL_ORDER[c] for c in self.player_hand)
+            l_high = max(self.SYMBOL_ORDER[c] for c in self.luigi_hand)
+
+            if p_high > l_high:
+                mult = self.MULTIPLIER.get(p_rank, 0)
+                winnings = self.bet * mult
+                self.coins += winnings
+                self.stars += 1
+                self.result = {
+                    "outcome": "win",
+                    "player_rank": p_rank,
+                    "luigi_rank": l_rank,
+                    "coins": self.coins,
+                    "stars": self.stars,
+                }
+            elif p_high < l_high:
+                self.coins -= self.bet
+                if self.stars > 0:
+                    self.stars -= 1
+                self.result = {
+                    "outcome": "lose",
+                    "player_rank": p_rank,
+                    "luigi_rank": l_rank,
+                    "coins": self.coins,
+                    "stars": self.stars,
+                }
+            else:
+                # true tie, return bet
+                self.result = {
+                    "outcome": "tie",
+                    "player_rank": p_rank,
+                    "luigi_rank": l_rank,
+                    "coins": self.coins,
+                    "stars": self.stars,
+                }
 
         return self.result
 
     def is_over(self) -> bool:
         return self.coins <= 0
-
-#test suite prob switch to pytest later but for now just terminal
-if __name__ == "__main__":
-    game = PicturePoker(starting_coins=20, starting_stars=0)
-
-    print("=== Starting Picture Poker Test ===")
-    game.start_round()
-    print(f"Round {game.round}, Bet = {game.bet}")
-    print("Player Hand:", game.player_hand)
-    print("Luigi Hand (hidden):", ["??"] * 5)
-
-    #simulate player discards first two cards
-    game.player_discard([0, 1])
-    print("Player Hand after discard:", game.player_hand)
-
-    #simulate luigi redraw
-    game.luigi_discard()
-
-    #resolve outcome
-    result = game.resolve_round()
-    print("Result:", result)
-    print("Game over?", game.is_over())
