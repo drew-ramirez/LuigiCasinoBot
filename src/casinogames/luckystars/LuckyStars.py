@@ -6,10 +6,11 @@
 
 import random
 
+
 class LuckyStars:
     CARD_W = 136
     CARD_H = 207
-    GAP_X = 80
+    GAP_X = 80  # horizontal gap between cards
     GAP_Y = 24
     MARGIN_X = 32
     MARGIN_Y = 32
@@ -19,21 +20,20 @@ class LuckyStars:
         self.reset()
 
     def reset(self):
-        #Reset game state for a fresh session.
+        # reset game state for a fresh session.
         self.coins = self.starting_coins
         self.round = 0
         self.last_result = None
         self.left_card = None
         self.right_card = None
-        self.picked = None   # 0 = left, 1 = right
+        self.picked = None  # 0 = left, 1 = right
         self.finished = False
 
-
     def deal_round(self):
-        
-        #Deal two different cards by drawing from a 1–5 deck
-        #shuffling [1,2,3,4,5] and picking the first two
-        
+
+        # Deal two different cards by drawing from a 1–5 deck
+        # shuffling [1,2,3,4,5] and picking the first two
+
         if self.finished:
             return None, None
 
@@ -48,7 +48,7 @@ class LuckyStars:
         return self.left_card, self.right_card
 
     def pick_card(self, pos: int):
-        #Player picks a card: 0 = left, 1 = right.
+        # Player picks a card: 0 = left, 1 = right.
         if pos not in (0, 1):
             raise ValueError("pos must be 0 or 1 ")
         if self.left_card is None or self.right_card is None:
@@ -56,10 +56,10 @@ class LuckyStars:
         self.picked = pos
 
     def resolve_round(self):
-        
-        #Reveal both cards, update coins, and return outcome.
-        #Returns a dict with details: player_val, dealer_val, coins, outcome
-        
+
+        # Reveal both cards, update coins, and return outcome.
+        # Returns a dict with details: player_val, dealer_val, coins, outcome
+
         if self.picked is None:
             raise RuntimeError("Player must pick a card before resolving.")
 

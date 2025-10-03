@@ -587,8 +587,6 @@ async def handle_lucky_pick(interaction: discord.Interaction, pos: int):
         text = f"✅ You win this round! Coins: {coins}\nPress **Next** to continue."
     elif outcome == "lose":
         text = f"❌ You lose this round! Coins: {coins}\nPress **Next** to continue."
-    else:
-        text = f"➖ Tie! Coins: {coins}\nPress **Next** to continue."
 
     if result["finished"]:
         text = f"{text}\n\n💀 Game over! You ran out of coins."
@@ -606,7 +604,7 @@ async def handle_lucky_pick(interaction: discord.Interaction, pos: int):
 
 
 async def handle_lucky_next(interaction: discord.Interaction):
-    """Advance to the next round when the user presses Next."""
+    #Advance to the next round when the user presses Next.
     uid = interaction.user.id
     game = lucky_games.get(uid)
     msg = lucky_messages.get(uid)
