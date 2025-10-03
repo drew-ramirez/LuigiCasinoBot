@@ -34,24 +34,36 @@ from casinogames.memorymatch.MemoryMatchUI import (
     update_controls_for_match,
     make_flip_controls,
     update_controls_for_unmatch,
-) 
+)
 
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_controls
 
+from casinogames.luckystars.LuckyStars import LuckyStars
+from casinogames.luckystars.LuckyStarsPrint import render_lucky_board
+from casinogames.luckystars.LuckyStarsUI import (
+    make_lucky_controls,
+    reveal_lucky_cards,
+    disable_left_right_enable_next,
+)
 
 bank = Bank()
 
-#MemoryMatch Globals
+# MemoryMatch Globals
 memory_games = {}
-memory_messages = {} 
+memory_messages = {}
 memory_views = {}
 
-#PairAGone Globals
+# PairAGone Globals
 pair_games = {}
 pair_messages = {}
 pair_views = {}
+
+# Per-user state for Lucky Stars
+lucky_games: dict[int, LuckyStars] = {}
+lucky_messages: dict[int, discord.Message] = {}
+lucky_views: dict[int, discord.ui.View] = {}
 
 # Load environment variables
 load_dotenv()
@@ -66,15 +78,18 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Events
 ###########################################################
 
+
 @bot.event
 async def on_ready():
     # Sync commands
     synced = await bot.tree.sync()
     print(f"{bot.user} is online. Synced {len(synced)} command(s).")
 
+
 ###########################################################
 # Commands
 ###########################################################
+
 
 @bot.tree.command(name="ping", description="Check if the bot is alive")
 async def ping(interaction: discord.Interaction):
@@ -96,26 +111,27 @@ async def help_cmd(interaction: discord.Interaction):
     # Note: only the user who ran the command sees the message when its Ephmeral
     await interaction.response.send_message(msg, ephemeral=True)
 
+
 @bot.tree.command(name="balance", description="Check your coin balance")
 async def balance_cmd(interaction: discord.Interaction):
     bal = bank.balance(interaction.user.id)
     await interaction.response.send_message(
-        f"{interaction.user.mention}, your balance is {bal} coins.", 
-        ephemeral=True
+        f"{interaction.user.mention}, your balance is {bal} coins.", ephemeral=True
     )
+
 
 @bot.tree.command(name="grant", description="grant coins")
 async def grant_cmd(interaction: discord.Interaction, amount: int):
     new_bal = bank.grant(interaction.user.id, amount)
     await interaction.response.send_message(
-        f"Granted {amount} coins. Your new balance is {new_bal}.", 
-        ephemeral=True
+        f"Granted {amount} coins. Your new balance is {new_bal}.", ephemeral=True
     )
+
 
 @bot.tree.command(name="test_sprite", description="Send a test slot icon by index")
 async def test_sprite(interaction: discord.Interaction, index: int):
-    #Send a slot icon by index (0–5).
-    sheet = load_slots_sheet()   # now returns SlotIcons
+    # Send a slot icon by index (0–5).
+    sheet = load_slots_sheet()  # now returns SlotIcons
     sprite = sheet.get_sprite(index)
 
     byte_arr = io.BytesIO()
@@ -124,6 +140,7 @@ async def test_sprite(interaction: discord.Interaction, index: int):
 
     file = discord.File(byte_arr, filename=f"slot_{index}.png")
     await interaction.response.send_message(file=file, ephemeral=True)
+
 
 @bot.tree.command(name="test_memory", description="Send a memory match card by name")
 async def test_memory(interaction: discord.Interaction, name: str, flip: bool = False):
@@ -145,7 +162,7 @@ async def test_memory(interaction: discord.Interaction, name: str, flip: bool = 
     except KeyError:
         await interaction.response.send_message(
             f"Unknown memory face: {name}. Valid options: mario, mushroom, goomba, luigi, flower, star, bowser, yoshi, lakitu.",
-            ephemeral=True
+            ephemeral=True,
         )
 
 
@@ -164,9 +181,10 @@ async def test_back(interaction: discord.Interaction, stage: str):
         await interaction.response.send_message(file=file, ephemeral=True)
     except KeyError:
         await interaction.response.send_message(
-            #back_full, back_half, back_edge.
+            # back_full, back_half, back_edge.
             ephemeral=True
         )
+
 
 @bot.tree.command(name="flip_demo", description="Animate a card flipping over")
 async def flip_demo(interaction: discord.Interaction, name: str):
@@ -210,12 +228,13 @@ async def flip_demo(interaction: discord.Interaction, name: str):
         save_all=True,
         append_images=normalized[1:],
         duration=125,  # ms per frame
-        loop=1         # if loop is 0 it goes infinite, 1 = 2 flips,  final_frame above holds it
+        loop=1,  # if loop is 0 it goes infinite, 1 = 2 flips,  final_frame above holds it
     )
     byte_arr.seek(0)
 
     file = discord.File(byte_arr, filename=f"{name}_flip.gif")
     await interaction.followup.send(file=file, ephemeral=True)
+
 
 ##################################################################################
 # MemoryMatch Section
@@ -226,6 +245,7 @@ async def flip_demo(interaction: discord.Interaction, name: str):
 #   handle_memory_flip
 #
 ##################################################################################
+
 
 @bot.tree.command(name="memory_start", description="Start a Memory Match game")
 async def memory_start(interaction: discord.Interaction):
@@ -244,19 +264,23 @@ async def memory_start(interaction: discord.Interaction):
     await interaction.response.send_message(
         f"Memory Match started!\nCoins: {game.remaining_coins}",
         file=file,
-        view=viewUpdate, # This is the button UI feature
-        ephemeral=True
+        view=viewUpdate,  # This is the button UI feature
+        ephemeral=True,
     )
 
     # Save reference to this original board message
     msg = await interaction.original_response()
     memory_messages[interaction.user.id] = msg
 
+
 @bot.tree.command(name="memory_flip", description="Flip a card by position")
 async def memory_flip(interaction: discord.Interaction, pos: int):
     await handle_memory_flip(interaction, pos)
 
-@bot.tree.command(name="test_memory_all", description="Show all memory match faces and flips")
+
+@bot.tree.command(
+    name="test_memory_all", description="Show all memory match faces and flips"
+)
 async def test_memory_all(interaction: discord.Interaction):
     faces = load_memory_faces()
 
@@ -297,20 +321,22 @@ async def test_memory_all(interaction: discord.Interaction):
     file = discord.File(out, filename="memory_all.png")
     await interaction.response.send_message(file=file, ephemeral=True)
 
+
 async def handle_memory_flip(interaction: discord.Interaction, pos: int):
     game = memory_games.get(interaction.user.id)
     board_msg = memory_messages.get(interaction.user.id)
     view = memory_views.get(interaction.user.id)
-    
+
     if not game or not board_msg or not view:
-        await interaction.response.send_message("No game running or controls missing!", ephemeral=True)
+        await interaction.response.send_message(
+            "No game running or controls missing!", ephemeral=True
+        )
         return
 
     if not game.flip_card(pos):
         await interaction.response.send_message("Invalid flip.", ephemeral=True)
         return
 
-    
     symbol, _, _ = game.board[pos]
 
     # This disables buttons during animation.
@@ -321,14 +347,18 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
     # 1. Show board flip animation
     gif = make_board_flip_gif(game, pos, symbol, duration=120)
     gif_file = discord.File(gif, filename=f"board_flip_{pos}.gif")
-    await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
+    await board_msg.edit(
+        content=f"Coins: {game.remaining_coins}", attachments=[gif_file]
+    )
 
     await asyncio.sleep(0.6)
 
     # 2. Update static board
     img_bytes = render_board_image(game)
     png_file = discord.File(img_bytes, filename="board.png")
-    await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+    await board_msg.edit(
+        content=f"Coins: {game.remaining_coins}", attachments=[png_file]
+    )
 
     # 3. Check match logic
     if len(game.revealed) % 2 == 0:
@@ -343,7 +373,9 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
             # Play reverse flip GIF
             gif = make_board_reverse_flip_gif(game, [a, b], symbols, duration=120)
             gif_file = discord.File(gif, filename="board_unflip.gif")
-            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[gif_file])
+            await board_msg.edit(
+                content=f"Coins: {game.remaining_coins}", attachments=[gif_file]
+            )
 
             await asyncio.sleep(0.6)
 
@@ -353,28 +385,33 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
             # Update static PNG after hiding
             img_bytes = render_board_image(game)
             png_file = discord.File(img_bytes, filename="board.png")
-            await board_msg.edit(content=f"Coins: {game.remaining_coins}", attachments=[png_file])
+            await board_msg.edit(
+                content=f"Coins: {game.remaining_coins}", attachments=[png_file]
+            )
             await update_controls_for_unmatch(view, [a, b], board_msg)
 
         else:
-            # Match = mark buttons 
+            # Match = mark buttons
             await update_controls_for_match(view, game.revealed[-2:], board_msg)
 
             if game.is_board_cleared():
-                
+
                 game.next_level()
 
                 # Re-render board for the new level
                 img_bytes = render_board_image(game)
                 png_file = discord.File(img_bytes, filename="board.png")
-                await board_msg.edit(content=f"Board Cleared | Stars: {game.stars} | Coins: {game.remaining_coins}", attachments=[png_file])
+                await board_msg.edit(
+                    content=f"Board Cleared | Stars: {game.stars} | Coins: {game.remaining_coins}",
+                    attachments=[png_file],
+                )
 
                 # Resetting controls for the new board size incase it ups
                 new_view = make_flip_controls(len(game.board))
                 memory_views[interaction.user.id] = new_view
                 await board_msg.edit(view=new_view)
                 return
-                
+
     # Re-enable all still-active buttons
     for i, child in enumerate(view.children):
         if i < len(game.board):
@@ -384,9 +421,12 @@ async def handle_memory_flip(interaction: discord.Interaction, pos: int):
             child.disabled = True
     await board_msg.edit(view=view)
 
+
 ##################################################################################
 # Pair A Gone Section
 #
+#   pair_start
+#   handle_pair_flip
 ##################################################################################
 @bot.tree.command(name="pair_start", description="Start a Pair-a-Gone game")
 async def pair_start(interaction: discord.Interaction):
@@ -397,21 +437,18 @@ async def pair_start(interaction: discord.Interaction):
     img_bytes = render_pair_board(game)
     file = discord.File(img_bytes, filename="pair_board.png")
 
-    # Build button grid 
+    # Build button grid
     view = make_pair_controls(game.COLS * game.ROWS, game.COLS)
     pair_views[interaction.user.id] = view
 
     await interaction.response.send_message(
-        "Pair-a-Gone started!",
-        file=file,
-        view=view,
-        ephemeral=True
+        "Pair-a-Gone started!", file=file, view=view, ephemeral=True
     )
 
     # Save reference to the message so flips can edit it
     msg = await interaction.original_response()
     pair_messages[interaction.user.id] = msg
- 
+
 
 async def handle_pair_flip(interaction: discord.Interaction, pos: int):
     import asyncio
@@ -427,7 +464,9 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
     view = pair_views.get(interaction.user.id)
 
     if not game or not msg or not view:
-        await interaction.response.send_message("No Pair-a-Gone game running!", ephemeral=True)
+        await interaction.response.send_message(
+            "No Pair-a-Gone game running!", ephemeral=True
+        )
         return
 
     # Collect selections
@@ -447,20 +486,20 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
     sa, sb = game.board[a], game.board[b]
     ra, ca = divmod(a, game.COLS)
     rb, cb = divmod(b, game.COLS)
-    is_adjacent = (abs(ra - rb) <= 1 and abs(ca - cb) <= 1)
-    is_match = (sa == sb and is_adjacent)
+    is_adjacent = abs(ra - rb) <= 1 and abs(ca - cb) <= 1
+    is_match = sa == sb and is_adjacent
 
     if not is_match:
         await msg.edit(content="❌ No match!", view=view)
         return
 
-    # ---------- 1) Disable buttons ----------
+    #  1). Disable buttons
     for child in view.children:
         if hasattr(child, "disabled"):
             child.disabled = True
     await msg.edit(view=view)
 
-    # ---------- 2) FLICKER ----------
+    # FLICKER 
     positions = [a, b]
     symbols = [sa, sb]
     flicker_gif = make_pair_flicker_gif(game, positions, symbols, duration=120)
@@ -471,7 +510,7 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
     )
     await asyncio.sleep(1.0)
 
-    # ---------- 3) REMOVE + REFILL ----------
+    # REMOVE & REFILL
     new_cards = game.remove_and_fall(positions)  # [(index, symbol), ...]
 
     # Start with ALL new slots green
@@ -483,17 +522,17 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
         view=view,
     )
 
-# ---------- 4) DEALER FLIP ONE AT A TIME ----------
+    # DEALER FLIP ONE AT A TIME
     revealed = []
     for pos, sym in new_cards:
-        # Blank out all new slots except the ones already revealed
+        #blanks out all new slots except the ones already revealed
         blanks = [p for p, _ in new_cards if p not in revealed and p != pos]
 
-        # Base board: already revealed new cards face up, unrevealed new ones green
+        #base board: already revealed new cards face up, unrevealed new ones green
         img_bytes = render_pair_board_with_blanks(game, blanks)
         base_board = Image.open(img_bytes).convert("RGBA")
 
-        # Build flip on this custom background
+        #build flip on this custom background
         flip_gif = make_deal_flip_gif(game, pos, sym, base_board, duration=120)
         await msg.edit(
             content="Dealer flips a new card...",
@@ -503,7 +542,7 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
         await asyncio.sleep(0.8)
 
         revealed.append(pos)
-    # ---------- 5) STATIC REDRAW ----------
+    # REDRAW CARDS
     final_png = render_pair_board(game)
     await msg.edit(
         content="Pair-a-Gone continues!",
@@ -511,13 +550,13 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
         view=view,
     )
 
-    # Re-enable buttons
+    #re-enable buttons
     for child in view.children:
         if hasattr(child, "disabled"):
             child.disabled = False
     await msg.edit(view=view)
 
-    # ---------- 6) END CONDITIONS ----------
+    #END CONDITIONS
     if game.is_board_cleared():
         await msg.edit(content="🎉 Board cleared!", view=None)
         return
@@ -525,13 +564,118 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
         await msg.edit(content="❌ Too Bad. No moves left.", view=None)
         return
 
+
+###########################################################
+# Lucky Stars (Luigi’s Casino)
+#   lucky_start
+#   handle_lucky_pick
+#   handle_lucky_next
+###########################################################
+
+
+@bot.tree.command(name="lucky_start", description="Start a Lucky Stars game")
+async def lucky_start(interaction: discord.Interaction):
+    game = LuckyStars()
+    game.deal_round()
+
+    img_bytes = render_lucky_board(game, reveal=False)
+    file = discord.File(img_bytes, filename="lucky.png")
+
+    # Next must be disabled at the start of each round
+    view = make_lucky_controls(
+        on_pick=handle_lucky_pick, on_next=handle_lucky_next, next_enabled=False
+    )
+
+    await interaction.response.send_message(
+        content=f"🎲 Lucky Stars started! You have {game.coins} coins.\nPick a card!",
+        file=file,
+        view=view,
+    )
+    msg = await interaction.original_response()
+    lucky_games[interaction.user.id] = game
+    lucky_messages[interaction.user.id] = msg
+    lucky_views[interaction.user.id] = view
+
+
+async def handle_lucky_pick(interaction: discord.Interaction, pos: int):
+    uid = interaction.user.id
+    game = lucky_games.get(uid)
+    msg = lucky_messages.get(uid)
+    view = lucky_views.get(uid)
+
+    if not game or not msg or not view:
+        await interaction.response.send_message(
+            "No Lucky Stars game running!", ephemeral=True
+        )
+        return
+
+    # Immediately freeze L/R and enable Next
+    await interaction.response.defer()  # keeps the interaction alive
+    await disable_left_right_enable_next(view, msg)
+
+    # Play animation and resolve
+    result = await reveal_lucky_cards(game, pos, msg)
+
+    outcome = result["outcome"]
+    coins = result["coins"]
+    if outcome == "win":
+        text = f"✅ You win this round! Coins: {coins}\nPress **Next** to continue."
+    elif outcome == "lose":
+        text = f"❌ You lose this round! Coins: {coins}\nPress **Next** to continue."
+
+    if result["finished"]:
+        text = f"{text}\n\n💀 Game over! You ran out of coins."
+        # Hide Next and fully disable the view
+        for c in view.children:
+            if isinstance(c, discord.ui.Button):
+                c.disabled = True
+        await msg.edit(content=text, view=view)
+        # cleanup
+        lucky_games.pop(uid, None)
+        lucky_messages.pop(uid, None)
+        lucky_views.pop(uid, None)
+    else:
+        await msg.edit(content=text, view=view)
+
+
+async def handle_lucky_next(interaction: discord.Interaction):
+    #Advances to the next round when the user presses Next.
+    uid = interaction.user.id
+    game = lucky_games.get(uid)
+    msg = lucky_messages.get(uid)
+    old_view = lucky_views.get(uid)
+
+    if not game or not msg or not old_view:
+        await interaction.response.send_message(
+            "No Lucky Stars game running!", ephemeral=True
+        )
+        return
+
+    await interaction.response.defer()
+
+    #deal next round and render the facedown board
+    game.deal_round()
+    img = render_lucky_board(game, reveal=False)
+    file = discord.File(img, filename="lucky.png")
+
+    #builds a fresh view for the new round: L/R enabled, Next disabled
+    new_view = make_lucky_controls(
+        on_pick=handle_lucky_pick, on_next=handle_lucky_next, next_enabled=False
+    )
+    await msg.edit(
+        content=f"Pick again! (Coins: {game.coins})", attachments=[file], view=new_view
+    )
+
+    lucky_views[uid] = new_view
+
+
 ###########################################################
 # Run Bot
 ###########################################################
+
 
 def run_bot():
     # Entrypoint for main.py
     if not TOKEN:
         raise RuntimeError("DISCORD_TOKEN not set in environment variables")
     bot.run(TOKEN)
-
