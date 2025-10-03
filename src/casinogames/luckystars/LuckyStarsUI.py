@@ -98,6 +98,5 @@ async def reveal_lucky_cards(
     file = discord.File(gif, filename=f"luckystars_r{game.round}.gif")
     await message.edit(attachments=[file])
 
-    # Immediately compute and return the result; the visual holds on its own
     result = game.resolve_round()
     return result
