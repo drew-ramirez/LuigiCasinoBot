@@ -1,6 +1,7 @@
 import random
 from casinogames.core.BaseGame import BaseGame
 
+
 class PairAGone(BaseGame):
     COLS = 5
     ROWS = 4
@@ -8,10 +9,16 @@ class PairAGone(BaseGame):
     def __init__(self, player_id: int, symbols=None):
         super().__init__(player_id)
         self.symbols = symbols or [
-            "cloud", "mushroom", "flower", "star",
-            "luigi", "mario", "goomba", "bowser"
+            "cloud",
+            "mushroom",
+            "flower",
+            "star",
+            "luigi",
+            "mario",
+            "goomba",
+            "bowser",
         ]
-        self.board = []     # flat list of symbols (len = ROWS * COLS)
+        self.board = []  # flat list of symbols (len = ROWS * COLS)
         self.selected = []
         self.generate_board()
 
@@ -57,13 +64,12 @@ class PairAGone(BaseGame):
         self.board = compacted
         return new_cards  # let caller know where new cards got dealt
 
-
     def is_board_cleared(self):
         return all(v is None for v in self.board)
-    
-    #Game lost checker
+
+    # Game lost checker
     def has_possible_moves(self) -> bool:
-        #Check if any adjacent pair is still possible.
+        # Check if any adjacent pair is still possible.
         for i in range(len(self.board)):
             symbol = self.board[i]
             if not symbol:
