@@ -15,6 +15,7 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from PIL import Image
+from collections import Counter
 
 # LuigiBot Library
 from economy.bank import Bank
@@ -48,6 +49,24 @@ from casinogames.luckystars.LuckyStarsUI import (
     disable_left_right_enable_next,
 )
 
+# Picture Poker
+from casinogames.picturepoker.PicturePoker import PicturePoker
+from casinogames.picturepoker.PicturePokerPrint import (
+    render_board,
+    render_board_with_hidden,
+    make_deal_flip_gif,
+    reveal_final,
+    make_discard_flicker_gif,
+    make_final_reveal_gif,
+)
+from casinogames.picturepoker.PicturePokerUI import (
+    poker_games,
+    poker_messages,
+    poker_views,
+    PokerControls,
+)
+
+
 bank = Bank()
 
 # MemoryMatch Globals
@@ -64,6 +83,11 @@ pair_views = {}
 lucky_games: dict[int, LuckyStars] = {}
 lucky_messages: dict[int, discord.Message] = {}
 lucky_views: dict[int, discord.ui.View] = {}
+
+# track active games for Picture Poker
+poker_games = {}
+poker_messages = {}
+poker_views = {}
 
 # Load environment variables
 load_dotenv()
@@ -564,7 +588,6 @@ async def handle_pair_flip(interaction: discord.Interaction, pos: int):
         await msg.edit(content="❌ Too Bad. No moves left.", view=None)
         return
 
-
 ###########################################################
 # Lucky Stars (Luigi’s Casino)
 #   lucky_start
@@ -668,6 +691,141 @@ async def handle_lucky_next(interaction: discord.Interaction):
 
     lucky_views[uid] = new_view
 
+
+# ----------------------
+# Picture Poker commands
+# ----------------------
+
+@bot.tree.command(name="poker_start", description="Start a Picture Poker game")
+async def poker_start(interaction: discord.Interaction):
+    game = PicturePoker()
+    game.start_round()
+
+    img_bytes = render_board(game, reveal=False)
+    file = discord.File(img_bytes, filename="poker.png")
+
+    await interaction.response.send_message(
+        content=f"🎴 Picture Poker started! Coins: {game.coins}, Stars: {game.stars}\nSelect cards to discard then submit.",
+        file=file,
+    )
+    msg = await interaction.original_response()
+
+    poker_games[interaction.user.id] = game
+    poker_messages[interaction.user.id] = msg
+
+    controls = PokerControls(interaction.user.id)
+    poker_views[interaction.user.id] = controls
+    await msg.edit(view=controls)
+
+
+# ----------------------
+# Discard + Stand logic
+# ----------------------
+
+async def handle_poker_discard(interaction, user_id: int, discards: list[int]):
+    game = poker_games[user_id]
+    msg = poker_messages[user_id]
+    view = poker_views[user_id]
+
+    await interaction.response.defer()
+
+    if not discards:
+        await msg.edit(content="❌ No cards selected to discard.")
+        return
+
+    game.player_discard(discards)
+
+    # A) show facedown
+    img_hidden = render_board_with_hidden(game, hidden_player=discards)
+    await msg.edit(
+        content="Your new cards are dealt facedown...",
+        attachments=[discord.File(img_hidden, "poker.png")],
+        view=view
+    )
+    await asyncio.sleep(0.8)
+
+    # B) flip 1-by-1 and keep them face-up
+    base = Image.open(img_hidden).convert("RGBA")
+    for idx, i in enumerate(discards):
+        symbol = game.player_hand[i]
+
+        gif = make_deal_flip_gif(game, i, symbol, base, dealer=False)
+        await msg.edit(
+            content=f"Flipping your card {i+1}...",
+            attachments=[discord.File(gif, f"player_flip_{i}.gif")],
+            view=view
+        )
+        await asyncio.sleep(0.8)
+
+        # update base with already flipped cards (others still hidden)
+        still_hidden = discards[idx+1:]
+        base = Image.open(
+            render_board_with_hidden(game, hidden_player=still_hidden)
+        ).convert("RGBA")
+
+    # C) disable discard buttons, keep stand
+    for child in view.children:
+        if "Card" in child.label or "submit" in child.label.lower():
+            child.disabled = True
+
+    final_png = render_board(game, reveal=False)
+    await msg.edit(
+        content="Your redraw is complete. Press **Stand** to let Luigi play.",
+        attachments=[discord.File(final_png, "poker.png")],
+        view=view
+    )
+
+
+async def handle_poker_stand(interaction, user_id: int):
+    game = poker_games[user_id]
+    msg = poker_messages[user_id]
+
+    await interaction.response.defer()
+
+    # Luigi logic
+    counts = Counter(game.luigi_hand)
+    keep = {s for s, c in counts.items() if c > 1}
+    luigi_discards = [i for i, c in enumerate(game.luigi_hand) if c not in keep]
+    game.luigi_discard()
+
+    # A) show Luigi’s new cards facedown
+    img_hidden = render_board_with_hidden(game, hidden_dealer=luigi_discards)
+    await msg.edit(
+        content="Luigi discards some cards...",
+        attachments=[discord.File(img_hidden, "poker.png")],
+        view=None
+    )
+    await asyncio.sleep(0.8)
+
+    # B) flicker only (no immediate flip-in for Luigi)
+    base = Image.open(img_hidden).convert("RGBA")
+    for idx, i in enumerate(luigi_discards):
+        flicker_gif = make_discard_flicker_gif(game, i, base, dealer=True)
+        await msg.edit(
+            content=f"Luigi discards card {i+1}...",
+            attachments=[discord.File(flicker_gif, f"luigi_discard_{i}.gif")],
+            view=None
+        )
+        await asyncio.sleep(0.8)
+
+        # keep Luigi's replacement hidden until final reveal
+        still_hidden = luigi_discards[idx+1:]
+        base = Image.open(
+            render_board_with_hidden(game, hidden_dealer=still_hidden)
+        ).convert("RGBA")
+
+    # C) outcome + final reveal
+    result = game.resolve_round()
+    final_gif = make_final_reveal_gif(game)
+    text = (
+        f"Round complete! Outcome: {result['outcome']}\n"
+        f"Coins: {result['coins']} | Stars: {result['stars']}"
+    )
+    await msg.edit(
+        content=text,
+        attachments=[discord.File(final_gif, "final_reveal.gif")],
+        view=None
+    )
 
 ###########################################################
 # Run Bot

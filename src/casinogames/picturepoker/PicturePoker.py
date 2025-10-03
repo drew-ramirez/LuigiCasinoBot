@@ -7,19 +7,26 @@
 import random
 from collections import Counter
 
+
 class PicturePoker:
+    CARD_W = 136
+    CARD_H = 207
+    GAP_X = 24
+    GAP_Y = 24
+    MARGIN_X = 32
+    MARGIN_Y = 32
+
     SYMBOLS = ["cloud", "mushroom", "flower", "luigi", "mario", "star"]
 
     SYMBOL_ORDER = {
-    "cloud": 0,
-    "mushroom": 1,
-    "flower": 2,
-    "luigi": 3,
-    "mario": 4,
-    "star": 5,
+        "cloud": 0,
+        "mushroom": 1,
+        "flower": 2,
+        "luigi": 3,
+        "mario": 4,
+        "star": 5,
     }
-    
-    #hand ranks in order (lowest to highest)
+
     HAND_RANKS = {
         "junk": 0,
         "one_pair": 1,
@@ -27,17 +34,16 @@ class PicturePoker:
         "three_kind": 3,
         "full_house": 4,
         "four_kind": 5,
-        "five_kind": 6
+        "five_kind": 6,
     }
 
-    #multiplier for winnings
     MULTIPLIER = {
         "one_pair": 2,
         "two_pair": 3,
         "three_kind": 4,
         "full_house": 6,
         "four_kind": 8,
-        "five_kind": 16
+        "five_kind": 16,
     }
 
     def __init__(self, starting_coins: int = 20, starting_stars: int = 0):
@@ -46,7 +52,6 @@ class PicturePoker:
         self.reset()
 
     def reset(self):
-        #reset game state
         self.coins = self.starting_coins
         self.stars = self.starting_stars
         self.round = 0
@@ -57,20 +62,17 @@ class PicturePoker:
         self.result = None
 
     def _build_deck(self):
-        #deck has 5 copies of each of the 6 symbols = 30 cards
         self.deck = []
         for sym in self.SYMBOLS:
             self.deck.extend([sym] * 5)
         random.shuffle(self.deck)
 
     def _draw_cards(self, n: int) -> list[str]:
-        #draw n cards from deck
         drawn = self.deck[:n]
         self.deck = self.deck[n:]
         return drawn
 
     def start_round(self):
-        #begin a new round
         self.round += 1
         self._build_deck()
         self.bet = self._min_bet()
@@ -79,16 +81,13 @@ class PicturePoker:
         self.result = None
 
     def _min_bet(self) -> int:
-        #bet increases every 5 stars up to 4
         return min(1 + self.stars // 5, 4)
 
     def increase_bet(self, amount: int):
-        #raise bet if player has enough coins
         if self.coins >= self.bet + amount:
             self.bet += amount
 
     def player_discard(self, indices: list[int]):
-        #discard cards at given indices and replace them
         if not indices:
             return
         for i in indices:
@@ -96,9 +95,9 @@ class PicturePoker:
                 self.player_hand[i] = self._draw_cards(1)[0]
 
     def luigi_discard(self):
-        #very simple dealer: keep the most common symbols, discard others
         counts = Counter(self.luigi_hand)
         keep = set([sym for sym, cnt in counts.items() if cnt > 1])
+
         new_hand = []
         for card in self.luigi_hand:
             if card in keep:
@@ -108,7 +107,6 @@ class PicturePoker:
         self.luigi_hand = new_hand
 
     def evaluate_hand(self, hand: list[str]) -> tuple[int, str]:
-        #return (rank_value, rank_name) for a hand
         counts = Counter(hand).values()
         count_sorted = sorted(counts, reverse=True)
 
@@ -127,12 +125,10 @@ class PicturePoker:
         return self.HAND_RANKS["junk"], "junk"
 
     def resolve_round(self):
-        # evaluate both hands and assign coins/stars
         p_val, p_rank = self.evaluate_hand(self.player_hand)
         l_val, l_rank = self.evaluate_hand(self.luigi_hand)
 
         if p_val > l_val:
-            # player wins
             mult = self.MULTIPLIER.get(p_rank, 0)
             winnings = self.bet * mult
             self.coins += winnings
@@ -146,7 +142,6 @@ class PicturePoker:
             }
 
         elif p_val < l_val:
-            # luigi wins
             self.coins -= self.bet
             if self.stars > 0:
                 self.stars -= 1
@@ -159,7 +154,6 @@ class PicturePoker:
             }
 
         else:
-            # same category tie-break by highest symbol
             p_high = max(self.SYMBOL_ORDER[c] for c in self.player_hand)
             l_high = max(self.SYMBOL_ORDER[c] for c in self.luigi_hand)
 
@@ -187,7 +181,6 @@ class PicturePoker:
                     "stars": self.stars,
                 }
             else:
-                # true tie, return bet
                 self.result = {
                     "outcome": "tie",
                     "player_rank": p_rank,
@@ -197,6 +190,14 @@ class PicturePoker:
                 }
 
         return self.result
+
+    def get_slot_rect(self, pos: int, dealer: bool = False) -> tuple[int, int, int, int]:
+        x = self.MARGIN_X + pos * (self.CARD_W + self.GAP_X)
+        if dealer:
+            y = self.MARGIN_Y
+        else:
+            y = self.MARGIN_Y + self.CARD_H + (self.GAP_Y * 2)
+        return x, y, self.CARD_W, self.CARD_H
 
     def is_over(self) -> bool:
         return self.coins <= 0
