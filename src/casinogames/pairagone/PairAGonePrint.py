@@ -117,7 +117,7 @@ def make_deal_flip_gif(
 
     # padding the last frame so Discord "freezes" instead of looping weirdly
     final_frame = frames[-1]
-    for _ in range(8):  # hold for ~1s
+    for _ in range(8):
         frames.append(final_frame)
 
     out = io.BytesIO()
