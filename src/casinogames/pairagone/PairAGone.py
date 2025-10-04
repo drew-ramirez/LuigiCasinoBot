@@ -1,7 +1,6 @@
 import random
 from casinogames.core.BaseGame import BaseGame
 
-
 class PairAGone(BaseGame):
     COLS = 5
     ROWS = 4
