@@ -62,4 +62,8 @@ async def setup_bot():
 ###########################################################
 
 if __name__ == "__main__":
-    asyncio.run(setup_bot())
+    try:
+        asyncio.run(setup_bot())
+    except KeyboardInterrupt:
+        print("\nLuigiCasinoBot shutting down")
+
