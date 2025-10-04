@@ -68,7 +68,7 @@ class PairControls(discord.ui.View):
         is_match = sa == sb and is_adjacent
 
         if not is_match:
-            await msg.edit(content="❌ No match!", view=self)
+            await msg.edit(content="No match!", view=self)
             return
 
         # disable buttons during animation
@@ -79,7 +79,7 @@ class PairControls(discord.ui.View):
         # flicker animation
         flicker_gif = make_pair_flicker_gif(game, [a, b], [sa, sb], duration=120)
         await msg.edit(
-            content="✅ Match!",
+            content="Match!",
             attachments=[discord.File(flicker_gif, "pair_flicker.gif")],
             view=self,
         )
@@ -126,8 +126,8 @@ class PairControls(discord.ui.View):
 
         # end conditions
         if game.is_board_cleared():
-            await msg.edit(content="🎉 Board cleared!", view=None)
+            await msg.edit(content="Board cleared!", view=None)
             return
         if not game.has_possible_moves():
-            await msg.edit(content="❌ Too Bad. No moves left.", view=None)
+            await msg.edit(content="Too Bad. No moves left.", view=None)
             return

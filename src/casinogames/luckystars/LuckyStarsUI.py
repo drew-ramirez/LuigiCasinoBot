@@ -1,10 +1,11 @@
 ###########################################################
-# File: LuckyStarsUi.py
+# File: LuckyStarsUI.py
 #
-# Description: Discord UI for Lucky Stars game
+# Description: Discord UI controls and animations for Lucky Stars
 ###########################################################
 
 import discord
+import asyncio
 from casinogames.luckystars.LuckyStars import LuckyStars
 from casinogames.luckystars.LuckyStarsPrint import (
     render_lucky_board,
@@ -12,91 +13,106 @@ from casinogames.luckystars.LuckyStarsPrint import (
 )
 
 
-class LuckyControls(discord.ui.View):
+###########################################################
+# lucky stars view
+###########################################################
+class LuckyStarsView(discord.ui.View):
+    def __init__(self, game: LuckyStars, user_id: int, on_next_callback):
+        super().__init__(timeout=None)
+        self.game = game
+        self.user_id = user_id
+        self.on_next_callback = on_next_callback
 
-    # Left / Next / Right buttons
-    # Left/Right call the bot's handle_lucky_pick(interaction, pos)
-    # Next calls the bot's handle_lucky_next(interaction)
+        ###########################################################
+        # left / next / right buttons
+        ###########################################################
+        self.left = LuckyStarsButton("Left", 0)
+        self.right = LuckyStarsButton("Right", 1)
+        self.next_button = LuckyStarsNextButton("Next", on_next_callback)
+        self.next_button.disabled = True  # starts disabled each round
 
-    def __init__(
-        self,
-        on_pick,
-        on_next,
-        next_enabled: bool = False,
-        *,
-        timeout: float | None = 180,
-    ):
-        super().__init__(timeout=timeout)
-        self.on_pick = on_pick  # coroutine (interaction, pos:int)
-        self.on_next = on_next  # coroutine (interaction)
-        # Create buttons in order: Left, Next, Right
-        self.left = discord.ui.Button(
-            label="Left", style=discord.ButtonStyle.secondary, row=0
-        )
-        self.next = discord.ui.Button(
-            label="Next",
-            style=discord.ButtonStyle.primary,
-            row=0,
-            disabled=not next_enabled,
-        )
-        self.right = discord.ui.Button(
-            label="Right", style=discord.ButtonStyle.secondary, row=0
-        )
-        # store helper attrs
-        self.left.pos = 0
-        self.right.pos = 1
-
-        # wire callbacks
-        async def _left_cb(interaction: discord.Interaction):
-            await self.on_pick(interaction, 0)
-
-        async def _right_cb(interaction: discord.Interaction):
-            await self.on_pick(interaction, 1)
-
-        async def _next_cb(interaction: discord.Interaction):
-            await self.on_next(interaction)
-
-        self.left.callback = _left_cb
-        self.right.callback = _right_cb
-        self.next.callback = _next_cb
-
-        # add to view
         self.add_item(self.left)
-        self.add_item(self.next)
+        self.add_item(self.next_button)
         self.add_item(self.right)
 
-
-def make_lucky_controls(
-    on_pick, on_next, *, next_enabled: bool = False
-) -> discord.ui.View:
-    # Factory used by bot.py
-    return LuckyControls(on_pick=on_pick, on_next=on_next, next_enabled=next_enabled)
-
-
-async def disable_left_right_enable_next(
-    view: discord.ui.View, message: discord.Message
-):
-    # After a pick: freeze L/R, enable Next
-    for child in view.children:
-        if isinstance(child, discord.ui.Button):
-            if getattr(child, "pos", None) in (0, 1):
-                child.disabled = True
-            if child.label == "Next":
-                child.disabled = False
-    await message.edit(view=view)
+    ###########################################################
+    # helper: disable L/R and enable Next
+    ###########################################################
+    async def disable_left_right_enable_next(self, message: discord.Message):
+        self.left.disabled = True
+        self.right.disabled = True
+        self.next_button.disabled = False
+        await message.edit(view=self)
 
 
-async def reveal_lucky_cards(
-    game: LuckyStars,
-    picked: int,
-    message: discord.Message,
-    duration: int = 200,
-):
-    game.pick_card(picked)
+###########################################################
+# left/right pick buttons
+###########################################################
+class LuckyStarsButton(discord.ui.Button):
+    def __init__(self, label: str, pos: int):
+        super().__init__(label=label, style=discord.ButtonStyle.secondary, row=0)
+        self.pos = pos
 
-    gif = make_slide_animation(game, duration=duration, tail_hold_ms=2500)
-    file = discord.File(gif, filename=f"luckystars_r{game.round}.gif")
-    await message.edit(attachments=[file])
+    async def callback(self, interaction: discord.Interaction):
+        view: LuckyStarsView = self.view
+        if interaction.user.id != view.user_id:
+            await interaction.response.send_message("Not your game!", ephemeral=True)
+            return
 
-    result = game.resolve_round()
-    return result
+        await interaction.response.defer()
+        msg = await interaction.original_response()
+
+        ###########################################################
+        # disable L/R buttons, enable Next
+        ###########################################################
+        await view.disable_left_right_enable_next(msg)
+
+        ###########################################################
+        # play animation
+        ###########################################################
+        game = view.game
+        game.pick_card(self.pos)
+        gif = make_slide_animation(game, duration=150, tail_hold_ms=2500)
+        await msg.edit(attachments=[discord.File(gif, f"luckystars_r{game.round}.gif")])
+        await asyncio.sleep(0.5)
+
+        ###########################################################
+        # resolve round and show outcome
+        ###########################################################
+        result = game.resolve_round()
+        outcome = result["outcome"]
+        coins = result["coins"]
+
+        if outcome == "win":
+            text = f"You win this round! Coins: {coins}\nPress **Next** to continue."
+        else:
+            text = f"You lose this round! Coins: {coins}\nPress **Next** to continue."
+
+        # handle game over
+        if result["finished"]:
+            text += "\n\nGame over! You ran out of coins."
+            for c in view.children:
+                c.disabled = True
+            await msg.edit(content=text, view=view)
+        else:
+            await msg.edit(content=text, view=view)
+
+
+###########################################################
+# next button
+###########################################################
+class LuckyStarsNextButton(discord.ui.Button):
+    def __init__(self, label: str, on_next_callback):
+        super().__init__(label=label, style=discord.ButtonStyle.success, row=0)
+        self.on_next_callback = on_next_callback
+
+    async def callback(self, interaction: discord.Interaction):
+        await self.on_next_callback(interaction)
+
+
+###########################################################
+# factory
+###########################################################
+def make_lucky_controls(game: LuckyStars, user_id: int, on_next_callback):
+    #factory to create a new LuckyStarsView
+    return LuckyStarsView(game, user_id, on_next_callback)

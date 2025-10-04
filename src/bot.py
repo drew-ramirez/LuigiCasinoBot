@@ -31,7 +31,7 @@ async def on_ready():
     print(f"{bot.user} is online. Synced {len(synced)} command(s).")
 
 ###########################################################
-# ASYNC COG LOADER
+# COG LOADER
 ###########################################################
 
 COGS = [
