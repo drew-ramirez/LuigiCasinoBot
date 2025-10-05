@@ -1,3 +1,7 @@
+###########################################################
+# File: AssetLoader.py
+#
+###########################################################
 import os
 from PIL import Image
 
@@ -80,6 +84,9 @@ class MemoryIcons:
             "yoshi": (2, 2),
             "cloud": (4, 2),
         }
+        
+        self.extras = load_pairagone_extras()
+
 
     def _col_x(self, col_index: int) -> int:
         # even col: full
@@ -100,16 +107,22 @@ class MemoryIcons:
         return face.resize((card_w, card_h), Image.NEAREST)
 
     def get_face(self, name: str) -> Image.Image:
-        if name not in self.faces:
-            raise KeyError(f"Unknown memory face: {name}")
-        col, row = self.faces[name]
-        return self._crop(col, row, is_full=True)
+        if name in self.faces:
+            col, row = self.faces[name]
+            return self._crop(col, row, is_full=True)
+        if f"{name}_full" in self.extras:
+            return self.extras[f"{name}_full"]
+        raise KeyError(f"Unknown memory face: {name}")
+
 
     def get_flip(self, name: str) -> Image.Image:
-        if name not in self.faces:
-            raise KeyError(f"Unknown memory face: {name}")
-        col, row = self.faces[name]
-        return self._crop(col + 1, row, is_full=False)  # flip is right next to full
+        if name in self.faces:
+            col, row = self.faces[name]
+            return self._crop(col + 1, row, is_full=False)
+        if f"{name}_half" in self.extras:
+            return self.extras[f"{name}_half"]
+        raise KeyError(f"Unknown memory flip: {name}")
+
 
 
 class MemoryBacks:
@@ -125,6 +138,9 @@ class MemoryBacks:
             "back_half": (136, 0, 210, 207),
             "back_edge": (210, 0, 240, 207),
         }
+
+        self.extras = load_pairagone_extras()
+
 
     def get(self, stage: str) -> Image.Image:
         if stage not in self.frames:
@@ -176,3 +192,30 @@ def load_lucky_assets():
     assets["star"] = _recolor_to_silver(star)
 
     return assets
+
+###########################################################
+# Pair-a-Gone extras 
+###########################################################
+def load_pairagone_extras():
+    # Loads Pair-a-Gone extras, later other visual indicators if available online
+
+    path = os.path.join(ASSETS_DIR_CARDART, "cards.gif")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Pair-a-Gone extra asset sheet not found: {path}")
+
+    sheet = Image.open(path).convert("RGBA")
+    extras = {}
+
+    boo_full = sheet.crop((80, 32, 111, 64))  # adjust a few px if off
+    extras["boo_full"] = boo_full.resize((136, 207), Image.NEAREST)
+
+    boo_half = sheet.crop((111, 32, 126, 64))
+    extras["boo_half"] = boo_half.resize((136, 207), Image.NEAREST)
+
+    blank_half = sheet.crop((176, 64, 192, 112))
+    extras["blank_half"] = blank_half.resize((136, 207), Image.NEAREST)
+
+    blank_full = sheet.crop((143, 64, 176, 112))
+    extras["blank_full"] = blank_full.resize((136, 207), Image.NEAREST)
+
+    return extras

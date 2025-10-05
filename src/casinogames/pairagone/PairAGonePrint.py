@@ -1,3 +1,8 @@
+###########################################################
+# File: PairAGonePrint.py
+#
+# Description: Rendering & animations for Pair a Gone
+###########################################################
 from PIL import Image
 import io
 from casinogames.assetloader import load_memory_faces, load_memory_backs
@@ -37,17 +42,17 @@ def render_pair_board_with_blanks(game, blanks: list[int]) -> io.BytesIO:
     return render_board(game, sprite_resolver)
 
 
-# ---------- Flicker animation ----------
+# Flicker animation
 def make_pair_flicker_gif(
-    game, positions: list[int], symbols: list[str], duration=150
+    game, positions: list[int], symbols: list[str], duration=60
 ) -> io.BytesIO:
     frames = []
 
     base_bytes = render_pair_board(game)
     base_board = Image.open(base_bytes).convert("RGBA")
 
-    for _ in range(3):  # 3 flicker cycles
-        # visible
+    for _ in range(2):  # only 2 quick flicker cycles 
+        # visible frame
         visible = base_board.copy()
         for pos, sym in zip(positions, symbols):
             slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
@@ -55,11 +60,12 @@ def make_pair_flicker_gif(
             visible.paste(face, (slot_x, slot_y), mask=face)
         frames.append(visible)
 
-        # blanked
+        # blanked frame
         flickered = base_board.copy()
         for pos in positions:
             slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            blank = Image.new("RGBA", (slot_w, slot_h), (0, 128, 0, 255))  # green bg
+
+            blank = Image.new("RGBA", (slot_w, slot_h), (0, 120, 0, 255))
             flickered.paste(blank, (slot_x, slot_y))
         frames.append(flickered)
 
@@ -70,7 +76,7 @@ def make_pair_flicker_gif(
         save_all=True,
         append_images=frames[1:],
         duration=duration,
-        loop=0,  # play once
+        loop=0,
         disposal=2,
         optimize=False,
     )
@@ -117,7 +123,7 @@ def make_deal_flip_gif(
 
     # padding the last frame so Discord "freezes" instead of looping weirdly
     final_frame = frames[-1]
-    for _ in range(8):  # hold for ~1s
+    for _ in range(8):
         frames.append(final_frame)
 
     out = io.BytesIO()
