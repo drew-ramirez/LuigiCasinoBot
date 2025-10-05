@@ -108,9 +108,10 @@ class PicturePokerView(discord.ui.View):
             attachments=[discord.File(img_hidden, "poker.png")],
             view=self,
         )
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(0.6)
 
         # B) flip cards one by one
+        img_hidden.seek(0)
         base = Image.open(img_hidden).convert("RGBA")
         for idx, i in enumerate(discards):
             symbol = self.game.player_hand[i]
@@ -120,12 +121,12 @@ class PicturePokerView(discord.ui.View):
                 attachments=[discord.File(gif, f"flip_{i}.gif")],
                 view=self,
             )
-            await asyncio.sleep(0.8)
+            await asyncio.sleep(0.6)
 
             still_hidden = discards[idx + 1:]
-            base = Image.open(
-                render_board_with_hidden(self.game, hidden_player=still_hidden)
-            ).convert("RGBA")
+            new_bytes = render_board_with_hidden(self.game, hidden_player=still_hidden)
+            new_bytes.seek(0)
+            base = Image.open(new_bytes).convert("RGBA")
 
         # C) disable discard-related buttons
         for child in self.children:
@@ -140,9 +141,17 @@ class PicturePokerView(discord.ui.View):
         )
         self.selected_discards.clear()
 
-    ###########################################################
-    # Stand logic (Luigi plays)
-    ###########################################################
+    #######################################################################
+    # Stand logic (Luigi plays), Keeping Rules Here for quick reference
+    # 
+    # Handles Luigi’s full turn after the player presses “Stand”:
+    #  1. Determines which cards Luigi will discard based on pairs/triples.
+    #  2. Animates the dealer’s discard process with flicker effects.
+    #  3. Resolves the round outcome (win/lose/tie) and updates coins.
+    #  4. Displays the final reveal animation for Luigi’s hand.
+    #  5. Presents replay and quit buttons for the next action.
+    ########################################################################
+
     async def _stand(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
@@ -151,45 +160,69 @@ class PicturePokerView(discord.ui.View):
         await interaction.response.defer()
         msg = await interaction.original_response()
 
-        # Luigi AI
+        # Luigi AI chooses which cards to discard
         counts = Counter(self.game.luigi_hand)
         keep = {s for s, c in counts.items() if c > 1}
         luigi_discards = [i for i, c in enumerate(self.game.luigi_hand) if c not in keep]
         self.game.luigi_discard()
 
-        # A) Luigi facedown cards
+        # Checkpoint 1 Luigi's facedown cards
         img_hidden = render_board_with_hidden(self.game, hidden_dealer=luigi_discards)
         await msg.edit(
             content="Luigi discards some cards...",
             attachments=[discord.File(img_hidden, "poker.png")],
             view=None,
         )
-        await asyncio.sleep(0.8)
+        await asyncio.sleep(0.6)
 
-        # B) Flicker animation for Luigi
-        base = Image.open(img_hidden).convert("RGBA")
+        # Checkpoint 2 Flicker animation for Luigi
+        base_board = Image.open(img_hidden).convert("RGBA")
+
         for idx, i in enumerate(luigi_discards):
-            flicker_gif = make_discard_flicker_gif(self.game, i, base, dealer=True)
+            # build and send flicker animation for each discarded card
+            flicker_gif = make_discard_flicker_gif(self.game, i, base_board, dealer=True)
             await msg.edit(
                 content=f"Luigi discards card {i+1}...",
-                attachments=[discord.File(flicker_gif, f"luigi_discard_{i}.gif")],
+                attachments=[discord.File(flicker_gif, f'luigi_discard_{i}.gif')],
                 view=None,
             )
-            await asyncio.sleep(0.8)
-            still_hidden = luigi_discards[idx + 1:]
-            base = Image.open(
-                render_board_with_hidden(self.game, hidden_dealer=still_hidden)
-            ).convert("RGBA")
+            await asyncio.sleep(0.6)
 
-        # C) Final reveal
-        result = self.game.resolve_round()
+            # update board state for remaining hidden cards
+            if idx < len(luigi_discards) - 1:
+                still_hidden = luigi_discards[idx + 1:]
+                base_board = Image.open(
+                    render_board_with_hidden(self.game, hidden_dealer=still_hidden)
+                ).convert("RGBA")
+
+        await asyncio.sleep(0.3)
+
+        # Checkpoint 3 Final reveal
+        
+        # keeping this for debug purposes 
+        try:
+            result = self.game.resolve_round()
+        except Exception as e:
+            print(f"[ERROR] resolve_round() failed: {e}")
+            return
+
         final_gif = make_final_reveal_gif(self.game)
+        final_gif.seek(0)
+        
+
+        dealer_name = result["luigi_rank"].replace("_", " ").title()
+        player_name = result["player_rank"].replace("_", " ").title()
+        outcome = result["outcome"].upper()
+
         text = (
-            f"Round complete! Outcome: {result['outcome']}\n"
-            f"Coins: {result['coins']} | Stars: {result['stars']}"
+            f"**Round Complete!**\n"
+            f"DEALER: {dealer_name}\n"
+            f"PLAYER: {player_name}\n"
+            f"**Outcome:** {outcome}\n"
+            f"💰 Coins: {result['coins']}"
         )
 
-        # Create "Play Again" and "Quit" buttons
+        # Checkpoint 4 Replay / Quit buttons
         replay_btn = discord.ui.Button(label="Play Again", style=discord.ButtonStyle.green)
         quit_btn = discord.ui.Button(label="Quit", style=discord.ButtonStyle.red)
 
@@ -204,7 +237,7 @@ class PicturePokerView(discord.ui.View):
             new_board = render_board(new_game, reveal=False)
             await msg.edit(
                 content=f"New game started! Coins: {new_game.coins}, Stars: {new_game.stars}\nSelect cards to discard then submit.",
-                attachments=[discord.File(new_board, "poker.png")],
+                attachments=[discord.File(new_board, 'poker.png')],
                 view=new_view,
             )
 
@@ -223,6 +256,7 @@ class PicturePokerView(discord.ui.View):
         replay_view.add_item(replay_btn)
         replay_view.add_item(quit_btn)
 
+        # show final results and reveal Luigi’s hand
         await msg.edit(
             content=text,
             attachments=[discord.File(final_gif, "final_reveal.gif")],

@@ -37,6 +37,17 @@ class PicturePoker:
         "five_kind": 6,
     }
 
+    HAND_NAMES = {
+        "junk": "Junk",
+        "one_pair": "One Pair",
+        "two_pair": "Two Pair",
+        "three_kind": "Three of a Kind",
+        "full_house": "Full House",
+        "four_kind": "Four of a Kind",
+        "five_kind": "Five of a Kind",
+    }
+
+
     MULTIPLIER = {
         "one_pair": 2,
         "two_pair": 3,
@@ -186,10 +197,17 @@ class PicturePoker:
                     "player_rank": p_rank,
                     "luigi_rank": l_rank,
                     "coins": self.coins,
-                    "stars": self.stars,
+                }
+                
+                self.result = {
+                    "outcome": "tie",
+                    "player_rank": p_rank,
+                    "luigi_rank": l_rank,
+                    "coins": self.coins,
                 }
 
         return self.result
+
 
     def get_slot_rect(self, pos: int, dealer: bool = False) -> tuple[int, int, int, int]:
         x = self.MARGIN_X + pos * (self.CARD_W + self.GAP_X)
