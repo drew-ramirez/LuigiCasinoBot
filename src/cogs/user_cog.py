@@ -8,6 +8,7 @@ import discord
 import datetime
 from discord.ext import commands
 from economy.bank import Bank
+from economy.EconomyManager import EconomyManager
 
 bank = Bank()
 
@@ -33,24 +34,45 @@ class UserCog(commands.Cog):
     @discord.app_commands.command(name="profile", description="View your casino profile")
     async def profile(self, interaction: discord.Interaction):
         uid = interaction.user.id
-        bal = bank.balance(uid)
+        username = interaction.user.name
+
+        # ensure user exists or create a new one
+        record = EconomyManager.ensure_user(uid, username)
+        bal = record.get("balance", 0)
+
         # placeholder values — you can later hook in star tracking or per-game stats
-        stars = 0
-        games_played = 0
-        last_game = "—"
+        stars = record.get("stars", 0)
+        games_played = record.get("games_played", 0)
+        last_game = record.get("last_game", "—")
 
         msg = (
             f"🎩 **{interaction.user.display_name}'s Casino Profile**\n"
             f"💰 Coins: {bal}\n"
             f"⭐ Stars: {stars}\n"
             f"🎮 Games Played: {games_played}\n"
-            f"🏆 Last Game: {last_game}\n"
         )
         await interaction.response.send_message(msg, ephemeral=True)
+
+
+    @discord.app_commands.command(name="balance", description="Check your casino balance.")
+    async def balance(self, interaction: discord.Interaction):
+        user = interaction.user
+        user_id = user.id
+        username = user.name
+
+        record = EconomyManager.ensure_user(user_id, username)
+        balance = record.get("balance", 0)
+
+        await interaction.response.send_message(
+            f"{user.mention}, your current balance is **{balance} coins**.",
+            ephemeral=True
+        )
+
 
     @discord.app_commands.command(name="daily", description="Claim your daily coin bonus")
     async def daily(self, interaction: discord.Interaction):
         uid = interaction.user.id
+        username = interaction.user.name
         now = datetime.datetime.utcnow()
         last_claim = self.last_daily_claim.get(uid)
 
@@ -67,7 +89,7 @@ class UserCog(commands.Cog):
 
         # grant reward
         reward = 50
-        bank.grant(uid, reward)
+        EconomyManager.grant(uid, reward, username)
         self.last_daily_claim[uid] = now
 
         await interaction.response.send_message(
@@ -78,13 +100,10 @@ class UserCog(commands.Cog):
 
     @discord.app_commands.command(name="leaderboard", description="Show top casino players by coin balance")
     async def leaderboard(self, interaction: discord.Interaction):
-        # assume bank._balances is a dict {user_id: coins}
-        # you can replace this with a proper database call later
-        try:
-            top_players = sorted(
-                bank._balances.items(), key=lambda kv: kv[1], reverse=True
-            )[:10]
-        except AttributeError:
+        # pull leaderboard data from Mongo instead of in-memory
+        users = list(EconomyManager.COLLECTION.find().sort("balance", -1).limit(10))
+
+        if not users:
             await interaction.response.send_message(
                 "No leaderboard data available yet.", ephemeral=True
             )
@@ -96,9 +115,11 @@ class UserCog(commands.Cog):
             color=discord.Color.gold(),
         )
 
-        for i, (uid, coins) in enumerate(top_players, start=1):
+        for i, record in enumerate(users, start=1):
+            uid = record.get("user_id")
+            coins = record.get("balance", 0)
             user = self.bot.get_user(uid)
-            name = user.display_name if user else f"User {uid}"
+            name = user.display_name if user else record.get("username", f"User {uid}")
             embed.add_field(name=f"#{i} {name}", value=f"💰 {coins} coins", inline=False)
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -117,12 +138,7 @@ class UserCog(commands.Cog):
             "/memory_start - play Memory Match (match pairs to earn coins)\n"
             "/pair_start - play Pair-a-Gone (clear the board by matching adjacent pairs)\n"
             "/lucky_start - play Lucky Stars (pick cards, test your luck)\n"
-            "/poker_start - play Picture Poker (beat Luigi’s hand)\n\n"
-            "## 🏦 Tips\n"
-            "- earn stars by clearing boards and winning rounds.\n"
-            "- use coins to join higher-stake games in the future.\n"
-            "- daily rewards keep you rolling even if you lose a few rounds.\n"
-            "- stay lucky, and don’t let Luigi bluff you twice!\n"
+            "/poker_start - play Picture Poker (beat Luigi’s hand)\n"
             "```"
         )
         await interaction.response.send_message(msg, ephemeral=True)
