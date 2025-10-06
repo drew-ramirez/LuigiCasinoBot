@@ -98,15 +98,17 @@ class PicturePokerCog(commands.Cog):
         # user for bet selection
         balance = EconomyManager.balance(user_id, username)
 
-        view = BetSelectView(user_id, username, on_bet_selected, min_bet=1, max_bet=5)
+        view = BetSelectView(user_id, username, on_bet_selected, wager_options=[1, 5, 10, 25, 50, 100, 150, 200, 250, 500])
 
         await responder(
             content=(
                 f"╔═════════════════════════╗\n"
                 f"🎰 Luigi’s Casino — Picture Poker\n"
+                f" ══════════════════════════\n"
                 f"💰 Balance: {balance:,} coins\n"
-                f"╚═════════════════════════╝\n\n"
-                f"Select your wager amount to begin:"
+                f" ══════════════════════════\n"
+                f"Select your wager amount to begin:\n"
+                f"╚═════════════════════════╝\n"
             ),
             view=view,
             ephemeral=True,

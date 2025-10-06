@@ -1,4 +1,4 @@
-###########################################################
+﻿###########################################################
 # File: bet_selector.py
 #
 # Description: Universal bet selection UI for all Luigi's Casino games.
@@ -10,19 +10,44 @@ from economy.EconomyManager import EconomyManager
 
 
 class BetSelectView(discord.ui.View):
-    """Reusable wager selection view for casino games."""
+    #Reusable wager selection view for casino games.
 
-    def __init__(self, user_id: int, username: str, on_bet_selected, min_bet: int = 1, max_bet: int = 5):
+    def __init__(
+        self,
+        user_id: int,
+        username: str,
+        on_bet_selected,
+        min_bet: int = 1,
+        max_bet: int = 5,
+        wager_options: list[int] | None = None,
+    ):
         super().__init__(timeout=30)
         self.user_id = user_id
         self.username = username
         self.on_bet_selected = on_bet_selected
 
-        for amount in range(min_bet, max_bet + 1):
+        amounts: list[int] = []
+        if wager_options:
+            for value in wager_options:
+                try:
+                    amount = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if amount <= 0 or amount in amounts:
+                    continue
+                amounts.append(amount)
+        else:
+            amounts = list(range(min_bet, max_bet + 1))
+
+        if not amounts:
+            amounts = [min_bet]
+
+        for idx, amount in enumerate(amounts):
             button = discord.ui.Button(
                 label=f"Bet {amount}",
                 style=discord.ButtonStyle.green,
-                custom_id=f"bet_{amount}"
+                custom_id=f"bet_{amount}",
+                row=idx // 5,
             )
             button.callback = self._make_bet_callback(amount)
             self.add_item(button)
