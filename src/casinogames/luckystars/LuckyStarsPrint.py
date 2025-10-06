@@ -179,20 +179,19 @@ def make_slide_animation(
     frames.extend([final_frame] * hold_frames)
 
     out = io.BytesIO()
-    loop_extra = 1
     frames[0].save(
         out,
         format="GIF",
         save_all=True,
         append_images=frames[1:],
         duration=duration,
-        loop=loop_extra,
+        loop=0,
         disposal=2,
         optimize=False,
     )
     out.seek(0)
 
-    total_ms = duration * len(frames) * (loop_extra + 1)
+    total_ms = duration * len(frames)
     return out, total_ms / 1000.0
 
 

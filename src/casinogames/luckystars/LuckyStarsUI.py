@@ -54,7 +54,7 @@ class LuckyStarsView(discord.ui.View):
         self.add_item(self.right_button)
 
     ###########################################################
-    # Helpers
+    # helpers
     ###########################################################
     def _header(self, action: str | None = None) -> str:
         stats = {
@@ -84,7 +84,7 @@ class LuckyStarsView(discord.ui.View):
             await self.msg.edit(view=self)
 
     ###########################################################
-    # Main selection flow
+    # main selection flow
     ###########################################################
     async def handle_pick(self, interaction: discord.Interaction, pos: int):
         if interaction.user.id != self.player.id:
@@ -101,14 +101,14 @@ class LuckyStarsView(discord.ui.View):
         self.game.pick_card(pos)
         await self._disable_buttons()
 
-        gif, total_seconds = make_slide_animation(self.game, duration=150, tail_hold_ms=1200)
+        gif, total_seconds = make_slide_animation(self.game, duration=90, tail_hold_ms=1200)
         gif.seek(0)
         await msg.edit(
             content=self._header("Cards sliding into place..."),
             attachments=[discord.File(gif, f"luckystars_round{self.game.round}.gif")],
             view=self,
         )
-        await asyncio.sleep(total_seconds)
+        await asyncio.sleep(3)
 
         result = self.game.resolve_round()
         player_val = result["player_val"]
@@ -122,9 +122,9 @@ class LuckyStarsView(discord.ui.View):
         if outcome == "win":
             payout = self.game.bet * 2
             EconomyManager.payout(self.player.id, payout, self.player.name)
-            summary += f" You win {payout} coins!"
+            summary += f"  You win {payout} coins!"
         else:
-            summary += " You lose this round."
+            summary += "  You lose this round."
 
         await msg.edit(
             content=self._header(summary),
@@ -135,7 +135,7 @@ class LuckyStarsView(discord.ui.View):
         await self._show_replay(summary)
 
     ###########################################################
-    # Replay / quit menu
+    # replay / quit menu
     ###########################################################
     async def _show_replay(self, summary: str):
         if self.on_finish is not None:
