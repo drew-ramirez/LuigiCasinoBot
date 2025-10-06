@@ -1,7 +1,7 @@
-###########################################################
+﻿###########################################################
 # File: PairAGone.py
 #
-# Description: Game logic for Luigi’s Casino Pair-a-Gone
+# Description: Game logic for Luigiâ€™s Casino Pair-a-Gone
 ###########################################################
 
 import random
@@ -16,8 +16,9 @@ class PairAGone(BaseGame):
     EXTRA_SYMBOLS = ["goomba", "bowser", "boo", "yoshi"]
     STAR_THRESHOLDS = [1, 3, 5, 7]  # star milestones to unlock extra symbols
 
-    def __init__(self, player_id: int):
+    def __init__(self, player_id: int, bet: int):
         super().__init__(player_id)
+        self.bet = max(1, bet)
 
         # progression state
         self.stars = 0
