@@ -18,6 +18,7 @@ from casinogames.picturepoker.PicturePokerPrint import (
     make_discard_flicker_gif,
     make_final_reveal_gif,
 )
+from utils.bet_selector import DEFAULT_WAGER_OPTIONS, BetSelectView
 from utils.ui_embeds import make_game_header
 from economy.EconomyManager import EconomyManager
 
@@ -38,12 +39,21 @@ def format_round_summary(result, delta_symbol=""):
 # Picture Poker View
 ###########################################################
 class PicturePokerView(discord.ui.View):
-    def __init__(self, game: PicturePoker, user_id: int, on_finish):
+    def __init__(
+        self,
+        game: PicturePoker,
+        user_id: int,
+        on_finish,
+        wager_options=None,
+        start_game_callback=None,
+    ):
         super().__init__(timeout=None)
         self.game = game
         self.user_id = user_id
         self.selected_discards = set()
         self.on_finish = on_finish  # callback to Cog cleanup/restart
+        self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
+        self.start_game_callback = start_game_callback
 
         ###########################################################
         # Card toggle buttons
@@ -85,7 +95,9 @@ class PicturePokerView(discord.ui.View):
     def _make_toggle(self, idx: int, btn: discord.ui.Button):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.user_id:
-                await interaction.response.send_message("Not your game!", ephemeral=True)
+                await interaction.response.send_message(
+                    "Not your game!", ephemeral=True
+                )
                 return
 
             if idx in self.selected_discards:
@@ -168,7 +180,9 @@ class PicturePokerView(discord.ui.View):
 
         final_png = render_board(self.game, reveal=False)
         stats = base_stats(
-            {"dealer_action": "Your redraw is complete.\n Press **Stand** to let Luigi play."}
+            {
+                "dealer_action": "Your redraw is complete.\n Press **Stand** to let Luigi play."
+            }
         )
         await msg.edit(
             content=make_game_header(interaction.user, "Picture Poker", stats),
@@ -200,7 +214,9 @@ class PicturePokerView(discord.ui.View):
         # Luigi discards
         counts = Counter(self.game.luigi_hand)
         keep = {s for s, c in counts.items() if c > 1}
-        luigi_discards = [i for i, c in enumerate(self.game.luigi_hand) if c not in keep]
+        luigi_discards = [
+            i for i, c in enumerate(self.game.luigi_hand) if c not in keep
+        ]
         self.game.luigi_discard()
 
         # A) Luigi's facedown cards
@@ -216,7 +232,9 @@ class PicturePokerView(discord.ui.View):
         # B) Flicker animation
         base_board = Image.open(img_hidden).convert("RGBA")
         for idx, i in enumerate(luigi_discards):
-            flicker_gif = make_discard_flicker_gif(self.game, i, base_board, dealer=True)
+            flicker_gif = make_discard_flicker_gif(
+                self.game, i, base_board, dealer=True
+            )
             stats = base_stats({"dealer_action": f"Luigi discards card {i+1}..."})
             await msg.edit(
                 content=make_game_header(interaction.user, "Picture Poker", stats),
@@ -275,7 +293,9 @@ class PicturePokerView(discord.ui.View):
         )
 
         # D) Replay / Quit buttons
-        replay_btn = discord.ui.Button(label="Play Again", style=discord.ButtonStyle.green)
+        replay_btn = discord.ui.Button(
+            label="Play Again", style=discord.ButtonStyle.green
+        )
         quit_btn = discord.ui.Button(label="Quit", style=discord.ButtonStyle.red)
 
         async def replay_cb(btn_inter: discord.Interaction):
@@ -283,21 +303,33 @@ class PicturePokerView(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            new_game = PicturePoker()
-            new_game.start_round()
-            new_view = PicturePokerView(new_game, self.user_id, self.on_finish)
-            new_board = render_board(new_game, reveal=False)
 
-            stats = {
-                "active_bet": new_game.bet,
-                "stars_current": new_game.stars,
-            }
+            def make_wager_callback():
+                new_game = PicturePoker()
 
-            await msg.edit(
-                content=make_game_header(btn_inter.user, "Picture Poker", stats),
-                attachments=[discord.File(new_board, "poker.png")],
-                view=new_view,
+                async def on_bet_selected(
+                    inner_inter: discord.Interaction, bet_amount: int
+                ):
+                    if self.start_game_callback is None:
+                        await inner_inter.response.send_message(
+                            "Unable to start new game right now.", ephemeral=True
+                        )
+                        return
+
+                    await self.start_game_callback(
+                        inner_inter, bet_amount, new_game=new_game
+                    )
+
+                return on_bet_selected
+
+            wager_view = BetSelectView(
+                self.user_id,
+                btn_inter.user.name,
+                make_wager_callback(),
+                wager_options=self.wager_options,
             )
+
+            await msg.edit(view=wager_view)
 
         async def quit_cb(btn_inter: discord.Interaction):
             if btn_inter.user.id != self.user_id:
@@ -328,5 +360,17 @@ class PicturePokerView(discord.ui.View):
 ###########################################################
 # Factory
 ###########################################################
-def make_poker_view(game: PicturePoker, user_id: int, on_finish) -> PicturePokerView:
-    return PicturePokerView(game, user_id, on_finish)
+def make_poker_view(
+    game: PicturePoker,
+    user_id: int,
+    on_finish,
+    wager_options=None,
+    start_game_callback=None,
+) -> PicturePokerView:
+    return PicturePokerView(
+        game,
+        user_id,
+        on_finish,
+        wager_options=wager_options,
+        start_game_callback=start_game_callback,
+    )

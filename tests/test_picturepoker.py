@@ -1,10 +1,15 @@
-﻿import pytest # type: ignore
+﻿import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+
+import pytest # type: ignore
 from casinogames.picturepoker.PicturePoker import PicturePoker
 
 #basic fixture to start a fresh game
 @pytest.fixture
 def game():
-    return PicturePoker(starting_coins=20, starting_stars=0)
+    return PicturePoker(starting_stars=0)
 
 def test_start_round_deals_cards(game):
     game.start_round()

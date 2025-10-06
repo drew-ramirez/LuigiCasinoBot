@@ -8,6 +8,7 @@
 import discord
 from economy.EconomyManager import EconomyManager
 
+DEFAULT_WAGER_OPTIONS = [5, 10, 25, 50, 100]
 
 class BetSelectView(discord.ui.View):
     #Reusable wager selection view for casino games.
@@ -26,8 +27,10 @@ class BetSelectView(discord.ui.View):
         self.username = username
         self.on_bet_selected = on_bet_selected
 
-        amounts: list[int] = []
-        if wager_options:
+        if wager_options is None:
+            amounts = list(range(min_bet, max_bet + 1))
+        else:
+            amounts = []
             for value in wager_options:
                 try:
                     amount = int(value)
@@ -36,11 +39,9 @@ class BetSelectView(discord.ui.View):
                 if amount <= 0 or amount in amounts:
                     continue
                 amounts.append(amount)
-        else:
-            amounts = list(range(min_bet, max_bet + 1))
 
         if not amounts:
-            amounts = [min_bet]
+            amounts = list(DEFAULT_WAGER_OPTIONS)
 
         for idx, amount in enumerate(amounts):
             button = discord.ui.Button(

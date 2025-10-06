@@ -1,4 +1,4 @@
-###########################################################
+﻿###########################################################
 # File: test_cog.py
 #
 # Description: Dev test and sprite visualization tools
@@ -33,7 +33,7 @@ class TestCog(commands.Cog):
 
     @discord.app_commands.command(name="test_sprite", description="Send a test slot icon by index")
     async def test_sprite(self, interaction: discord.Interaction, index: int):
-        # send a slot icon by index (0–5)
+        # send a slot icon by index (0â€“5)
         sheet = load_slots_sheet()
         sprite = sheet.get_sprite(index)
         byte_arr = io.BytesIO()
@@ -130,3 +130,6 @@ class TestCog(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(TestCog(bot))
+#pytest keeps thinking this is test cause
+#it has the word test just disabling
+TestCog.__test__ = False
