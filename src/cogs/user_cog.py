@@ -17,6 +17,7 @@ class UserCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # track when users last claimed their daily reward
+        # TODO: prob gonna have to do this in DB later 
         self.last_daily_claim = {}
 
     ###########################################################

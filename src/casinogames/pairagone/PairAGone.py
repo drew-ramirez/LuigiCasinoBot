@@ -1,7 +1,7 @@
 ﻿###########################################################
 # File: PairAGone.py
 #
-# Description: Game logic for Luigiâ€™s Casino Pair-a-Gone
+# Description: Game logic for Luigi's Casino Pair-a-Gone
 ###########################################################
 
 import random
