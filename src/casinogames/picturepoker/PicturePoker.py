@@ -1,7 +1,7 @@
-###########################################################
+﻿###########################################################
 # File: PicturePoker.py
 #
-# Description: Game logic for Luigi’s Casino Picture Poker
+# Description: Game logic for Luigi's Casino Picture Poker
 ###########################################################
 
 import random
@@ -47,7 +47,6 @@ class PicturePoker:
         "five_kind": "Five of a Kind",
     }
 
-
     MULTIPLIER = {
         "one_pair": 2,
         "two_pair": 3,
@@ -57,13 +56,15 @@ class PicturePoker:
         "five_kind": 16,
     }
 
-    def __init__(self, starting_coins: int = 20, starting_stars: int = 0):
+    def __init__(self, starting_coins: int = 0, starting_stars: int = 0):
+        # starting_coins kept for backwards compatibility
+        # real balance lives in EconomyManager
+        # If we want to use stars for auto betting in some we can later
         self.starting_coins = starting_coins
         self.starting_stars = starting_stars
         self.reset()
 
     def reset(self):
-        self.coins = self.starting_coins
         self.stars = self.starting_stars
         self.round = 0
         self.deck = []
@@ -83,20 +84,19 @@ class PicturePoker:
         self.deck = self.deck[n:]
         return drawn
 
-    def start_round(self):
+    def start_round(self, forced_bet: int | None = None):
         self.round += 1
         self._build_deck()
-        self.bet = self._min_bet()
+        if forced_bet is not None:
+            self.bet = forced_bet
+        elif self.bet <= 0:
+            self.bet = self._min_bet()
         self.player_hand = self._draw_cards(5)
         self.luigi_hand = self._draw_cards(5)
         self.result = None
 
     def _min_bet(self) -> int:
         return min(1 + self.stars // 5, 4)
-
-    def increase_bet(self, amount: int):
-        if self.coins >= self.bet + amount:
-            self.bet += amount
 
     def player_discard(self, indices: list[int]):
         if not indices:
@@ -107,7 +107,7 @@ class PicturePoker:
 
     def luigi_discard(self):
         counts = Counter(self.luigi_hand)
-        keep = set([sym for sym, cnt in counts.items() if cnt > 1])
+        keep = {sym for sym, cnt in counts.items() if cnt > 1}
 
         new_hand = []
         for card in self.luigi_hand:
@@ -142,26 +142,26 @@ class PicturePoker:
         if p_val > l_val:
             mult = self.MULTIPLIER.get(p_rank, 0)
             winnings = self.bet * mult
-            self.coins += winnings
             self.stars += 1
             self.result = {
                 "outcome": "win",
                 "player_rank": p_rank,
                 "luigi_rank": l_rank,
-                "coins": self.coins,
+                "coins": winnings,
                 "stars": self.stars,
+                "bet": self.bet,
             }
 
         elif p_val < l_val:
-            self.coins -= self.bet
             if self.stars > 0:
                 self.stars -= 1
             self.result = {
                 "outcome": "lose",
                 "player_rank": p_rank,
                 "luigi_rank": l_rank,
-                "coins": self.coins,
+                "coins": self.bet,
                 "stars": self.stars,
+                "bet": self.bet,
             }
 
         else:
@@ -171,43 +171,37 @@ class PicturePoker:
             if p_high > l_high:
                 mult = self.MULTIPLIER.get(p_rank, 0)
                 winnings = self.bet * mult
-                self.coins += winnings
                 self.stars += 1
                 self.result = {
                     "outcome": "win",
                     "player_rank": p_rank,
                     "luigi_rank": l_rank,
-                    "coins": self.coins,
+                    "coins": winnings,
                     "stars": self.stars,
+                    "bet": self.bet,
                 }
             elif p_high < l_high:
-                self.coins -= self.bet
                 if self.stars > 0:
                     self.stars -= 1
                 self.result = {
                     "outcome": "lose",
                     "player_rank": p_rank,
                     "luigi_rank": l_rank,
-                    "coins": self.coins,
+                    "coins": self.bet,
                     "stars": self.stars,
+                    "bet": self.bet,
                 }
             else:
                 self.result = {
                     "outcome": "tie",
                     "player_rank": p_rank,
                     "luigi_rank": l_rank,
-                    "coins": self.coins,
-                }
-                
-                self.result = {
-                    "outcome": "tie",
-                    "player_rank": p_rank,
-                    "luigi_rank": l_rank,
-                    "coins": self.coins,
+                    "coins": 0,
+                    "stars": self.stars,
+                    "bet": self.bet,
                 }
 
         return self.result
-
 
     def get_slot_rect(self, pos: int, dealer: bool = False) -> tuple[int, int, int, int]:
         x = self.MARGIN_X + pos * (self.CARD_W + self.GAP_X)
@@ -216,6 +210,3 @@ class PicturePoker:
         else:
             y = self.MARGIN_Y + self.CARD_H + (self.GAP_Y * 2)
         return x, y, self.CARD_W, self.CARD_H
-
-    def is_over(self) -> bool:
-        return self.coins <= 0

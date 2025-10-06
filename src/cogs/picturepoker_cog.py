@@ -48,8 +48,7 @@ class PicturePokerCog(commands.Cog):
         ###########################################################
         async def on_bet_selected(inter: discord.Interaction, bet_amount: int):
             # deduct wager and initialize round
-            game.bet = bet_amount
-            game.start_round()
+            game.start_round(forced_bet=bet_amount)
 
             # Prepare starting content and image
             img_bytes = render_board(game, reveal=False)
@@ -95,10 +94,15 @@ class PicturePokerCog(commands.Cog):
                 "game": game,
                 "message": message,
             }
-        # user for bet selection
+
         balance = EconomyManager.balance(user_id, username)
 
-        view = BetSelectView(user_id, username, on_bet_selected, wager_options=[1, 5, 10, 25, 50, 100, 150, 200, 250, 500])
+        view = BetSelectView(
+            user_id,
+            username,
+            on_bet_selected,
+            wager_options=[1, 5, 10, 25, 50, 100, 150, 200, 250, 500],
+        )
 
         await responder(
             content=(

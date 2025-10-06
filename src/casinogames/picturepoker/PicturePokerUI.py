@@ -1,4 +1,4 @@
-###########################################################
+﻿###########################################################
 # File: PicturePokerUI.py
 #
 # Description: Discord UI controls for Picture Poker
@@ -19,7 +19,7 @@ from casinogames.picturepoker.PicturePokerPrint import (
     make_final_reveal_gif,
 )
 from utils.ui_embeds import make_game_header
-from economy.EconomyManager import EconomyManager  # NEW
+from economy.EconomyManager import EconomyManager
 
 
 ###########################################################
@@ -31,7 +31,7 @@ def format_round_summary(result, delta_symbol=""):
     outcome = result["outcome"].upper()
     delta_symbol = delta_symbol
     coins = result["coins"]
-    return f"DEALER: {dealer_name}  vs.  PLAYER: {player_name} \n  🏆 {outcome} 💰  ({delta_symbol}){coins})"
+    return f"DEALER: {dealer_name}  🆚  PLAYER: {player_name} \n  🏆 {outcome} 💰  ({delta_symbol}{coins})"
 
 
 ###########################################################
@@ -237,23 +237,34 @@ class PicturePokerView(discord.ui.View):
         user = interaction.user
         coins = result.get("coins", 0)
         outcome = result.get("outcome", "").lower()
+        bet_amount = result.get("bet", self.game.bet)
         delta_symbol = ""
+        coins_display = coins
 
         if outcome == "win":
-            EconomyManager.payout(user.id, coins, user.name)
+            payout_total = bet_amount + coins
+            EconomyManager.payout(user.id, payout_total, user.name)
             delta_symbol = "+"
         elif outcome == "lose":
-            EconomyManager.wager(user.id, coins, user.name)
             delta_symbol = "-"
+            coins_display = bet_amount
+        else:
+            EconomyManager.payout(user.id, bet_amount, user.name)
+            coins_display = bet_amount
+            delta_symbol = "+"
+
+        summary_result = dict(result)
+        summary_result["coins"] = coins_display
 
         final_gif = make_final_reveal_gif(self.game)
         final_gif.seek(0)
-        summary = format_round_summary(result, delta_symbol)
+        summary = format_round_summary(summary_result, delta_symbol)
 
         stats = base_stats(
             {
                 "stars_current": result.get("stars", self.game.stars),
                 "dealer_action": summary,
+                "active_bet": bet_amount,
             }
         )
 

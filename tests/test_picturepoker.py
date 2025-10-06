@@ -1,4 +1,4 @@
-import pytest # type: ignore
+﻿import pytest # type: ignore
 from casinogames.picturepoker.PicturePoker import PicturePoker
 
 #basic fixture to start a fresh game
@@ -36,7 +36,7 @@ def test_resolve_round_player_wins(game):
     game.bet = 2
     result = game.resolve_round()
     assert result["outcome"] == "win"
-    assert result["coins"] > 20
+    assert result["coins"] == 32  # 2 * 16 multiplier
     assert result["stars"] == 1
 
 def test_resolve_round_luigi_wins(game):
@@ -45,4 +45,4 @@ def test_resolve_round_luigi_wins(game):
     game.bet = 2
     result = game.resolve_round()
     assert result["outcome"] == "lose"
-    assert result["coins"] < 20
+    assert result["coins"] == 2
