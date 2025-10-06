@@ -46,7 +46,11 @@ class PicturePokerCog(commands.Cog):
         ###########################################################
         # Callback: when a bet is selected
         ###########################################################
-        async def start_game(inter: discord.Interaction, bet_amount: int, new_game: PicturePoker | None = None):
+        async def start_game(
+            inter: discord.Interaction,
+            bet_amount: int,
+            new_game: PicturePoker | None = None,
+        ):
             nonlocal game
 
             target_game = new_game or game
