@@ -49,7 +49,9 @@ class LuckyStarsView(discord.ui.View):
         self.right_button = LuckyStarsButton("Right", 1)
 
         self.add_item(self.left_button)
-        spacer = discord.ui.Button(label="?", style=discord.ButtonStyle.grey, disabled=True)
+        spacer = discord.ui.Button(
+            label="", style=discord.ButtonStyle.grey, disabled=True
+        )
         self.add_item(spacer)
         self.add_item(self.right_button)
 
@@ -64,7 +66,9 @@ class LuckyStarsView(discord.ui.View):
         }
         return make_game_header(self.player, "Lucky Stars", stats)
 
-    def _board_file(self, reveal: bool = False, filename: str = "lucky.png") -> discord.File:
+    def _board_file(
+        self, reveal: bool = False, filename: str = "lucky.png"
+    ) -> discord.File:
         board = render_lucky_board(self.game, reveal=reveal)
         board.seek(0)
         return discord.File(board, filename)
@@ -101,7 +105,9 @@ class LuckyStarsView(discord.ui.View):
         self.game.pick_card(pos)
         await self._disable_buttons()
 
-        gif, total_seconds = make_slide_animation(self.game, duration=90, tail_hold_ms=1200)
+        gif, total_seconds = make_slide_animation(
+            self.game, duration=90, tail_hold_ms=1200
+        )
         gif.seek(0)
         await msg.edit(
             content=self._header("Cards sliding into place..."),
@@ -115,9 +121,7 @@ class LuckyStarsView(discord.ui.View):
         dealer_val = result["dealer_val"]
         outcome = result["outcome"]
 
-        summary = (
-            f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
-        )
+        summary = f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
 
         if outcome == "win":
             payout = self.game.bet * 2
@@ -144,7 +148,9 @@ class LuckyStarsView(discord.ui.View):
         if not self.msg:
             return
 
-        replay_btn = discord.ui.Button(label="Play Again", style=discord.ButtonStyle.green)
+        replay_btn = discord.ui.Button(
+            label="Play Again", style=discord.ButtonStyle.green
+        )
         quit_btn = discord.ui.Button(label="Quit", style=discord.ButtonStyle.red)
 
         async def replay_cb(inter: discord.Interaction):
@@ -159,7 +165,9 @@ class LuckyStarsView(discord.ui.View):
                 )
                 return
 
-            async def on_bet_selected(inner_inter: discord.Interaction, bet_amount: int):
+            async def on_bet_selected(
+                inner_inter: discord.Interaction, bet_amount: int
+            ):
                 await self.start_game_callback(
                     inner_inter,
                     bet_amount,
@@ -181,7 +189,9 @@ class LuckyStarsView(discord.ui.View):
                 await inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await inter.response.defer()
-            await self.msg.edit(content=self._header("Thanks for playing Lucky Stars!"), view=None)
+            await self.msg.edit(
+                content=self._header("Thanks for playing Lucky Stars!"), view=None
+            )
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
@@ -219,6 +229,3 @@ def make_lucky_controls(
         start_game_callback=start_game_callback,
         message=message,
     )
-
-
-
