@@ -14,7 +14,19 @@ from discord.ext import commands
 # load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-CASINO_CHANNEL_ID = int(os.getenv("CASINO_CHANNEL_ID", "1424904415160045589"))
+_channels_env = os.getenv("CASINO_CHANNEL_IDS")
+if _channels_env:
+    ALLOWED_CHANNEL_IDS = {
+        int(value.strip())
+        for value in _channels_env.split(",")
+        if value.strip().isdigit()
+    }
+else:
+    single_channel = os.getenv("CASINO_CHANNEL_ID", "1424904415160045589")
+    try:
+        ALLOWED_CHANNEL_IDS = {int(single_channel)}
+    except ValueError:
+        ALLOWED_CHANNEL_IDS = set()
 
 # intents (enable content for debugging)
 intents = discord.Intents.default()
@@ -22,16 +34,18 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-
+###########################################################
+# Channel Extraction Helper
+###########################################################
 def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
-    """Collect potential parent channel IDs for the interaction's context."""
+    # Collect potential parent channel IDs for the interaction's context
     ids: set[int | None] = set()
     channel = getattr(interaction, "channel", None)
 
-    # direct channel id (thread or text)
+    # base channel id (text, thread, or stage)
     ids.add(getattr(channel, "id", None))
 
-    # parent thread/forum/category
+    # parent thread/forum/category recovery
     parent_id = getattr(channel, "parent_id", None)
     ids.add(parent_id)
 
@@ -42,81 +56,95 @@ def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
         if grand_parent is not None:
             ids.add(getattr(grand_parent, "id", None))
 
-    # messages sometimes carry the correct channel fallback
+    # sometimes message carries correct source channel id
     message = getattr(interaction, "message", None)
     ids.add(getattr(message, "channel_id", None))
 
-    # fallback to interaction.channel_id attribute
+    # explicit channel_id field
     ids.add(getattr(interaction, "channel_id", None))
 
+    # discard nulls
     ids.discard(None)
     return ids
 
 
-async def casino_channel_only(interaction: discord.Interaction):
-    if not CASINO_CHANNEL_ID:
+###########################################################
+# Channel Restriction Check
+###########################################################
+async def casino_channel_only(interaction: discord.Interaction) -> bool:
+    # allow all if no restriction
+    if not ALLOWED_CHANNEL_IDS:
         return True
 
     related_ids = _extract_parent_ids(interaction)
-    if not related_ids:
-        # some ephemeral interactions especially from persistent views
-        # arrive without channel context, this allows them by default.
-        return True
-    if CASINO_CHANNEL_ID in related_ids:
+
+    # allow ephemeral or DM contexts (no guild)
+    if not related_ids or interaction.guild is None:
+        print("[DEBUG] Ephemeral or DM context detected — allowing.")
         return True
 
-    target = (
-        interaction.guild.get_channel(CASINO_CHANNEL_ID)
-        if interaction.guild
-        else None
-    )
-    channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
+    # allow if current or parent channel is permitted
+    if ALLOWED_CHANNEL_IDS.intersection(related_ids):
+        return True
+
+    # otherwise, build mention text for allowed channels
+    allowed_mentions = []
+    for cid in ALLOWED_CHANNEL_IDS:
+        channel = interaction.guild.get_channel(cid)
+        mention = channel.mention if channel else f"<#{cid}>"
+        allowed_mentions.append(mention)
+    channel_mention = ", ".join(allowed_mentions)
+
+    # quick rejection message (respond fast before timeout)
+    try:
+        if not interaction.response.is_done():
+            await interaction.response.send_message(
+                f"Sorry, we're isolated testing in {channel_mention} only :).",
+                ephemeral=True,
+            )
+        else:
+            await interaction.followup.send(
+                f"Sorry, we're isolated testing in {channel_mention} only :).",
+                ephemeral=True,
+            )
+    except Exception as e:
+        print(f"[WARN] Failed to send isolation message: {e}")
+
+    # returning False stops the command from executing
     context_debug = ", ".join(str(cid) for cid in sorted(related_ids)) or "none"
     print(
         f"[channel-check] Blocking command in {interaction.channel} "
         f"(related IDs: {context_debug})"
     )
-    raise app_commands.CheckFailure(
-        f"Sorry we're isolated testing in {channel_mention} only :)"
-    )
+    return False
 
 
+# assign as a global tree-level check
 bot.tree.interaction_check = casino_channel_only
 
 
+###########################################################
+# Error Handling
+###########################################################
 @bot.tree.error
-async def on_app_command_error(
-    interaction: discord.Interaction, error: Exception
-):
-    if isinstance(error, app_commands.CheckFailure) and CASINO_CHANNEL_ID:
-        target = (
-            interaction.guild.get_channel(CASINO_CHANNEL_ID)
-            if interaction.guild
-            else None
-        )
-        channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
-        message = f"Sorry we're isolated testing in {channel_mention} only :)."
-        if interaction.response.is_done():
-            await interaction.followup.send(message, ephemeral=True)
-        else:
-            await interaction.response.send_message(message, ephemeral=True)
-        return
-    raise error
+async def on_app_command_error(interaction: discord.Interaction, error: Exception):
+    # log unexpected command errors
+    print(f"[ERROR] Unhandled command error: {error}")
+
 
 ###########################################################
 # EVENTS
 ###########################################################
-
 @bot.event
 async def on_ready():
     # sync commands once the bot is ready (has application_id)
     synced = await bot.tree.sync()
     print(f"{bot.user} is online. Synced {len(synced)} command(s).")
 
+
 ###########################################################
 # COG LOADER
 ###########################################################
-
 COGS = [
     "cogs.user_cog",
     "cogs.admin_cog",
@@ -140,13 +168,12 @@ async def setup_bot():
 
     await bot.start(TOKEN)
 
+
 ###########################################################
 # ENTRYPOINT
 ###########################################################
-
 if __name__ == "__main__":
     try:
         asyncio.run(setup_bot())
     except KeyboardInterrupt:
         print("\nLuigiCasinoBot shutting down")
-
