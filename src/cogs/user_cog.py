@@ -11,6 +11,7 @@ from economy.EconomyManager import EconomyManager
 
 bank = Bank()
 
+
 ###########################################################
 # Safe Send Utility
 ###########################################################
@@ -45,25 +46,44 @@ class UserCog(commands.Cog):
         name="profile", description="View your casino profile"
     )
     async def profile(self, interaction: discord.Interaction):
+        # defer to acknowledge the command
+        await interaction.response.defer(ephemeral=True)
+
         uid = interaction.user.id
         username = interaction.user.name
 
         # ensure user exists or create a new one
         record = EconomyManager.ensure_user(uid, username)
-        bal = record.get("balance", 0)
 
-        # placeholder values  
-        stars = record.get("stars", 0)
+        balance = record.get("balance", 0)
         games_played = record.get("games_played", 0)
-        last_game = record.get("last_game", "—")
+        coins_won = record.get("coins_won", 0)
+        coins_lost = record.get("coins_lost", 0)
+        biggest_cashout = record.get("biggest_cashout", 0)
+        daily_streak = record.get("daily_claim_streak", 0)
+        career_stars = record.get("career_stars_total", 0)
 
-        msg = (
-            f"🎩 **{interaction.user.display_name}'s Casino Profile**\n"
-            f"💰 Coins: {bal}\n"
-            f"⭐ Stars: {stars}\n"
-            f"🎮 Games Played: {games_played}\n"
+        # build the profile embed
+        embed = discord.Embed(
+            title=f"{interaction.user.display_name}'s Casino Profile",
+            color=discord.Color.gold(),
         )
-        await safe_send(interaction, content=msg, ephemeral=True)
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+
+        embed.add_field(name="Balance", value=f"💰 {balance:,} coins", inline=True)
+        embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
+        embed.add_field(name="Daily Streak", value=f"⏲️ {daily_streak:,}", inline=True)
+
+        embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
+        embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
+        embed.add_field(
+            name="Biggest Cashout", value=f"💸 {biggest_cashout:,}", inline=True
+        )
+
+        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=False)
+
+        # send followup
+        await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.app_commands.command(
         name="balance", description="Check your casino balance."
@@ -79,11 +99,10 @@ class UserCog(commands.Cog):
         record = EconomyManager.ensure_user(user_id, username)
         balance = record.get("balance", 0)
 
-        # follow up 
+        # follow up
         await interaction.followup.send(
             f"{user.name}, your current balance is **{balance} coins**."
         )
-
 
     @discord.app_commands.command(
         name="daily", description="Claim your daily coin bonus"
@@ -122,7 +141,7 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-    name="leaderboard", description="Show top casino players by coin balance"
+        name="leaderboard", description="Show top casino players by coin balance"
     )
     async def leaderboard(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -130,20 +149,30 @@ class UserCog(commands.Cog):
         collection = EconomyManager.COLLECTION
 
         def resolve_name(record: dict) -> str:
-            uid = record.get('user_id')
+            uid = record.get("user_id")
             user = self.bot.get_user(uid)
             if user is not None:
                 return user.display_name
-            return record.get('username') or f'User {uid}'
+            return record.get("username") or f"User {uid}"
+
+        def resolve_avatar(record: dict) -> str:
+            uid = record.get("user_id")
+            user = self.bot.get_user(uid)
+            if user is not None:
+                return user.display_avatar.url
+            return "https://cdn.discordapp.com/embed/avatars/0.png"
 
         def build_entries(records: list[dict], metric: str, formatter) -> list[dict]:
             entries: list[dict] = []
             for record in records:
                 value = record.get(metric, 0) or 0
-                entries.append({
-                    'name': resolve_name(record),
-                    'value': formatter(value),
-                })
+                entries.append(
+                    {
+                        "name": resolve_name(record),
+                        "value": formatter(value),
+                        "avatar": resolve_avatar(record),
+                    }
+                )
             return entries
 
         datasets = {
@@ -152,7 +181,7 @@ class UserCog(commands.Cog):
                 "entries": build_entries(
                     list(collection.find().sort("balance", -1).limit(10)),
                     "balance",
-                    lambda v: f"💰 Balance: {v:,} coins",
+                    lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
                 "emoji": "💰",
@@ -162,30 +191,32 @@ class UserCog(commands.Cog):
                 "entries": build_entries(
                     list(collection.find().sort("games_played", -1).limit(10)),
                     "games_played",
-                    lambda v: f"🎯 Games Played: {v:,}",
+                    lambda v: f"{v:,}",
                 ),
                 "select_label": "Games Played",
-                "emoji": "🎯",
+                "emoji": "🎲",
             },
             "cashout": {
                 "label": "Top 10 players with the largest cashout.",
                 "entries": build_entries(
                     list(collection.find().sort("biggest_cashout", -1).limit(10)),
                     "biggest_cashout",
-                    lambda v: f"💸 Biggest Cashout: {v:,}",
+                    lambda v: f"{v:,}",
                 ),
-                "select_label": "Biggest Cashout",
+                "select_label": "Largest Cashout",
                 "emoji": "💸",
             },
         }
 
-
-        view = LeaderboardView(datasets, initial_key="balance", requester=interaction.user)
+        view = LeaderboardView(
+            datasets, initial_key="balance", requester=interaction.user
+        )
         embed = view.build_embed()
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
-
-    @discord.app_commands.command(name="help", description="Show help information for the casino games")
+    @discord.app_commands.command(
+        name="help", description="Show help information for the casino games"
+    )
     async def help_cmd(self, interaction: discord.Interaction):
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
@@ -195,23 +226,27 @@ class UserCog(commands.Cog):
 
         embed.add_field(
             name="General Commands",
-            value="\n".join([
-                "/profile",
-                "/daily",
-                "/leaderboard",
-                "/balance",
-            ]),
+            value="\n".join(
+                [
+                    "/profile",
+                    "/daily",
+                    "/leaderboard",
+                    "/balance",
+                ]
+            ),
             inline=False,
         )
 
         embed.add_field(
             name="Game Commands",
-            value="\n".join([
-                "/memory_start",
-                "/pair_start",
-                "/lucky_start",
-                "/poker_start",
-            ]),
+            value="\n".join(
+                [
+                    "/memory_start",
+                    "/pair_start",
+                    "/lucky_start",
+                    "/poker_start",
+                ]
+            ),
             inline=False,
         )
 
@@ -234,7 +269,9 @@ class LeaderboardCategorySelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         if interaction.user.id != self.parent_view.requester_id:
-            await interaction.response.send_message("Not your leaderboard!", ephemeral=True)
+            await interaction.response.send_message(
+                "Not your leaderboard!", ephemeral=True
+            )
             return
         selected = self.values[0]
         self.parent_view.current_key = selected
@@ -247,7 +284,9 @@ class LeaderboardCategorySelect(discord.ui.Select):
 
 
 class LeaderboardView(discord.ui.View):
-    def __init__(self, datasets: dict[str, dict], initial_key: str, requester: discord.User):
+    def __init__(
+        self, datasets: dict[str, dict], initial_key: str, requester: discord.User
+    ):
         super().__init__(timeout=120)
         self.datasets = datasets
         self.current_key = initial_key
@@ -257,6 +296,7 @@ class LeaderboardView(discord.ui.View):
 
     def build_embed(self) -> discord.Embed:
         data = self.datasets[self.current_key]
+        # base embed
         embed = discord.Embed(
             title="🏆 Luigi's Casino Leaderboard",
             description=data["label"],
@@ -264,23 +304,24 @@ class LeaderboardView(discord.ui.View):
         )
         entries = data.get("entries", [])
         if entries:
+            lines = []
             for i, entry in enumerate(entries, start=1):
-                embed.add_field(
-                    name=f"#{i} {entry['name']}",
-                    value=entry["value"],
-                    inline=False,
-                )
+                lines.append(f"**#{i}** {entry['name']} — {entry['value']}")
+            leaderboard_text = "\n".join(lines)
+            embed.add_field(name="\u200b", value=leaderboard_text, inline=False)
         else:
             embed.add_field(
                 name="No players yet",
                 value="Play some games to appear here!",
                 inline=False,
             )
+
         embed.set_footer(text="Use the selector below to change the leaderboard.")
         return embed
 
     async def on_timeout(self) -> None:
         self.clear_items()
+
 
 ###########################################################
 # COG SETUP
