@@ -78,7 +78,7 @@ async def casino_channel_only(interaction: discord.Interaction) -> bool:
 
     related_ids = _extract_parent_ids(interaction)
 
-    # allow ephemeral or DM contexts (no guild)
+    # allow ephemeral
     if not related_ids or interaction.guild is None:
         print("[DEBUG] Ephemeral or DM context detected — allowing.")
         return True
@@ -87,7 +87,7 @@ async def casino_channel_only(interaction: discord.Interaction) -> bool:
     if ALLOWED_CHANNEL_IDS.intersection(related_ids):
         return True
 
-    # otherwise, build mention text for allowed channels
+    # otherwise build mention text for allowed channels
     allowed_mentions = []
     for cid in ALLOWED_CHANNEL_IDS:
         channel = interaction.guild.get_channel(cid)

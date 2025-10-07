@@ -122,41 +122,65 @@ class UserCog(commands.Cog):
     name="leaderboard", description="Show top casino players by coin balance"
     )
     async def leaderboard(self, interaction: discord.Interaction):
-        # always defer FIRST prevents 'already acknowledged'
         await interaction.response.defer(ephemeral=True)
 
-        users = list(EconomyManager.COLLECTION.find().sort("balance", -1).limit(10))
+        collection = EconomyManager.COLLECTION
 
-        if not users:
-            await interaction.followup.send("No leaderboard data available yet.", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title="🏆 Luigi’s Casino Leaderboard",
-            description="Top 10 players with the highest coin balance.",
-            color=discord.Color.gold(),
-        )
-
-        for i, record in enumerate(users, start=1):
-            uid = record.get("user_id")
-            coins = record.get("balance", 0)
+        def resolve_name(record: dict) -> str:
+            uid = record.get('user_id')
             user = self.bot.get_user(uid)
-            name = user.display_name if user else record.get("username", f"User {uid}")
-            coins_won = record.get("coins_won", 0)
-            games_played = record.get("games_played", 0)
-            biggest_cashout = record.get("biggest_cashout", 0)
-            embed.add_field(
-                name=f"#{i} {name}",
-                value=(
-                    f"💰 Balance: {coins:,} coins\n"
-                    f"🎯 Games Played: {games_played:,}\n"
-                    f"🏆 Coins Won: {coins_won:,}\n"
-                    f"💸 Biggest Cashout: {biggest_cashout:,}"
-                ),
-                inline=False,
-            )
+            if user is not None:
+                return user.display_name
+            return record.get('username') or f'User {uid}'
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        def build_entries(records: list[dict], metric: str, formatter) -> list[dict]:
+            entries: list[dict] = []
+            for record in records:
+                value = record.get(metric, 0) or 0
+                entries.append({
+                    'name': resolve_name(record),
+                    'value': formatter(value),
+                })
+            return entries
+
+        datasets = {
+            "balance": {
+                "label": "Top 10 players with the highest coin balance.",
+                "entries": build_entries(
+                    list(collection.find().sort("balance", -1).limit(10)),
+                    "balance",
+                    lambda v: f"💰 Balance: {v:,} coins",
+                ),
+                "select_label": "Coin Balance",
+                "emoji": "💰",
+            },
+            "games": {
+                "label": "Top 10 players with the most games played.",
+                "entries": build_entries(
+                    list(collection.find().sort("games_played", -1).limit(10)),
+                    "games_played",
+                    lambda v: f"🎲 Games Played: {v:,}",
+                ),
+                "select_label": "Games Played",
+                "emoji": "🎲",
+            },
+            "cashout": {
+                "label": "Top 10 players with the largest cashout.",
+                "entries": build_entries(
+                    list(collection.find().sort("biggest_cashout", -1).limit(10)),
+                    "biggest_cashout",
+                    lambda v: f"💸 Largest Cashout: {v:,}",
+                ),
+                "select_label": "Largest Cashout",
+                "emoji": "💸",
+            },
+        }
+
+        view = LeaderboardView(datasets, initial_key="balance", requester=interaction.user)
+        embed = view.build_embed()
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+
+
 
 
     @discord.app_commands.command(
@@ -179,6 +203,72 @@ class UserCog(commands.Cog):
             "```"
         )
         await safe_send(interaction, content=msg, ephemeral=True)
+
+
+class LeaderboardCategorySelect(discord.ui.Select):
+    def __init__(self, parent: "LeaderboardView"):
+        options = [
+            discord.SelectOption(
+                label=data["select_label"],
+                value=key,
+                emoji=data.get("emoji"),
+                default=(key == parent.current_key),
+            )
+            for key, data in parent.datasets.items()
+        ]
+        super().__init__(placeholder="Choose a leaderboard", options=options)
+        self.parent_view = parent
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user.id != self.parent_view.requester_id:
+            await interaction.response.send_message("Not your leaderboard!", ephemeral=True)
+            return
+        selected = self.values[0]
+        self.parent_view.current_key = selected
+        for option in self.options:
+            option.default = option.value == selected
+        await interaction.response.edit_message(
+            embed=self.parent_view.build_embed(),
+            view=self.parent_view,
+        )
+
+
+class LeaderboardView(discord.ui.View):
+    def __init__(self, datasets: dict[str, dict], initial_key: str, requester: discord.User):
+        super().__init__(timeout=120)
+        self.datasets = datasets
+        self.current_key = initial_key
+        self.requester_id = requester.id
+        self.select_component = LeaderboardCategorySelect(self)
+        self.add_item(self.select_component)
+
+    def build_embed(self) -> discord.Embed:
+        data = self.datasets[self.current_key]
+        embed = discord.Embed(
+            title="🏆 Luigi's Casino Leaderboard",
+            description=data["label"],
+            color=discord.Color.gold(),
+        )
+        entries = data.get("entries", [])
+        if entries:
+            for i, entry in enumerate(entries, start=1):
+                embed.add_field(
+                    name=f"#{i} {entry['name']}",
+                    value=entry["value"],
+                    inline=False,
+                )
+        else:
+            embed.add_field(
+                name="No players yet",
+                value="Play some games to appear here!",
+                inline=False,
+            )
+        embed.set_footer(text="Use the selector below to change the leaderboard")
+        return embed
+
+    async def on_timeout(self) -> None:
+        self.clear_items()
+
 
 
 ###########################################################
