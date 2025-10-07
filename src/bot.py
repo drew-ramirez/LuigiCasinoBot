@@ -23,23 +23,76 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
+def _extract_parent_ids(
+    interaction: discord.Interaction,
+) -> set[int]:
+    """Collecting potential parent channel IDs for the interaction context
+
+    There's like false positives when the command is run inside forum posts or
+    uncached threads. This helper gathers every related ID so we can allow
+    anything rooted under CASINO_CHANNEL_ID.
+    """
+    ids: set[int] = set()
+    channel = getattr(interaction, "channel", None)
+
+    # direct channel id (thread or text)
+    channel_id = getattr(channel, "id", None)
+    if channel_id is not None:
+        ids.add(channel_id)
+
+    # parent thread/forum/category
+    parent_id = getattr(channel, "parent_id", None)
+    if parent_id is not None:
+        ids.add(parent_id)
+
+    parent = getattr(channel, "parent", None)
+    if parent is not None:
+        parent_parent_id = getattr(parent, "id", None)
+        if parent_parent_id is not None:
+            ids.add(parent_parent_id)
+        grand_parent = getattr(parent, "parent", None)
+        if grand_parent is not None:
+            grand_parent_id = getattr(grand_parent, "id", None)
+            if grand_parent_id is not None:
+                ids.add(grand_parent_id)
+
+    # messages sometimes carry the correct channel fallback
+    message_channel_id = getattr(
+        getattr(interaction, "message", None), "channel_id", None
+    )
+    if message_channel_id is not None:
+        ids.add(message_channel_id)
+
+    # fallback to interaction.channel_id attribute
+    attr_channel_id = getattr(interaction, "channel_id", None)
+    if attr_channel_id is not None:
+        ids.add(attr_channel_id)
+
+    return ids
+
+
 async def casino_channel_only(interaction: discord.Interaction):
     if not CASINO_CHANNEL_ID:
         return True
 
-    channel_id = interaction.channel_id
-    parent_id = getattr(interaction.channel, "parent_id", None)
-    if channel_id != CASINO_CHANNEL_ID and parent_id != CASINO_CHANNEL_ID:
-        target = (
-            interaction.guild.get_channel(CASINO_CHANNEL_ID)
-            if interaction.guild
-            else None
-        )
-        channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
-        raise app_commands.CheckFailure(
-            f"Sorry we're isolated testing in {channel_mention} only :)"
-        )
-    return True
+    related_ids = _extract_parent_ids(interaction)
+    if CASINO_CHANNEL_ID in related_ids:
+        return True
+
+    target = (
+        interaction.guild.get_channel(CASINO_CHANNEL_ID)
+        if interaction.guild
+        else None
+    )
+    channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
+    context_debug = ", ".join(str(cid) for cid in sorted(related_ids)) or "none"
+    print(
+        f"[channel-check] Blocking command in {interaction.channel} "
+        f"(related IDs: {context_debug})"
+    )
+    raise app_commands.CheckFailure(
+        f"Sorry we're isolated testing in {channel_mention} only :)"
+    )
 
 
 bot.tree.interaction_check = casino_channel_only

@@ -93,7 +93,7 @@ class PairControls(discord.ui.View):
             else:
                 if deck_remaining == 0:
                     child.disabled = True
-                    child.label = "\u2800"
+                    child.label = "\u2800" # blank button
                 else:
                     child.disabled = False
                     child.label = str(i + 1)

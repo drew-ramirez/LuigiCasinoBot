@@ -6,20 +6,18 @@
 
 import discord
 from discord.ext import commands
+from cogs.base_game_cog import BaseGameCog
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_view
-from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header
-from economy.EconomyManager import EconomyManager
 
 
-class PairAGoneCog(commands.Cog):
+class PairAGoneCog(BaseGameCog):
     # Cog for handling the Pair-a-Gone game
 
     def __init__(self, bot):
-        self.bot = bot
-        self.active_games = {}
+        super().__init__(bot, "Pair-a-Gone", log_label="PairAGone")
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -32,12 +30,9 @@ class PairAGoneCog(commands.Cog):
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
-        username = player.name
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
-
-        responder = interaction.followup.send
 
         async def start_game(
             inter: discord.Interaction,
@@ -61,7 +56,6 @@ class PairAGoneCog(commands.Cog):
                 game,
                 inter.user,
                 self.cleanup_game,
-                wager_options=DEFAULT_WAGER_OPTIONS,
                 start_game_callback=start_game,
             )
 
@@ -74,38 +68,12 @@ class PairAGoneCog(commands.Cog):
             message = await inter.original_response()
             view.msg = message
 
-            self.active_games[user_id] = {
-                "game": game,
-                "message": message,
-            }
+            self.register_active_game(user_id, game=game, message=message)
 
-        balance = EconomyManager.balance(user_id, username)
-
-        view = BetSelectView(
-            user_id,
-            username,
-            start_game,
-            wager_options=DEFAULT_WAGER_OPTIONS,
+        await self.present_wager_menu(
+            interaction,
+            on_bet_selected=start_game,
         )
-
-        await responder(
-            content=(
-                f"╔═════════════════════════╗\n"
-                f"🎰 Luigi’s Casino — Memory Match\n"
-                f" ══════════════════════════\n"
-                f"💰 Balance: {balance:,} coins\n"
-                f" ══════════════════════════\n"
-                f"Select your wager amount to begin:\n"
-                f"╚═════════════════════════╝\n"
-            ),
-            view=view,
-            ephemeral=True,
-        )
-
-    async def cleanup_game(self, user_id: int):
-        if user_id in self.active_games:
-            self.active_games.pop(user_id, None)
-            print(f"[PairAGone] Cleaned up game for {user_id}")
 
 
 ###########################################################
