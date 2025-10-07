@@ -5,7 +5,6 @@
 ###########################################################
 
 import discord
-import datetime
 from discord.ext import commands
 from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
@@ -16,9 +15,6 @@ bank = Bank()
 class UserCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # track when users last claimed their daily reward
-        # TODO: prob gonna have to do this in DB later 
-        self.last_daily_claim = {}
 
     ###########################################################
     # EVENTS
@@ -74,28 +70,26 @@ class UserCog(commands.Cog):
     async def daily(self, interaction: discord.Interaction):
         uid = interaction.user.id
         username = interaction.user.name
-        now = datetime.datetime.utcnow()
-        last_claim = self.last_daily_claim.get(uid)
-
-        # check if already claimed in the last 24 hours
-        if last_claim and (now - last_claim).total_seconds() < 86400:
-            remaining = 86400 - (now - last_claim).total_seconds()
-            hours = int(remaining // 3600)
-            minutes = int((remaining % 3600) // 60)
+        claim_info = EconomyManager.record_daily_claim(uid, username)
+        
+        # if not available, show time remaining, moved some stuff to economy manager
+        if not claim_info.get("available", False):
+            remaining = int(claim_info.get("seconds_remaining", 0))
+            hours = remaining // 3600
+            minutes = (remaining % 3600) // 60
             await interaction.response.send_message(
-                f"🕒 You’ve already claimed your daily reward. Come back in {hours}h {minutes}m.",
+                f"You've already claimed your daily reward. Come back in {hours}h {minutes}m.",
                 ephemeral=True,
             )
             return
 
-        # grant reward
-        reward = 50
+        reward = 100
+        streak = claim_info.get("streak", 1)
         EconomyManager.grant(uid, reward, username)
-        self.last_daily_claim[uid] = now
 
         await interaction.response.send_message(
-            f"💰 You claimed your daily bonus of **{reward} coins!**\n"
-            f"See you again tomorrow, {interaction.user.display_name}.",
+            f"?? Daily bonus claimed! You received **{reward} coins**.\n"
+            f"Daily streak: {streak} day{'s' if streak != 1 else ''}.",
             ephemeral=True,
         )
 

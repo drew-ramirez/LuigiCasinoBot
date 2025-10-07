@@ -8,6 +8,8 @@
 from pymongo import MongoClient  # type: ignore
 from pymongo.server_api import ServerApi  # type: ignore
 from dotenv import load_dotenv
+from datetime import datetime, timedelta, time as dt_time
+from zoneinfo import ZoneInfo
 import os
 import time
 
@@ -51,6 +53,7 @@ class EconomyManager:
             "biggest_cashout": 0,
             "profile_level": 1,
             "daily_claim_streak": 0,
+            "last_daily_claim": "",
         }
 
         EconomyManager.COLLECTION.insert_one(new_user)
@@ -161,6 +164,80 @@ class EconomyManager:
         )
 
     ###########################################################
+    # daily reward helpers
+    ###########################################################
+    @staticmethod
+    def record_daily_claim(
+        user_id: int,
+        username: str = "Unknown",
+    ) -> dict:
+        """Handle daily reward streak tracking with a midnight PST reset."""
+        record = EconomyManager.ensure_user(user_id, username)
+
+        pst = ZoneInfo("America/Los_Angeles")
+        now_pst = datetime.now(pst)
+        today = now_pst.date()
+
+        last_raw = record.get("last_daily_claim", "")
+        last_date = None
+
+        if isinstance(last_raw, str) and last_raw:
+            try:
+                last_date = datetime.strptime(last_raw, "%Y-%m-%d").date()
+            except ValueError:
+                last_date = None
+        elif isinstance(last_raw, (int, float)) and last_raw:
+            try:
+                last_date = datetime.fromtimestamp(float(last_raw), tz=pst).date()
+            except Exception:
+                last_date = None
+
+        streak_raw = record.get("daily_claim_streak", 0) or 0
+        try:
+            streak = max(0, int(streak_raw))
+        except (TypeError, ValueError):
+            streak = 0
+
+        if last_date == today:
+            next_midnight = datetime.combine(
+                today + timedelta(days=1),
+                dt_time.min,
+                tzinfo=pst,
+            )
+            seconds_remaining = int((next_midnight - now_pst).total_seconds())
+            return {
+                "available": False,
+                "seconds_remaining": max(0, seconds_remaining),
+                "streak": streak,
+                "last_claim": last_date,
+            }
+
+        if last_date == today - timedelta(days=1):
+            streak += 1
+        else:
+            streak = 1
+
+        EconomyManager.COLLECTION.update_one(
+            {"user_id": user_id},
+            {
+                "$set": {
+                    "last_daily_claim": today.isoformat(),
+                    "daily_claim_streak": streak,
+                }
+            },
+        )
+
+        print(
+            f"[DEBUG] Daily claim recorded for {username} ({user_id}) -> streak {streak}"
+        )
+
+        return {
+            "available": True,
+            "streak": streak,
+            "last_claim": today,
+        }
+
+    ###########################################################
     # grant coins
     ###########################################################
     @staticmethod
@@ -186,7 +263,14 @@ class EconomyManager:
             return False
 
         EconomyManager.COLLECTION.update_one(
-            {"user_id": user_id}, {"$inc": {"balance": -amount}}
+            {"user_id": user_id},
+            {
+                "$inc": {
+                    "balance": -amount,
+                    "games_played": 1,
+                    "coins_lost": amount,
+                }
+            },
         )
         print(
             f"[DEBUG] Wager accepted: {username} ({user_id}) bet {amount}, new balance {bal - amount}"
@@ -199,8 +283,17 @@ class EconomyManager:
     @staticmethod
     def payout(user_id: int, amount: int, username: str = "Unknown") -> int:
         EconomyManager.ensure_user(user_id, username)
-        new_balance = EconomyManager.grant(user_id, amount, username)
+        update_query: dict[str, dict[str, object]] = {
+            "$inc": {
+                "balance": amount,
+                "coins_won": amount,
+            },
+            "$max": {"biggest_cashout": amount},
+        }
+        EconomyManager.COLLECTION.update_one({"user_id": user_id}, update_query)
+        new_balance = EconomyManager.balance(user_id, username)
         print(
             f"[DEBUG] Payout: {username} ({user_id}) won {amount}, balance {new_balance}"
         )
         return new_balance
+
