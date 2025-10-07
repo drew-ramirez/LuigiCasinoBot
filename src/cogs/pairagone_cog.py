@@ -30,15 +30,14 @@ class PairAGoneCog(commands.Cog):
     ###########################################################
     @discord.app_commands.command(name="pair_start", description="Start a Pair-a-Gone game")
     async def pair_start(self, interaction: discord.Interaction):
-        responder = (
-            interaction.followup.send
-            if interaction.response.is_done()
-            else interaction.response.send_message
-        )
-
         player = interaction.user
         user_id = player.id
         username = player.name
+
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        responder = interaction.followup.send
 
         async def start_game(
             inter: discord.Interaction,

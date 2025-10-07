@@ -32,16 +32,14 @@ class PicturePokerCog(commands.Cog):
     )
     async def poker_start(self, interaction: discord.Interaction):
 
-        # needed to stop timeout
-        responder = (
-            interaction.followup.send
-            if interaction.response.is_done()
-            else interaction.response.send_message
-        )
-
         user_id = interaction.user.id
         username = interaction.user.name
         game = PicturePoker()
+
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        responder = interaction.followup.send
 
         ###########################################################
         # Callback: when a bet is selected

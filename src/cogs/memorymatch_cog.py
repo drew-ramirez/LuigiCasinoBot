@@ -29,15 +29,16 @@ class MemoryMatchCog(commands.Cog):
         name="memory_start", description="Start a Memory Match game"
     )
     async def memory_start(self, interaction: discord.Interaction):
-        responder = (
-            interaction.followup.send
-            if interaction.response.is_done()
-            else interaction.response.send_message
-        )
-
         player = interaction.user
         user_id = player.id
         username = player.name
+
+        #defer response prevent "interaction failed" message
+        #in other game cogs as well.
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        responder = interaction.followup.send
 
         async def start_game(
             inter: discord.Interaction,

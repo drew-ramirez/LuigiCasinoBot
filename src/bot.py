@@ -8,17 +8,61 @@ import os
 import asyncio
 from dotenv import load_dotenv
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 # load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
+CASINO_CHANNEL_ID = int(os.getenv("CASINO_CHANNEL_ID", "1424904415160045589"))
 
 # intents (enable content for debugging)
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+
+async def casino_channel_only(interaction: discord.Interaction):
+    if not CASINO_CHANNEL_ID:
+        return True
+
+    channel_id = interaction.channel_id
+    parent_id = getattr(interaction.channel, "parent_id", None)
+    if channel_id != CASINO_CHANNEL_ID and parent_id != CASINO_CHANNEL_ID:
+        target = (
+            interaction.guild.get_channel(CASINO_CHANNEL_ID)
+            if interaction.guild
+            else None
+        )
+        channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
+        raise app_commands.CheckFailure(
+            f"Sorry we're isolated testing in {channel_mention} only :)"
+        )
+    return True
+
+
+bot.tree.interaction_check = casino_channel_only
+
+
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction, error: Exception
+):
+    if isinstance(error, app_commands.CheckFailure) and CASINO_CHANNEL_ID:
+        target = (
+            interaction.guild.get_channel(CASINO_CHANNEL_ID)
+            if interaction.guild
+            else None
+        )
+        channel_mention = target.mention if target else f"<#{CASINO_CHANNEL_ID}>"
+        message = f"Sorry we're isolated testing in {channel_mention} only :)."
+        if interaction.response.is_done():
+            await interaction.followup.send(message, ephemeral=True)
+        else:
+            await interaction.response.send_message(message, ephemeral=True)
+        return
+    raise error
 
 ###########################################################
 # EVENTS
