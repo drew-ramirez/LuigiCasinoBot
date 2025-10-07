@@ -69,6 +69,9 @@ class UserCog(commands.Cog):
         name="balance", description="Check your casino balance."
     )
     async def balance(self, interaction: discord.Interaction):
+        # always defer early acknowledges immediately
+        await interaction.response.defer(ephemeral=True)
+
         user = interaction.user
         user_id = user.id
         username = user.name
@@ -76,11 +79,11 @@ class UserCog(commands.Cog):
         record = EconomyManager.ensure_user(user_id, username)
         balance = record.get("balance", 0)
 
-        await safe_send(
-            interaction,
-            content=f"{user.mention}, your current balance is **{balance} coins**.",
-            ephemeral=True,
+        # follow up 
+        await interaction.followup.send(
+            f"{user.name}, your current balance is **{balance} coins**."
         )
+
 
     @discord.app_commands.command(
         name="daily", description="Claim your daily coin bonus"
@@ -159,50 +162,60 @@ class UserCog(commands.Cog):
                 "entries": build_entries(
                     list(collection.find().sort("games_played", -1).limit(10)),
                     "games_played",
-                    lambda v: f"🎲 Games Played: {v:,}",
+                    lambda v: f"🎯 Games Played: {v:,}",
                 ),
                 "select_label": "Games Played",
-                "emoji": "🎲",
+                "emoji": "🎯",
             },
             "cashout": {
                 "label": "Top 10 players with the largest cashout.",
                 "entries": build_entries(
                     list(collection.find().sort("biggest_cashout", -1).limit(10)),
                     "biggest_cashout",
-                    lambda v: f"💸 Largest Cashout: {v:,}",
+                    lambda v: f"💸 Biggest Cashout: {v:,}",
                 ),
-                "select_label": "Largest Cashout",
+                "select_label": "Biggest Cashout",
                 "emoji": "💸",
             },
         }
+
 
         view = LeaderboardView(datasets, initial_key="balance", requester=interaction.user)
         embed = view.build_embed()
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 
-
-
-    @discord.app_commands.command(
-        name="help", description="Show help information for the casino games"
-    )
+    @discord.app_commands.command(name="help", description="Show help information for the casino games")
     async def help_cmd(self, interaction: discord.Interaction):
-        msg = (
-            "```markdown\n"
-            "# 🎰 Luigi’s Casino Help Menu\n\n"
-            "## 📜 General Commands\n"
-            "/profile - view your casino profile\n"
-            "/daily - claim a daily coin reward (every 24 hours)\n"
-            "/leaderboard - view the top casino players\n"
-            "/balance - check your current coin balance\n\n"
-            "## 🎮 Game Commands\n"
-            "/memory_start - play Memory Match (match pairs to earn coins)\n"
-            "/pair_start - play Pair-a-Gone (clear the board by matching adjacent pairs)\n"
-            "/lucky_start - play Lucky Stars (pick cards, test your luck)\n"
-            "/poker_start - play Picture Poker (beat Luigi’s hand)\n"
-            "```"
+        embed = discord.Embed(
+            title="📜 Luigi's Casino Help",
+            description="Quick reference for available commands.",
+            color=discord.Color.gold(),
         )
-        await safe_send(interaction, content=msg, ephemeral=True)
+
+        embed.add_field(
+            name="General Commands",
+            value="\n".join([
+                "/profile",
+                "/daily",
+                "/leaderboard",
+                "/balance",
+            ]),
+            inline=False,
+        )
+
+        embed.add_field(
+            name="Game Commands",
+            value="\n".join([
+                "/memory_start",
+                "/pair_start",
+                "/lucky_start",
+                "/poker_start",
+            ]),
+            inline=False,
+        )
+
+        await safe_send(interaction, embed=embed, ephemeral=True)
 
 
 class LeaderboardCategorySelect(discord.ui.Select):
@@ -263,13 +276,11 @@ class LeaderboardView(discord.ui.View):
                 value="Play some games to appear here!",
                 inline=False,
             )
-        embed.set_footer(text="Use the selector below to change the leaderboard")
+        embed.set_footer(text="Use the selector below to change the leaderboard.")
         return embed
 
     async def on_timeout(self) -> None:
         self.clear_items()
-
-
 
 ###########################################################
 # COG SETUP
