@@ -1,85 +1,79 @@
-###########################################################
+﻿###########################################################
 # File: luckystars_cog.py
 #
-# Description: Cog for Luigi’s Casino - Lucky Stars Game
+# Description: Cog for Luigi's Casino - Lucky Stars Game
 ###########################################################
 
 import discord
 from discord.ext import commands
+
+from cogs.base_game_cog import BaseGameCog
 from casinogames.luckystars.LuckyStars import LuckyStars
 from casinogames.luckystars.LuckyStarsPrint import render_lucky_board
 from casinogames.luckystars.LuckyStarsUI import make_lucky_controls
+from utils.ui_embeds import make_game_header
 
 
-class LuckyStarsCog(commands.Cog):
+class LuckyStarsCog(BaseGameCog):
     def __init__(self, bot):
-        self.bot = bot
-        self.active_games = {}
+        super().__init__(bot, "Lucky Stars", log_label="LuckyStars")
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("LuckyStarsCog loaded.")
 
     ###########################################################
-    # Slash command: start game
+    # /lucky_start
     ###########################################################
-    @discord.app_commands.command(
-        name="lucky_start",
-        description="Start a Lucky Stars game"
-    )
+    @discord.app_commands.command(name="lucky_start", description="Start a Lucky Stars game")
     async def lucky_start(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        try:
-            # Prevent multiple concurrent games for same user
-            if user_id in self.active_games:
-                await interaction.response.send_message(
-                    "You already have a Lucky Stars game running!",
-                    ephemeral=True
-                )
-                return
+        player = interaction.user
+        user_id = player.id
 
-            # Create game instance
-            game = LuckyStars()
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+
+        async def start_game(
+            inter: discord.Interaction,
+            bet_amount: int,
+            new_game: LuckyStars | None = None,
+        ):
+            game = new_game or LuckyStars(bet_amount)
             game.deal_round()
 
-            # Render initial board image
-            img_bytes = render_lucky_board(game, reveal=False)
-            file = discord.File(img_bytes, filename="lucky.png")
+            board_bytes = render_lucky_board(game, reveal=False)
+            board_bytes.seek(0)
+            file = discord.File(board_bytes, filename="lucky.png")
 
-            # Build the View
-            view = make_lucky_controls(game, user_id, self.cleanup_game)
+            stats = {
+                "active_bet": game.bet,
+                "stars_current": 0,
+                "dealer_action": "Pick a card!",
+            }
+            content = make_game_header(inter.user, "Lucky Stars", stats)
 
-            # Respond immediately (required to avoid timeout)
-            await interaction.response.send_message(
-                content=f"🎲 Lucky Stars started! You have {game.coins} coins.\nPick a card!",
-                file=file,
+            view = make_lucky_controls(
+                game,
+                inter.user,
+                self.cleanup_game,
+                start_game_callback=start_game,
+            )
+
+            await inter.response.edit_message(
+                content=content,
+                attachments=[file],
                 view=view,
             )
 
-            # Store active game info
-            msg = await interaction.original_response()
-            self.active_games[user_id] = {"game": game, "message": msg}
-            print(f"[LuckyStars] Game started for user {user_id}")
+            message = await inter.original_response()
+            view.msg = message
 
-        except Exception as e:
-            print(f"[LuckyStars ERROR] {type(e).__name__}: {e}")
-            try:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        "Error starting Lucky Stars game.",
-                        ephemeral=True
-                    )
-            except Exception:
-                pass
+            self.register_active_game(user_id, game=game, message=message)
 
-    ###########################################################
-    # Cleanup
-    ###########################################################
-    async def cleanup_game(self, user_id: int):
-        """Remove game after user finishes or quits."""
-        if user_id in self.active_games:
-            self.active_games.pop(user_id, None)
-            print(f"[LuckyStars] Cleaned up game for {user_id}")
+        await self.present_wager_menu(
+            interaction,
+            on_bet_selected=start_game,
+        )
 
 
 ###########################################################

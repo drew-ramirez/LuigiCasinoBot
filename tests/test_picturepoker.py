@@ -1,10 +1,15 @@
+﻿import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
+
 import pytest # type: ignore
 from casinogames.picturepoker.PicturePoker import PicturePoker
 
 #basic fixture to start a fresh game
 @pytest.fixture
 def game():
-    return PicturePoker(starting_coins=20, starting_stars=0)
+    return PicturePoker(starting_stars=0)
 
 def test_start_round_deals_cards(game):
     game.start_round()
@@ -36,7 +41,7 @@ def test_resolve_round_player_wins(game):
     game.bet = 2
     result = game.resolve_round()
     assert result["outcome"] == "win"
-    assert result["coins"] > 20
+    assert result["coins"] == 32  # 2 * 16 multiplier
     assert result["stars"] == 1
 
 def test_resolve_round_luigi_wins(game):
@@ -45,4 +50,4 @@ def test_resolve_round_luigi_wins(game):
     game.bet = 2
     result = game.resolve_round()
     assert result["outcome"] == "lose"
-    assert result["coins"] < 20
+    assert result["coins"] == 2

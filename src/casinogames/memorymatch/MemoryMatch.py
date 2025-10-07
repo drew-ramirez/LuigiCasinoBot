@@ -1,4 +1,4 @@
-import random
+﻿import random
 from typing import List, Tuple
 from casinogames.core.BaseGame import BaseGame
 
@@ -13,11 +13,12 @@ class MemoryMatch(BaseGame):
     MARGIN_X = 32
     MARGIN_Y = 32
 
-    def __init__(self, player_id: int):
+    def __init__(self, player_id: int, bet: int, base_attempts: int = 3):
         self.player_id = player_id
+        self.bet = max(1, bet)
+        self.base_attempts = max(1, base_attempts)
+        self.remaining_attempts = self.base_attempts
         self.stars = 0
-        self.bet_coins = 3
-        self.remaining_coins = 3
         self.board = []           # [(symbol, is_flipped, is_matched)]
         self.symbols = []
         self.revealed = []        # positions currently flipped
@@ -37,13 +38,26 @@ class MemoryMatch(BaseGame):
     def generate_board(self):
         num_cards, symbols = self.get_difficulty()
         self.symbols = symbols
-        
+
+        layout_map = {
+            8: (4, 2),
+            12: (4, 3),
+            16: (4, 4),
+            20: (5, 4),
+        }
+        cols, rows = layout_map.get(num_cards, (self.COLS, self.ROWS))
+        if cols * rows < num_cards:
+            rows = max(rows, (num_cards + cols - 1) // cols)
+        self.COLS = max(1, cols)
+        self.ROWS = max(1, rows)
+
         # Choose pairs
         selected = symbols.copy()
         while len(selected) * 2 > num_cards:
             selected.pop()  # trim if too many
 
         cards = selected * 2
+        num_cards = len(cards)
         random.shuffle(cards)
 
         self.board = [(s, False, False) for s in cards]
@@ -76,7 +90,7 @@ class MemoryMatch(BaseGame):
             self.board[b] = (sb, True, True)
             return True
         else:
-            self.remaining_coins -= 1
+            self.remaining_attempts -= 1
             return False
 
     def hide_unmatched(self):
@@ -87,11 +101,11 @@ class MemoryMatch(BaseGame):
                 self.board[pos] = (sym, False, matched)
 
     def is_game_over(self) -> bool:
-        return self.remaining_coins <= 0 or all(m for _, _, m in self.board)
+        return self.remaining_attempts <= 0 or all(m for _, _, m in self.board)
 
     def award_star(self):
         self.stars += 1
-        self.remaining_coins = self.bet_coins * 2
+        self.remaining_attempts = self.base_attempts * 2
 
     def is_board_cleared(self) -> bool:
         # True if all cards matched

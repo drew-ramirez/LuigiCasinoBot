@@ -1,0 +1,32 @@
+{
+  "picture poker": {
+    "lines": [
+      "💰 Balance: {balance:,}   🎯 Bet: {active_bet}   ⭐ Stars: {stars_text}",
+      "🃏 Hand: {player_rank}   💎 Payout: ×{payout_mult}",
+      "🕐 Round: {round}           🎩 Luigi: {luigi_rank}"
+    ]
+  },
+  "lucky stars": {
+    "lines": [
+      "💰 Coins: {coins}   🕐 Round: {round}   🌟 Gain: +{reward_value}",
+      "🪄 Choice: {last_choice}"
+    ]
+  },
+  "memory match": {
+    "lines": [
+      "💰 Balance: {balance:,}   🧩 Matches: {matches_found}/{pairs_total}   💥 Combo: ×{combo_streak}",
+      "❌ Misses: {miss_count}       🕐 Board: {round}"
+    ]
+  },
+  "pair-a-gone": {
+    "lines": [
+      "💰 Balance: {coins}   🕐 Round: {round}   🔢 Pairs: {pairs_left}",
+      "💥 Chain: ×{chain_mult}      🏆 Score: {score}"
+    ]
+  },
+  "default": {
+    "lines": [
+      "💰 Balance: {balance:,}   ⭐ Stars: {stars_text}   🕐 Round: {round}"
+    ]
+  }
+}

@@ -42,14 +42,6 @@ class AdminCog(commands.Cog):
     async def ping(self, interaction: discord.Interaction):
         await interaction.response.send_message("Don't Ping Me.", ephemeral=True)
 
-    @discord.app_commands.command(name="balance", description="Check your coin balance")
-    @manager_only()
-    async def balance_cmd(self, interaction: discord.Interaction):
-        bal = bank.balance(interaction.user.id)
-        await interaction.response.send_message(
-            f"{interaction.user.mention}, your balance is {bal} coins.", ephemeral=True
-        )
-
     @discord.app_commands.command(name="grant", description="Grant yourself coins (admin/dev only)")
     @manager_only()
     async def grant_cmd(self, interaction: discord.Interaction, amount: int):
