@@ -39,12 +39,25 @@ class MemoryMatch(BaseGame):
         num_cards, symbols = self.get_difficulty()
         self.symbols = symbols
 
+        layout_map = {
+            8: (4, 2),
+            12: (4, 3),
+            16: (4, 4),
+            20: (5, 4),
+        }
+        cols, rows = layout_map.get(num_cards, (self.COLS, self.ROWS))
+        if cols * rows < num_cards:
+            rows = max(rows, (num_cards + cols - 1) // cols)
+        self.COLS = max(1, cols)
+        self.ROWS = max(1, rows)
+
         # Choose pairs
         selected = symbols.copy()
         while len(selected) * 2 > num_cards:
             selected.pop()  # trim if too many
 
         cards = selected * 2
+        num_cards = len(cards)
         random.shuffle(cards)
 
         self.board = [(s, False, False) for s in cards]

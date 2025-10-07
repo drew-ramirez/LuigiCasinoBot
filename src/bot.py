@@ -23,51 +23,33 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-def _extract_parent_ids(
-    interaction: discord.Interaction,
-) -> set[int]:
-    """Collecting potential parent channel IDs for the interaction context
-
-    There's like false positives when the command is run inside forum posts or
-    uncached threads. This helper gathers every related ID so we can allow
-    anything rooted under CASINO_CHANNEL_ID.
-    """
-    ids: set[int] = set()
+def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
+    """Collect potential parent channel IDs for the interaction's context."""
+    ids: set[int | None] = set()
     channel = getattr(interaction, "channel", None)
 
     # direct channel id (thread or text)
-    channel_id = getattr(channel, "id", None)
-    if channel_id is not None:
-        ids.add(channel_id)
+    ids.add(getattr(channel, "id", None))
 
     # parent thread/forum/category
     parent_id = getattr(channel, "parent_id", None)
-    if parent_id is not None:
-        ids.add(parent_id)
+    ids.add(parent_id)
 
     parent = getattr(channel, "parent", None)
     if parent is not None:
-        parent_parent_id = getattr(parent, "id", None)
-        if parent_parent_id is not None:
-            ids.add(parent_parent_id)
+        ids.add(getattr(parent, "id", None))
         grand_parent = getattr(parent, "parent", None)
         if grand_parent is not None:
-            grand_parent_id = getattr(grand_parent, "id", None)
-            if grand_parent_id is not None:
-                ids.add(grand_parent_id)
+            ids.add(getattr(grand_parent, "id", None))
 
     # messages sometimes carry the correct channel fallback
-    message_channel_id = getattr(
-        getattr(interaction, "message", None), "channel_id", None
-    )
-    if message_channel_id is not None:
-        ids.add(message_channel_id)
+    message = getattr(interaction, "message", None)
+    ids.add(getattr(message, "channel_id", None))
 
     # fallback to interaction.channel_id attribute
-    attr_channel_id = getattr(interaction, "channel_id", None)
-    if attr_channel_id is not None:
-        ids.add(attr_channel_id)
+    ids.add(getattr(interaction, "channel_id", None))
 
+    ids.discard(None)
     return ids
 
 
@@ -76,6 +58,10 @@ async def casino_channel_only(interaction: discord.Interaction):
         return True
 
     related_ids = _extract_parent_ids(interaction)
+    if not related_ids:
+        # some ephemeral interactions especially from persistent views
+        # arrive without channel context, this allows them by default.
+        return True
     if CASINO_CHANNEL_ID in related_ids:
         return True
 

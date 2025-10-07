@@ -32,7 +32,7 @@ class EconomyManager:
     ###########################################################
     @staticmethod
     def ensure_user(user_id: int, username: str = "Unknown") -> dict:
-        #find an existing user or create a new one with default balance
+        # find an existing user or create a new one with default balance
         record = EconomyManager.COLLECTION.find_one({"user_id": user_id})
         if record:
             return record
@@ -43,10 +43,20 @@ class EconomyManager:
             "balance": 1000,
             "games_played": 0,
             "created_at": int(time.time()),
+            # Tracking fields for future features
+            "star_bonuses": {},
+            "career_stars_total": 0,
+            "coins_won": 0,
+            "coins_lost": 0,
+            "biggest_cashout": 0,
+            "profile_level": 1,
+            "daily_claim_streak": 0,
         }
 
         EconomyManager.COLLECTION.insert_one(new_user)
-        print(f"[DEBUG] Created new user record for {username} ({user_id}) with 1000 coins.")
+        print(
+            f"[DEBUG] Created new user record for {username} ({user_id}) with 1000 coins."
+        )
         return new_user
 
     ###########################################################
@@ -58,17 +68,111 @@ class EconomyManager:
         return record.get("balance", 0)
 
     ###########################################################
+    # star bonus helpers
+    ###########################################################
+    @staticmethod
+    def _resolve_bonus_map(record: dict) -> dict:
+        """Return the star bonus map, handling legacy 'streaks' key."""
+        bonuses = record.get("star_bonuses")
+        if bonuses is None:
+            bonuses = record.get("streaks", {})
+        return bonuses or {}
+
+    @staticmethod
+    def star_bonus_count(user_id: int, game_key: str, username: str = "Unknown") -> int:
+        record = EconomyManager.ensure_user(user_id, username)
+        bonuses = EconomyManager._resolve_bonus_map(record)
+        try:
+            return max(0, int(bonuses.get(game_key, 0)))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def star_bonus_multiplier(stars: int) -> float:
+        base_bonus = 0.05  # +5% per star
+        max_bonus = 0.50  # cap at +50%
+        bonus = min(max(stars, 0) * base_bonus, max_bonus)
+        return round(1.0 + bonus, 4)
+
+    @staticmethod
+    def adjust_star_bonus(
+        user_id: int,
+        game_key: str,
+        *,
+        delta: int | None = None,
+        absolute: int | None = None,
+        username: str = "Unknown",
+        career_increment: int = 0,
+    ) -> dict:
+        """
+        Update the star bonus count for a given game, optionally increasing the career total.
+
+        Returns a dict containing the new count, updated career total, and
+        current multiplier.
+        """
+        record = EconomyManager.ensure_user(user_id, username)
+        current = EconomyManager.star_bonus_count(user_id, game_key, username)
+
+        if absolute is not None:
+            new_value = max(0, int(absolute))
+        elif delta is not None:
+            new_value = max(0, current + int(delta))
+        else:
+            new_value = current
+
+        update_query: dict[str, dict[str, object]] = {
+            "$set": {f"star_bonuses.{game_key}": new_value}
+        }
+        if career_increment:
+            update_query.setdefault("$inc", {})["career_stars_total"] = int(
+                max(0, career_increment)
+            )
+
+        EconomyManager.COLLECTION.update_one(
+            {"user_id": user_id},
+            update_query,
+        )
+
+        career_total = record.get("career_stars_total", 0) + max(
+            0, int(career_increment)
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(new_value)
+
+        print(
+            f"[DEBUG] Updated {username} ({user_id}) star bonus for {game_key}: "
+            f"{current} -> {new_value} (career_total={career_total}, multiplier={multiplier:.2f})"
+        )
+
+        return {
+            "stars": new_value,
+            "career_total": career_total,
+            "multiplier": multiplier,
+        }
+
+    @staticmethod
+    def reset_star_bonus(
+        user_id: int, game_key: str, username: str = "Unknown"
+    ) -> dict:
+        return EconomyManager.adjust_star_bonus(
+            user_id,
+            game_key,
+            absolute=0,
+            username=username,
+        )
+
+    ###########################################################
     # grant coins
     ###########################################################
     @staticmethod
     def grant(user_id: int, amount: int, username: str = "Unknown") -> int:
         EconomyManager.ensure_user(user_id, username)
         EconomyManager.COLLECTION.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": amount}}
+            {"user_id": user_id}, {"$inc": {"balance": amount}}
         )
         new_balance = EconomyManager.balance(user_id, username)
-        print(f"[DEBUG] Granted {amount} coins to {username} ({user_id}) -> balance {new_balance}")
+        print(
+            f"[DEBUG] Granted {amount} coins to {username} ({user_id}) -> balance {new_balance}"
+        )
         return new_balance
 
     ###########################################################
@@ -82,10 +186,11 @@ class EconomyManager:
             return False
 
         EconomyManager.COLLECTION.update_one(
-            {"user_id": user_id},
-            {"$inc": {"balance": -amount}}
+            {"user_id": user_id}, {"$inc": {"balance": -amount}}
         )
-        print(f"[DEBUG] Wager accepted: {username} ({user_id}) bet {amount}, new balance {bal - amount}")
+        print(
+            f"[DEBUG] Wager accepted: {username} ({user_id}) bet {amount}, new balance {bal - amount}"
+        )
         return True
 
     ###########################################################
@@ -95,5 +200,7 @@ class EconomyManager:
     def payout(user_id: int, amount: int, username: str = "Unknown") -> int:
         EconomyManager.ensure_user(user_id, username)
         new_balance = EconomyManager.grant(user_id, amount, username)
-        print(f"[DEBUG] Payout: {username} ({user_id}) won {amount}, balance {new_balance}")
+        print(
+            f"[DEBUG] Payout: {username} ({user_id}) won {amount}, balance {new_balance}"
+        )
         return new_balance

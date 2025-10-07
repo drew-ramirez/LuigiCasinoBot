@@ -20,6 +20,7 @@ from economy.EconomyManager import EconomyManager
 
 class MemoryMatchControls(discord.ui.View):
     #persistent view for Memory Match with per-card callbacks
+    GAME_KEY = "memorymatch"
 
     def __init__(
         self,
@@ -36,22 +37,41 @@ class MemoryMatchControls(discord.ui.View):
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
         self.start_game_callback = start_game_callback
         self.msg: discord.Message | None = None
+        self._pending_star_gain: bool = False
+        self._pending_next_streak: int | None = None
 
         self._build_buttons()
 
     def _build_buttons(self):
+        cols = max(1, getattr(self.game, "COLS", 4) or 1)
         for i in range(len(self.game.board)):
+            row = i // cols
             btn = discord.ui.Button(
                 label=str(i + 1),
                 style=discord.ButtonStyle.secondary,
                 custom_id=f"memory_{i}",
-                row=i // 4,
+                row=row,
             )
             btn.callback = self._make_callback(i)
             self.add_item(btn)
 
+    def _reset_board_controls(self):
+        self.clear_items()
+        self._build_buttons()
+
     def _status_text(self, dealer_action: str | None = None) -> str:
         action = dealer_action or f"Attempts left: {self.game.remaining_attempts}"
+        streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            self.player.name,
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        streak_summary = f"(⭐ bonus x{multiplier:.2f})"
+        if action:
+            action = f"{action} | {streak_summary}"
+        else:
+            action = streak_summary
         stats = {
             "active_bet": self.game.bet,
             "stars_current": self.game.stars,
@@ -167,21 +187,138 @@ class MemoryMatchControls(discord.ui.View):
         await self.update_controls_for_unmatch([a, b], msg)
 
     async def _handle_win(self, interaction: discord.Interaction, msg: discord.Message):
-        payout = self.game.bet * 2
+        final_board = self._board_file()
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            self.player.name,
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(current_streak)
+        payout_base = self.game.bet * 2
+        payout = int(round(payout_base * multiplier))
         EconomyManager.payout(self.player.id, payout, self.player.name)
 
         await msg.edit(
-            content=self._status_text(f"Board cleared! You won {payout} coins."),
+            content=self._status_text(
+                f"Board cleared! You won {payout} coins \n"
+                "Continue or Exit Now?"
+            ),
+            attachments=[final_board],
+            view=None,
+        )
+
+        self._pending_star_gain = True
+        self._pending_next_streak = current_streak + 1
+        await self._prompt_continue(
+            msg,
+            next_streak=self._pending_next_streak,
+        )
+
+    async def _handle_loss(self, msg: discord.Message):
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            self.player.name,
+        )
+        if current_streak > 0:
+            EconomyManager.adjust_star_bonus(
+                self.player.id,
+                self.GAME_KEY,
+                delta=-1,
+                username=self.player.name,
+            )
+
+        self._pending_star_gain = False
+
+        await msg.edit(
+            content=self._status_text(
+                f"No attempts remaining"
+            ),
             attachments=[self._board_file()],
         )
         await self._show_replay(msg)
 
-    async def _handle_loss(self, msg: discord.Message):
-        await msg.edit(
-            content=self._status_text("No attempts remaining. Round over."),
-            attachments=[self._board_file()],
+    async def _prompt_continue(self, msg: discord.Message, next_streak: int):
+        multiplier_next = EconomyManager.star_bonus_multiplier(next_streak)
+        continue_btn = discord.ui.Button(
+            label=f"Continue (next bonus x{multiplier_next:.2f})",
+            style=discord.ButtonStyle.green,
         )
-        await self._show_replay(msg)
+        cash_out_btn = discord.ui.Button(
+            label="Exit Now",
+            style=discord.ButtonStyle.red,
+        )
+
+        async def continue_cb(btn_inter: discord.Interaction):
+            if btn_inter.user.id != self.player.id:
+                await btn_inter.response.send_message("Not your game!", ephemeral=True)
+                return
+            await btn_inter.response.defer()
+            streak_info = None
+            if self._pending_star_gain:
+                streak_info = EconomyManager.adjust_star_bonus(
+                    self.player.id,
+                    self.GAME_KEY,
+                    delta=1,
+                    username=self.player.name,
+                    career_increment=1,
+                )
+                self._pending_star_gain = False
+                self._pending_next_streak = streak_info["stars"] + 1
+                self.game.next_level()
+            else:
+                current = EconomyManager.star_bonus_count(
+                    self.player.id,
+                    self.GAME_KEY,
+                    self.player.name,
+                )
+                streak_info = {
+                    "stars": current,
+                    "career_total": EconomyManager.ensure_user(
+                        self.player.id, self.player.name
+                    ).get("career_stars_total", 0),
+                    "multiplier": EconomyManager.star_bonus_multiplier(current),
+                }
+            await self._start_next_round(msg, streak_info=streak_info)
+
+        async def cash_out_cb(btn_inter: discord.Interaction):
+            if btn_inter.user.id != self.player.id:
+                await btn_inter.response.send_message("Not your game!", ephemeral=True)
+                return
+            await btn_inter.response.defer()
+            self._pending_star_gain = False
+            await msg.edit(
+                content=self._status_text(f"Cashed out at round {self.game.stars+1}"),
+                attachments=[],
+                view=None,
+            )
+            await self._show_replay(msg)
+
+        continue_btn.callback = continue_cb
+        cash_out_btn.callback = cash_out_cb
+
+        prompt_view = discord.ui.View()
+        prompt_view.add_item(continue_btn)
+        prompt_view.add_item(cash_out_btn)
+
+        await msg.edit(view=prompt_view)
+
+    async def _start_next_round(self, msg: discord.Message, streak_info: dict | None = None):
+        self._reset_board_controls()
+        self.msg = msg
+        if streak_info and "stars" in streak_info:
+            self._pending_next_streak = streak_info["stars"] + 1
+        note = ""
+        next_target = self._pending_next_streak
+        if next_target:
+            note = (
+                f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
+            )
+        await msg.edit(
+            content=self._status_text(f"New board ready!\n{note}"),
+            attachments=[self._board_file()],
+            view=self,
+        )
 
     async def _show_replay(self, msg: discord.Message):
         if self.on_finish is not None:
