@@ -157,6 +157,7 @@ async def setup_bot():
                 now = datetime.now(timezone.utc)
                 MetricsRollups.record_economy_snapshot(as_of=now)
                 MetricsRollups.record_guild_snapshot(as_of=now)
+                MetricsRollups.record_user_guild_affinity(as_of=now)
             except Exception as exc:
                 print(f"[WARN] Rollup worker failed: {exc}")
             await asyncio.sleep(24 * 60 * 60)

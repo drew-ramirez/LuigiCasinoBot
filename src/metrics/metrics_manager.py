@@ -1,8 +1,8 @@
 ###########################################################
 # File: metrics_manager.py
 #
-# Description: Simple helpers for engagement metrics logging
-#              into MongoDB so we can run aggregations later.
+# Description: Helpers for logging engagement metrics and for
+#              materializing daily rollups used by dashboards.
 ###########################################################
 
 from __future__ import annotations
@@ -94,6 +94,7 @@ class MetricsRollups:
 
     ECONOMY_ROLLUPS = db["metrics_economy_rollups"]
     GUILD_ROLLUPS = db["metrics_guild_rollups"]
+    USER_GUILD_AFFINITY = db["metrics_user_guild_affinity"]
     _indexes_ready = False
 
     @classmethod
@@ -101,9 +102,16 @@ class MetricsRollups:
         if cls._indexes_ready:
             return
         try:
+            # Ensure rollup lookups and upserts stay efficient as data grows.
             cls.ECONOMY_ROLLUPS.create_index("date", unique=True)
             cls.GUILD_ROLLUPS.create_index(
                 [("date", 1), ("guild_id", 1)], unique=True
+            )
+            cls.USER_GUILD_AFFINITY.create_index(
+                [("user_id", 1), ("guild_id", 1)], unique=True
+            )
+            cls.USER_GUILD_AFFINITY.create_index(
+                [("user_id", 1), ("is_primary", 1)]
             )
         except Exception as exc:  # pragma: no cover
             print(f"[WARN] MetricsRollups index creation failed: {exc}")
@@ -116,6 +124,7 @@ class MetricsRollups:
         stamped = as_of or datetime.now(timezone.utc)
         date_key = stamped.date().isoformat()
 
+        # Aggregate totals directly from the users collection so we capture the current economy state.
         pipeline = [
             {
                 "$group": {
@@ -162,6 +171,7 @@ class MetricsRollups:
         date_key = stamped.date().isoformat()
         window_start = stamped - timedelta(hours=window_hours)
 
+        # Pull recent game sessions by guild to see which servers are most active.
         match_stage: Dict[str, Any] = {
             "guild_id": {"$ne": None},
             "timestamp": {"$gte": window_start},
@@ -216,6 +226,7 @@ class MetricsRollups:
                     "total_bet": 1,
                     "unique_players": {
                         "$size": {
+                            # Collapse all player id sets per guild into one combined unique list.
                             "$reduce": {
                                 "input": "$player_sets",
                                 "initialValue": [],
@@ -251,3 +262,80 @@ class MetricsRollups:
             docs.append(doc)
 
         return docs
+
+    @classmethod
+    def record_user_guild_affinity(
+        cls,
+        *,
+        as_of: Optional[datetime] = None,
+        lookback_days: int = 30,
+    ) -> list[Dict[str, Any]]:
+        """Assign each user a primary guild based on recent activity."""
+        cls._ensure_indexes()
+        stamped = as_of or datetime.now(timezone.utc)
+        window_start = stamped - timedelta(days=lookback_days)
+
+        # Count how many sessions each user played per guild within the lookback window.
+        pipeline = [
+            {
+                "$match": {
+                    "timestamp": {"$gte": window_start},
+                    "user_id": {"$ne": None},
+                    "guild_id": {"$ne": None},
+                }
+            },
+            {
+                "$group": {
+                    "_id": {"user_id": "$user_id", "guild_id": "$guild_id"},
+                    "sessions": {"$sum": 1},
+                    "last_played": {"$max": "$timestamp"},
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "user_id": "$_id.user_id",
+                    "guild_id": "$_id.guild_id",
+                    "sessions": 1,
+                    "last_played": 1,
+                }
+            },
+        ]
+
+        records = list(MetricsManager.GAME_COLLECTION.aggregate(pipeline))
+
+        by_user: Dict[int, list[Dict[str, Any]]] = {}
+        for record in records:
+            by_user.setdefault(record["user_id"], []).append(record)
+
+        updates: list[Dict[str, Any]] = []
+        for user_id, entries in by_user.items():
+            # Highest session count wins; most recent play breaks ties so active guilds stay primary.
+            entries.sort(
+                key=lambda item: (
+                    item.get("sessions", 0),
+                    item.get("last_played")
+                    if isinstance(item.get("last_played"), datetime)
+                    else datetime.min.replace(tzinfo=timezone.utc),
+                ),
+                reverse=True,
+            )
+            primary_guild_id = entries[0]["guild_id"] if entries else None
+            for entry in entries:
+                doc = {
+                    "user_id": user_id,
+                    "guild_id": entry["guild_id"],
+                    "sessions": entry.get("sessions", 0),
+                    "last_played": entry.get("last_played", stamped),
+                    "lookback_days": lookback_days,
+                    "generated_at": stamped,
+                    "is_primary": entry["guild_id"] == primary_guild_id,
+                }
+                cls.USER_GUILD_AFFINITY.update_one(
+                    {"user_id": user_id, "guild_id": entry["guild_id"]},
+                    {"$set": doc},
+                    upsert=True,
+                )
+                updates.append(doc)
+
+        return updates
