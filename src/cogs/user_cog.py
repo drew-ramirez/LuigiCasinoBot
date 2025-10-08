@@ -306,7 +306,7 @@ class LeaderboardView(discord.ui.View):
         if entries:
             lines = []
             for i, entry in enumerate(entries, start=1):
-                lines.append(f"**#{i}** {entry['name']} — {entry['value']}")
+                lines.append(f"**#{i}** {entry['name']} - {entry['value']}")
             leaderboard_text = "\n".join(lines)
             embed.add_field(name="\u200b", value=leaderboard_text, inline=False)
         else:

@@ -21,7 +21,7 @@ if _channels_env:
         int(v.strip()) for v in _channels_env.split(",") if v.strip().isdigit()
     }
 else:
-    single_channel = os.getenv("CASINO_CHANNEL_ID", "1424904415160045589")
+    single_channel = os.getenv("CASINO_CHANNEL_ID", "1424113433712001105")
     try:
         ALLOWED_CHANNEL_IDS = {int(single_channel)}
     except ValueError:

@@ -50,7 +50,9 @@ class LuckyStarsView(discord.ui.View):
 
         self.add_item(self.left_button)
         spacer = discord.ui.Button(
-            label="", style=discord.ButtonStyle.grey, disabled=True
+            label="\u200b",  # zero-width space keeps Discord happy MUST HAVE DO NOT DELETE
+            style=discord.ButtonStyle.grey,
+            disabled=True,
         )
         self.add_item(spacer)
         self.add_item(self.right_button)

@@ -39,7 +39,7 @@ def make_game_header(user, game_name: str, stats: dict) -> str:
     dealer_action = stats.get("dealer_action")
     round_summary = stats.get("round_summary")
 
-    title = f"🎰 Luigi’s Casino — {game_name}"
+    title = f"🎰 Luigi’s Casino - {game_name}"
     line1 = f"💰 Balance: {balance:,}   💎 Bet: {active_bet}   ⭐ Stars: {stars_current}"
     footer = round_summary or dealer_action
 
@@ -60,7 +60,7 @@ def make_pregame_banner(
     call_to_action = prompt or "Select your wager amount to begin:"
 
     lines = [
-        f"🎰 Luigi’s Casino — {game_name}",
+        f"🎰 Luigi’s Casino - {game_name}",
         f"💰 Balance: {balance:,} coins",
         call_to_action,
     ]

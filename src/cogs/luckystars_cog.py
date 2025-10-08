@@ -58,7 +58,7 @@ class LuckyStarsCog(BaseGameCog):
                 self.cleanup_game,
                 start_game_callback=start_game,
             )
-
+            
             await inter.response.edit_message(
                 content=content,
                 attachments=[file],
