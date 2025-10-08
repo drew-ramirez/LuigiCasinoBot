@@ -1,14 +1,13 @@
 ###########################################################
 # File: metrics_manager.py
 #
-# Description: Simple helpers for recording lightweight
-#              engagement metrics (command volume, game starts)
+# Description: Simple helpers for engagement metrics logging
 #              into MongoDB so we can run aggregations later.
 ###########################################################
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, TYPE_CHECKING
 
 from economy.EconomyManager import db
@@ -22,6 +21,7 @@ class MetricsManager:
 
     COMMAND_COLLECTION = db["metrics_command_events"]
     GAME_COLLECTION = db["metrics_game_events"]
+    USERS_COLLECTION = db["users"]
 
     @staticmethod
     def _utcnow() -> datetime:
@@ -88,3 +88,166 @@ class MetricsManager:
         except Exception as exc:  # pragma: no cover - logging should not break gameplay
             print(f"[WARN] MetricsManager game insert failed: {exc}")
 
+
+class MetricsRollups:
+    """Aggregate daily economy and guild summaries for dashboards."""
+
+    ECONOMY_ROLLUPS = db["metrics_economy_rollups"]
+    GUILD_ROLLUPS = db["metrics_guild_rollups"]
+    _indexes_ready = False
+
+    @classmethod
+    def _ensure_indexes(cls) -> None:
+        if cls._indexes_ready:
+            return
+        try:
+            cls.ECONOMY_ROLLUPS.create_index("date", unique=True)
+            cls.GUILD_ROLLUPS.create_index(
+                [("date", 1), ("guild_id", 1)], unique=True
+            )
+        except Exception as exc:  # pragma: no cover
+            print(f"[WARN] MetricsRollups index creation failed: {exc}")
+        cls._indexes_ready = True
+
+    @classmethod
+    def record_economy_snapshot(cls, *, as_of: Optional[datetime] = None) -> Dict[str, Any]:
+        """Capture total coins, wins/losses, and user counts."""
+        cls._ensure_indexes()
+        stamped = as_of or datetime.now(timezone.utc)
+        date_key = stamped.date().isoformat()
+
+        pipeline = [
+            {
+                "$group": {
+                    "_id": None,
+                    "total_users": {"$sum": 1},
+                    "total_balance": {"$sum": {"$ifNull": ["$balance", 0]}},
+                    "total_coins_won": {"$sum": {"$ifNull": ["$coins_won", 0]}},
+                    "total_coins_lost": {"$sum": {"$ifNull": ["$coins_lost", 0]}},
+                    "total_games_played": {"$sum": {"$ifNull": ["$games_played", 0]}},
+                }
+            }
+        ]
+
+        aggregated = list(MetricsManager.USERS_COLLECTION.aggregate(pipeline))
+        summary = aggregated[0] if aggregated else {}
+
+        doc: Dict[str, Any] = {
+            "date": date_key,
+            "generated_at": stamped,
+            "total_users": summary.get("total_users", 0),
+            "total_balance": summary.get("total_balance", 0),
+            "total_coins_won": summary.get("total_coins_won", 0),
+            "total_coins_lost": summary.get("total_coins_lost", 0),
+            "total_games_played": summary.get("total_games_played", 0),
+        }
+
+        cls.ECONOMY_ROLLUPS.update_one(
+            {"date": date_key},
+            {"$set": doc},
+            upsert=True,
+        )
+        return doc
+
+    @classmethod
+    def record_guild_snapshot(
+        cls,
+        *,
+        as_of: Optional[datetime] = None,
+        window_hours: int = 24,
+    ) -> list[Dict[str, Any]]:
+        """Summarize game activity per guild over the recent window."""
+        cls._ensure_indexes()
+        stamped = as_of or datetime.now(timezone.utc)
+        date_key = stamped.date().isoformat()
+        window_start = stamped - timedelta(hours=window_hours)
+
+        match_stage: Dict[str, Any] = {
+            "guild_id": {"$ne": None},
+            "timestamp": {"$gte": window_start},
+        }
+
+        pipeline = [
+            {"$match": match_stage},
+            {
+                "$group": {
+                    "_id": {
+                        "guild_id": "$guild_id",
+                        "game_key": {"$ifNull": ["$game_key", "unknown"]},
+                    },
+                    "sessions": {"$sum": 1},
+                    "total_bet": {"$sum": {"$ifNull": ["$bet_amount", 0]}},
+                    "players": {"$addToSet": "$user_id"},
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "guild_id": "$_id.guild_id",
+                    "game_key": "$_id.game_key",
+                    "sessions": 1,
+                    "total_bet": 1,
+                    "players": "$players",
+                    "unique_players": {"$size": "$players"},
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$guild_id",
+                    "games": {
+                        "$push": {
+                            "game_key": "$game_key",
+                            "sessions": "$sessions",
+                            "unique_players": "$unique_players",
+                            "total_bet": "$total_bet",
+                        }
+                    },
+                    "total_sessions": {"$sum": "$sessions"},
+                    "total_bet": {"$sum": "$total_bet"},
+                    "player_sets": {"$push": "$players"},
+                }
+            },
+            {
+                "$project": {
+                    "_id": 0,
+                    "guild_id": "$_id",
+                    "games": 1,
+                    "total_sessions": 1,
+                    "total_bet": 1,
+                    "unique_players": {
+                        "$size": {
+                            "$reduce": {
+                                "input": "$player_sets",
+                                "initialValue": [],
+                                "in": {"$setUnion": ["$$value", "$$this"]},
+                            }
+                        }
+                    },
+                }
+            },
+        ]
+
+        records = list(MetricsManager.GAME_COLLECTION.aggregate(pipeline))
+        docs: list[Dict[str, Any]] = []
+
+        for record in records:
+            doc = {
+                "date": date_key,
+                "generated_at": stamped,
+                "window_hours": window_hours,
+                "window_start": window_start,
+                "window_end": stamped,
+                "guild_id": record["guild_id"],
+                "total_sessions": record.get("total_sessions", 0),
+                "unique_players": record.get("unique_players", 0),
+                "total_bet": record.get("total_bet", 0),
+                "games": record.get("games", []),
+            }
+            cls.GUILD_ROLLUPS.update_one(
+                {"date": date_key, "guild_id": record["guild_id"]},
+                {"$set": doc},
+                upsert=True,
+            )
+            docs.append(doc)
+
+        return docs
