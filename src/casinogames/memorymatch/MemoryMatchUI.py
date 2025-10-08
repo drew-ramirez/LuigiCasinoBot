@@ -17,6 +17,13 @@ from utils.ui_embeds import make_game_header
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from economy.EconomyManager import EconomyManager
 
+# this'll probably be better for future iterations
+FLIP_FRAME_DURATION_MS = 90
+FLIP_ANIMATION_DELAY = 0.45
+MISMATCH_REVEAL_DELAY = 0.55
+UNFLIP_FRAME_DURATION_MS = 90
+UNFLIP_ANIMATION_DELAY = 0.45
+
 
 class MemoryMatchControls(discord.ui.View):
     #persistent view for Memory Match with per-card callbacks
@@ -119,12 +126,12 @@ class MemoryMatchControls(discord.ui.View):
         ###########################################################
         # flip animation
         ###########################################################
-        gif = make_board_flip_gif(game, pos, symbol, duration=120)
+        gif = make_board_flip_gif(game, pos, symbol, duration=FLIP_FRAME_DURATION_MS)
         await msg.edit(
             content=self._status_text(f"Revealing card {pos + 1}..."),
             attachments=[discord.File(gif, filename=f"board_flip_{pos}.gif")],
         )
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(FLIP_ANIMATION_DELAY)
 
         ###########################################################
         # update static board
@@ -167,17 +174,19 @@ class MemoryMatchControls(discord.ui.View):
         await msg.edit(view=self)
 
     async def _handle_mismatch(self, msg: discord.Message):
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(MISMATCH_REVEAL_DELAY)
         a, b = self.game.revealed[-2], self.game.revealed[-1]
         symbols = [self.game.board[a][0], self.game.board[b][0]]
 
-        gif = make_board_reverse_flip_gif(self.game, [a, b], symbols, duration=120)
+        gif = make_board_reverse_flip_gif(
+            self.game, [a, b], symbols, duration=UNFLIP_FRAME_DURATION_MS
+        )
         await msg.edit(
             content=self._status_text("Not a match!"),
             attachments=[discord.File(gif, "board_unflip.gif")],
         )
 
-        await asyncio.sleep(0.6)
+        await asyncio.sleep(UNFLIP_ANIMATION_DELAY)
         self.game.hide_unmatched()
 
         await msg.edit(

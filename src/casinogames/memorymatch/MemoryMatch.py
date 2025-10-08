@@ -2,6 +2,7 @@
 from typing import List, Tuple
 from casinogames.core.BaseGame import BaseGame
 
+
 class MemoryMatch(BaseGame):
     # Board layout constants
     COLS = 4
@@ -13,27 +14,56 @@ class MemoryMatch(BaseGame):
     MARGIN_X = 32
     MARGIN_Y = 32
 
+    # Each clear upgrades the board until we hit the cap.
+    DIFFICULTY_STEPS: List[Tuple[int, List[str]]] = [
+        (8, ["cloud", "mushroom", "flower", "star"]),
+        (12, ["cloud", "mushroom", "flower", "star", "luigi", "mario"]),
+        (
+            16,
+            [
+                "cloud",
+                "mushroom",
+                "flower",
+                "star",
+                "luigi",
+                "mario",
+                "goomba",
+                "bowser",
+            ],
+        ),
+        (
+            20,
+            [
+                "cloud",
+                "mushroom",
+                "flower",
+                "star",
+                "luigi",
+                "mario",
+                "goomba",
+                "bowser",
+                "boo",
+                "yoshi",
+            ],
+        ),
+    ]
+
     def __init__(self, player_id: int, bet: int, base_attempts: int = 3):
         self.player_id = player_id
         self.bet = max(1, bet)
         self.base_attempts = max(1, base_attempts)
         self.remaining_attempts = self.base_attempts
         self.stars = 0
-        self.board = []           # [(symbol, is_flipped, is_matched)]
+        self.board = []  # [(symbol, is_flipped, is_matched)]
         self.symbols = []
-        self.revealed = []        # positions currently flipped
+        self.revealed = []  # positions currently flipped
         self.generate_board()
 
     def get_difficulty(self) -> Tuple[int, List[str]]:
-        # Decide number of cards + symbols based on stars earned
-        if self.stars < 5:
-            return 8, ["cloud", "mushroom", "flower", "star"]
-        elif self.stars < 10:
-            return 12, ["cloud", "mushroom", "flower", "star", "luigi", "mario"]
-        elif self.stars < 15:
-            return 16, ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser"]
-        else:
-            return 20, ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser", "boo", "yoshi"]
+        # Decide number of cards + symbols based on how many clears (stars) the player has
+        index = min(self.stars, len(self.DIFFICULTY_STEPS) - 1)
+        cards, symbols = self.DIFFICULTY_STEPS[index]
+        return cards, list(symbols)
 
     def generate_board(self):
         num_cards, symbols = self.get_difficulty()
