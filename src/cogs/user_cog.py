@@ -44,10 +44,10 @@ class UserCog(commands.Cog):
     ###########################################################
 
     @discord.app_commands.command(
-        name="profile", description="View your casino profile"
+        name="casino_profile", description="View your casino profile"
     )
     async def profile(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "profile")
+        MetricsManager.record_command_event(interaction, "casino_profile")
         # defer to acknowledge the command
         await interaction.response.defer(ephemeral=True)
 
@@ -88,10 +88,10 @@ class UserCog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.app_commands.command(
-        name="balance", description="Check your casino balance."
+        name="casino_balance", description="Check your casino balance."
     )
     async def balance(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "balance")
+        MetricsManager.record_command_event(interaction, "casino_balance")
         # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=True)
 
@@ -108,10 +108,10 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="daily", description="Claim your daily coin bonus"
+        name="casino_daily", description="Claim your daily coin bonus"
     )
     async def daily(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "daily")
+        MetricsManager.record_command_event(interaction, "casino_daily")
         uid = interaction.user.id
         username = interaction.user.name
         claim_info = EconomyManager.record_daily_claim(uid, username)
@@ -145,10 +145,10 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="leaderboard", description="Show top casino players by coin balance"
+        name="casino_leaderboard", description="Show top casino players by coin balance"
     )
     async def leaderboard(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "leaderboard")
+        MetricsManager.record_command_event(interaction, "casino_leaderboard")
         await interaction.response.defer(ephemeral=True)
 
         collection = EconomyManager.COLLECTION
@@ -220,10 +220,10 @@ class UserCog(commands.Cog):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @discord.app_commands.command(
-        name="help", description="Show help information for the casino games"
+        name="casino_help", description="Show help information for the casino games"
     )
     async def help_cmd(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "help")
+        MetricsManager.record_command_event(interaction, "casino_help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
             description="Quick reference for available commands.",
@@ -234,10 +234,10 @@ class UserCog(commands.Cog):
             name="General Commands",
             value="\n".join(
                 [
-                    "/profile",
-                    "/daily",
-                    "/leaderboard",
-                    "/balance",
+                    "/casino_profile",
+                    "/casino_daily",
+                    "/casino_leaderboard",
+                    "/casino_balance",
                 ]
             ),
             inline=False,
@@ -247,10 +247,10 @@ class UserCog(commands.Cog):
             name="Game Commands",
             value="\n".join(
                 [
-                    "/memory_start",
-                    "/pair_start",
-                    "/lucky_start",
-                    "/poker_start",
+                    "/casino_memorymatch",
+                    "/casino_pairagone",
+                    "/casino_luckystars",
+                    "/casino_picturepoker",
                 ]
             ),
             inline=False,

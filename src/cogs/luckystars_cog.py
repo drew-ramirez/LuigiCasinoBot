@@ -23,14 +23,14 @@ class LuckyStarsCog(BaseGameCog):
         print("LuckyStarsCog loaded.")
 
     ###########################################################
-    # /lucky_start
+    # /casino_luckystars
     ###########################################################
-    @discord.app_commands.command(name="lucky_start", description="Start a Lucky Stars game")
+    @discord.app_commands.command(name="casino_luckystars", description="Start a Lucky Stars game")
     async def lucky_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
 
-        self.log_command_invocation(interaction, "lucky_start")
+        self.log_command_invocation(interaction, "casino_luckystars")
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
@@ -44,7 +44,7 @@ class LuckyStarsCog(BaseGameCog):
             game.deal_round()
             self.log_game_start(
                 inter,
-                "lucky_start",
+                "casino_luckystars",
                 bet_amount=bet_amount,
             )
 

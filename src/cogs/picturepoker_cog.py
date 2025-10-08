@@ -23,16 +23,16 @@ class PicturePokerCog(BaseGameCog):
         print("PicturePokerCog loaded.")
 
     ###########################################################
-    # /poker_start
+    # /casino_picturepoker
     ###########################################################
     @discord.app_commands.command(
-        name="poker_start", description="Start a Picture Poker game"
+        name="casino_picturepoker", description="Start a Picture Poker game"
     )
     async def poker_start(self, interaction: discord.Interaction):
 
         user_id = interaction.user.id
 
-        self.log_command_invocation(interaction, "poker_start")
+        self.log_command_invocation(interaction, "casino_picturepoker")
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
@@ -51,7 +51,7 @@ class PicturePokerCog(BaseGameCog):
             target_game.start_round(forced_bet=bet_amount)
             self.log_game_start(
                 inter,
-                "poker_start",
+                "casino_picturepoker",
                 bet_amount=bet_amount,
             )
 
