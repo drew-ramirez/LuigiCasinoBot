@@ -157,7 +157,7 @@ class MemoryMatchControls(discord.ui.View):
             board_cleared = game.is_board_cleared()
             if game.last_bonus_awarded and not board_cleared:
                 await msg.edit(
-                    content=self._status_text("3-Streak! +1 attempt."),
+                    content=self._status_text("3-Streak, +1 attempt!"),
                     attachments=[self._board_file()],
                     view=self,
                 )
