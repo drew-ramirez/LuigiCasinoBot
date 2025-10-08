@@ -33,6 +33,8 @@ class MemoryMatchCog(BaseGameCog):
         player = interaction.user
         user_id = player.id
 
+        self.log_command_invocation(interaction, "memory_start")
+
         #defer response prevent "interaction failed" message
         #in other game cogs as well.
         if not interaction.response.is_done():
@@ -44,6 +46,11 @@ class MemoryMatchCog(BaseGameCog):
             new_game: MemoryMatch | None = None,
         ):
             game = new_game or MemoryMatch(user_id, bet_amount)
+            self.log_game_start(
+                inter,
+                "memory_start",
+                bet_amount=bet_amount,
+            )
 
             board_bytes = render_board_image(game)
             board_bytes.seek(0)

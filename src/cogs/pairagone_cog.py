@@ -31,6 +31,8 @@ class PairAGoneCog(BaseGameCog):
         player = interaction.user
         user_id = player.id
 
+        self.log_command_invocation(interaction, "pair_start")
+
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
 
@@ -40,6 +42,11 @@ class PairAGoneCog(BaseGameCog):
             new_game: PairAGone | None = None,
         ):
             game = new_game or PairAGone(user_id, bet_amount)
+            self.log_game_start(
+                inter,
+                "pair_start",
+                bet_amount=bet_amount,
+            )
 
             board_bytes = render_pair_board(game)
             board_bytes.seek(0)

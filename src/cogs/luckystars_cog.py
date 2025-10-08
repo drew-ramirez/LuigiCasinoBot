@@ -30,6 +30,8 @@ class LuckyStarsCog(BaseGameCog):
         player = interaction.user
         user_id = player.id
 
+        self.log_command_invocation(interaction, "lucky_start")
+
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
 
@@ -40,6 +42,11 @@ class LuckyStarsCog(BaseGameCog):
         ):
             game = new_game or LuckyStars(bet_amount)
             game.deal_round()
+            self.log_game_start(
+                inter,
+                "lucky_start",
+                bet_amount=bet_amount,
+            )
 
             board_bytes = render_lucky_board(game, reveal=False)
             board_bytes.seek(0)
