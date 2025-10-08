@@ -130,8 +130,8 @@ async def on_ready():
 ###########################################################
 COGS = [
     "cogs.user_cog",
-    # "cogs.admin_cog",
-    # "cogs.test_cog",
+    #"cogs.admin_cog",
+    #"cogs.test_cog",
     "cogs.memorymatch_cog",
     "cogs.pairagone_cog",
     "cogs.luckystars_cog",

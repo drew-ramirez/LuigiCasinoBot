@@ -2,7 +2,6 @@
 from typing import List, Tuple
 from casinogames.core.BaseGame import BaseGame
 
-
 class MemoryMatch(BaseGame):
     # Board layout constants
     COLS = 4
@@ -20,16 +19,7 @@ class MemoryMatch(BaseGame):
         (12, ["cloud", "mushroom", "flower", "star", "luigi", "mario"]),
         (
             16,
-            [
-                "cloud",
-                "mushroom",
-                "flower",
-                "star",
-                "luigi",
-                "mario",
-                "goomba",
-                "bowser",
-            ],
+            ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser"],
         ),
         (
             20,
@@ -54,9 +44,11 @@ class MemoryMatch(BaseGame):
         self.base_attempts = max(1, base_attempts)
         self.remaining_attempts = self.base_attempts
         self.stars = 0
-        self.board = []  # [(symbol, is_flipped, is_matched)]
+        self.board = []           # [(symbol, is_flipped, is_matched)]
         self.symbols = []
-        self.revealed = []  # positions currently flipped
+        self.revealed = []        # positions currently flipped
+        self.match_streak = 0     # consecutive correct matches
+        self.last_bonus_awarded = False
         self.generate_board()
 
     def get_difficulty(self) -> Tuple[int, List[str]]:
@@ -68,6 +60,8 @@ class MemoryMatch(BaseGame):
     def generate_board(self):
         num_cards, symbols = self.get_difficulty()
         self.symbols = symbols
+        self.match_streak = 0
+        self.last_bonus_awarded = False
 
         layout_map = {
             8: (4, 2),
@@ -108,6 +102,7 @@ class MemoryMatch(BaseGame):
     def check_match(self) -> bool:
         # Check if two revealed cards match
         if len(self.revealed) < 2:
+            self.last_bonus_awarded = False
             return None
 
         a, b = self.revealed[-2], self.revealed[-1]
@@ -118,9 +113,20 @@ class MemoryMatch(BaseGame):
         if sa == sb:
             self.board[a] = (sa, True, True)
             self.board[b] = (sb, True, True)
+            self.match_streak += 1
+
+            bonus_awarded = False
+            while self.match_streak >= 3:
+                self.remaining_attempts += 1
+                self.match_streak -= 3
+                bonus_awarded = True
+
+            self.last_bonus_awarded = bonus_awarded
             return True
         else:
             self.remaining_attempts -= 1
+            self.match_streak = 0
+            self.last_bonus_awarded = False
             return False
 
     def hide_unmatched(self):
@@ -136,6 +142,8 @@ class MemoryMatch(BaseGame):
     def award_star(self):
         self.stars += 1
         self.remaining_attempts = self.base_attempts * 2
+        self.match_streak = 0
+        self.last_bonus_awarded = False
 
     def is_board_cleared(self) -> bool:
         # True if all cards matched

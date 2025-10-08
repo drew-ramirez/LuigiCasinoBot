@@ -108,6 +108,33 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
+        name="casino_pity", description="Gambled your life-savings? Luigi's got you."
+    )
+    async def pity(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_pity")
+        await interaction.response.defer(ephemeral=True)
+
+        user = interaction.user
+        user_id = user.id
+        username = user.name
+
+        record = EconomyManager.ensure_user(user_id, username)
+        balance = record.get("balance", 0)
+
+        if balance > 5:
+            await interaction.followup.send(
+                f"{user.display_name}, your balance is **{balance} coins** - keep spinning!",
+                ephemeral=True,
+            )
+            return
+
+        new_balance = EconomyManager.grant(user_id, 100, username)
+        await interaction.followup.send(
+            f"{user.display_name}, Luigi tossed you **100 coins**. New balance: **{new_balance}**.",
+            ephemeral=True,
+        )
+
+    @discord.app_commands.command(
         name="casino_daily", description="Claim your daily coin bonus"
     )
     async def daily(self, interaction: discord.Interaction):
@@ -131,7 +158,7 @@ class UserCog(commands.Cog):
             )
             return
 
-        reward = 100
+        reward = 150
         streak = claim_info.get("streak", 1)
         EconomyManager.grant(uid, reward, username)
 
@@ -234,10 +261,11 @@ class UserCog(commands.Cog):
             name="General Commands",
             value="\n".join(
                 [
-                    "/casino_profile",
-                    "/casino_daily",
-                    "/casino_leaderboard",
-                    "/casino_balance",
+                    "**/casino_profile** - View your casino profile",
+                    "**/casino_daily** - Claim your daily coin bonus",
+                    "**/casino_leaderboard** - View the top players",
+                    "**/casino_balance** - Check your coin balance",
+                    "**/casino_pity** - Luigi fuels your addiction",
                 ]
             ),
             inline=False,
@@ -247,10 +275,10 @@ class UserCog(commands.Cog):
             name="Game Commands",
             value="\n".join(
                 [
-                    "/casino_memorymatch",
-                    "/casino_pairagone",
-                    "/casino_luckystars",
-                    "/casino_picturepoker",
+                    "**/casino_memorymatch** - Face Down Match Pairs",
+                    "**/casino_pairagone** - Match Pairs Till Deck's Gone",
+                    "**/casino_luckystars** - 50/50 Card Game",
+                    "**/casino_picturepoker** - Luigi's Picture Poker",
                 ]
             ),
             inline=False,

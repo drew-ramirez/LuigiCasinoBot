@@ -206,16 +206,49 @@ def load_pairagone_extras():
     sheet = Image.open(path).convert("RGBA")
     extras = {}
 
-    boo_full = sheet.crop((80, 32, 111, 64))  # adjust a few px if off
-    extras["boo_full"] = boo_full.resize((136, 207), Image.NEAREST)
+    def _resize_card(img: Image.Image) -> Image.Image:
+        return img.resize((136, 207), Image.NEAREST)
 
-    boo_half = sheet.crop((111, 32, 126, 64))
-    extras["boo_half"] = boo_half.resize((136, 207), Image.NEAREST)
+    def _compose_on_blank(
+        blank: Image.Image,
+        sprite: Image.Image,
+        *,
+        margin_x_ratio: float = 0.07,
+        margin_y_ratio: float = 0.14,
+    ) -> Image.Image:
+        card = blank.copy()
+        sprite = sprite.convert("RGBA")
+        max_w = max(1, int(round(blank.width * (1.0 - 2 * margin_x_ratio))))
+        max_h = max(1, int(round(blank.height * (1.0 - 2 * margin_y_ratio))))
+        scale = min(max_w / sprite.width, max_h / sprite.height)
+        new_size = (
+            max(1, int(round(sprite.width * scale))),
+            max(1, int(round(sprite.height * scale))),
+        )
+        sprite = sprite.resize(new_size, Image.NEAREST)
+        offset = (
+            (blank.width - new_size[0]) // 2,
+            (blank.height - new_size[1]) // 2,
+        )
+        card.paste(sprite, offset, mask=sprite)
+        return card
 
-    blank_half = sheet.crop((176, 64, 192, 112))
-    extras["blank_half"] = blank_half.resize((136, 207), Image.NEAREST)
+    blank_full_src = sheet.crop((143, 64, 176, 112))
+    blank_half_src = sheet.crop((176, 64, 192, 112))
+    blank_full = _resize_card(blank_full_src)
+    blank_half = _resize_card(blank_half_src)
 
-    blank_full = sheet.crop((143, 64, 176, 112))
-    extras["blank_full"] = blank_full.resize((136, 207), Image.NEAREST)
+    extras["blank_full"] = blank_full
+    extras["blank_half"] = blank_half
+
+    boo_face = sheet.crop((73, 65, 104, 93))
+    boo_half_face = sheet.crop((240, 19, 256, 30))
+
+    extras["boo_full"] = _compose_on_blank(
+        blank_full, boo_face, margin_x_ratio=0.05, margin_y_ratio=0.12
+    )
+    extras["boo_half"] = _compose_on_blank(
+        blank_half, boo_half_face, margin_x_ratio=0.1, margin_y_ratio=0.18
+    )
 
     return extras

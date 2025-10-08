@@ -154,7 +154,19 @@ class MemoryMatchControls(discord.ui.View):
             await self._handle_mismatch(msg)
         elif result:
             await self.update_controls_for_match(game.revealed[-2:], msg)
-            if game.is_board_cleared():
+            board_cleared = game.is_board_cleared()
+            if game.last_bonus_awarded and not board_cleared:
+                await msg.edit(
+                    content=self._status_text("3-Streak! +1 attempt."),
+                    attachments=[self._board_file()],
+                    view=self,
+                )
+                game.last_bonus_awarded = False
+            elif game.last_bonus_awarded:
+                # ensure flag does not linger if the board is cleared
+                game.last_bonus_awarded = False
+
+            if board_cleared:
                 await self._handle_win(interaction, msg)
                 return
 

@@ -57,7 +57,7 @@ class TestCog(commands.Cog):
             await interaction.response.send_message(
                 (
                     f"Unknown memory face: {name}. Valid options: "
-                    "mario, mushroom, goomba, luigi, flower, star, bowser, yoshi, lakitu."
+                    "mario, mushroom, goomba, luigi, flower, star, bowser, yoshi, boo."
                 ),
                 ephemeral=True,
             )
