@@ -32,9 +32,7 @@ class PairAGoneCog(BaseGameCog):
         user_id = player.id
 
         self.log_command_invocation(interaction, "casino_pairagone")
-
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
+        visibility = self.resolve_visibility(interaction)
 
         async def start_game(
             inter: discord.Interaction,
@@ -80,6 +78,7 @@ class PairAGoneCog(BaseGameCog):
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
+            visibility=visibility,
         )
 
 

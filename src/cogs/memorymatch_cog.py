@@ -34,11 +34,7 @@ class MemoryMatchCog(BaseGameCog):
         user_id = player.id
 
         self.log_command_invocation(interaction, "casino_memorymatch")
-
-        #defer response prevent "interaction failed" message
-        #in other game cogs as well.
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
+        visibility = self.resolve_visibility(interaction)
 
         async def start_game(
             inter: discord.Interaction,
@@ -84,6 +80,7 @@ class MemoryMatchCog(BaseGameCog):
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
+            visibility=visibility,
         )
 
 

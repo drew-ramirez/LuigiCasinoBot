@@ -13,6 +13,7 @@ from discord.ext import commands
 
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_pregame_banner
+from utils.visibility import CommandVisibility, resolve_command_visibility
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 
@@ -59,6 +60,9 @@ class BaseGameCog(commands.Cog):
             metadata=extra,
         )
 
+    def resolve_visibility(self, interaction: discord.Interaction) -> CommandVisibility:
+        return resolve_command_visibility(interaction, self.metrics_game_key)
+
     async def present_wager_menu(
         self,
         interaction: discord.Interaction,
@@ -66,15 +70,22 @@ class BaseGameCog(commands.Cog):
         on_bet_selected: BetSelectedCallback,
         wager_options: Optional[list[int]] = None,
         prompt: Optional[str] = None,
-        ephemeral: bool = True,
+        visibility: Optional[CommandVisibility] = None,
+        ephemeral: Optional[bool] = None,
     ) -> None:
         """Wager used by all game cogs"""
         player = interaction.user
         user_id = player.id
         username = player.name
 
+        resolved_visibility = visibility or self.resolve_visibility(interaction)
+        if ephemeral is None:
+            ephemeral_flag = resolved_visibility.ephemeral
+        else:
+            ephemeral_flag = ephemeral
+
         if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=ephemeral)
+            await interaction.response.defer(ephemeral=ephemeral_flag)
 
         balance = EconomyManager.balance(user_id, username)
 
@@ -89,7 +100,7 @@ class BaseGameCog(commands.Cog):
         await interaction.followup.send(
             content=banner,
             view=view,
-            ephemeral=ephemeral,
+            ephemeral=ephemeral_flag,
         )
 
     def register_active_game(

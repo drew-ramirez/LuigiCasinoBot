@@ -33,9 +33,7 @@ class PicturePokerCog(BaseGameCog):
         user_id = interaction.user.id
 
         self.log_command_invocation(interaction, "casino_picturepoker")
-
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
+        visibility = self.resolve_visibility(interaction)
 
         ###########################################################
         # Callback: when a bet is selected
@@ -102,6 +100,7 @@ class PicturePokerCog(BaseGameCog):
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
+            visibility=visibility,
         )
 
 
