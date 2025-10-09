@@ -6,10 +6,13 @@
 
 import os
 import asyncio
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 import discord
 from discord.ext import commands
 from discord import app_commands
+
+from metrics.metrics_manager import MetricsRollups
 
 # load environment variables
 load_dotenv()
@@ -127,8 +130,8 @@ async def on_ready():
 ###########################################################
 COGS = [
     "cogs.user_cog",
-    # "cogs.admin_cog",
-    # "cogs.test_cog",
+    #"cogs.admin_cog",
+    #"cogs.test_cog",
     "cogs.memorymatch_cog",
     "cogs.pairagone_cog",
     "cogs.luckystars_cog",
@@ -146,6 +149,20 @@ async def setup_bot():
 
     if not TOKEN:
         raise RuntimeError("DISCORD_TOKEN not set in environment variables")
+
+    async def rollup_worker():
+        await bot.wait_until_ready()
+        while not bot.is_closed():
+            try:
+                now = datetime.now(timezone.utc)
+                MetricsRollups.record_economy_snapshot(as_of=now)
+                MetricsRollups.record_guild_snapshot(as_of=now)
+                MetricsRollups.record_user_guild_affinity(as_of=now)
+            except Exception as exc:
+                print(f"[WARN] Rollup worker failed: {exc}")
+            await asyncio.sleep(24 * 60 * 60)
+
+    asyncio.create_task(rollup_worker())
 
     await bot.start(TOKEN)
 

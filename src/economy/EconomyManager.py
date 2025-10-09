@@ -42,7 +42,7 @@ class EconomyManager:
         new_user = {
             "user_id": user_id,
             "username": username,
-            "balance": 1000,
+            "balance": 500,
             "games_played": 0,
             "created_at": int(time.time()),
             # Tracking fields for future features

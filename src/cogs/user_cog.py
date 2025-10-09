@@ -8,6 +8,7 @@ import discord
 from discord.ext import commands
 from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 bank = Bank()
 
@@ -43,9 +44,10 @@ class UserCog(commands.Cog):
     ###########################################################
 
     @discord.app_commands.command(
-        name="profile", description="View your casino profile"
+        name="casino_profile", description="View your casino profile"
     )
     async def profile(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_profile")
         # defer to acknowledge the command
         await interaction.response.defer(ephemeral=True)
 
@@ -86,9 +88,10 @@ class UserCog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=True)
 
     @discord.app_commands.command(
-        name="balance", description="Check your casino balance."
+        name="casino_balance", description="Check your casino balance."
     )
     async def balance(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_balance")
         # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=True)
 
@@ -105,9 +108,37 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="daily", description="Claim your daily coin bonus"
+        name="casino_pity", description="Gambled your life-savings? Luigi's got you."
+    )
+    async def pity(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_pity")
+        await interaction.response.defer(ephemeral=True)
+
+        user = interaction.user
+        user_id = user.id
+        username = user.name
+
+        record = EconomyManager.ensure_user(user_id, username)
+        balance = record.get("balance", 0)
+
+        if balance > 5:
+            await interaction.followup.send(
+                f"{user.display_name}, your balance is **{balance} coins** - keep spinning!",
+                ephemeral=True,
+            )
+            return
+
+        new_balance = EconomyManager.grant(user_id, 100, username)
+        await interaction.followup.send(
+            f"{user.display_name}, Luigi tossed you **100 coins**. New balance: **{new_balance}**.",
+            ephemeral=True,
+        )
+
+    @discord.app_commands.command(
+        name="casino_daily", description="Claim your daily coin bonus"
     )
     async def daily(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_daily")
         uid = interaction.user.id
         username = interaction.user.name
         claim_info = EconomyManager.record_daily_claim(uid, username)
@@ -127,7 +158,7 @@ class UserCog(commands.Cog):
             )
             return
 
-        reward = 100
+        reward = 150
         streak = claim_info.get("streak", 1)
         EconomyManager.grant(uid, reward, username)
 
@@ -141,9 +172,10 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="leaderboard", description="Show top casino players by coin balance"
+        name="casino_leaderboard", description="Show top casino players by coin balance"
     )
     async def leaderboard(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_leaderboard")
         await interaction.response.defer(ephemeral=True)
 
         collection = EconomyManager.COLLECTION
@@ -215,9 +247,10 @@ class UserCog(commands.Cog):
         await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
     @discord.app_commands.command(
-        name="help", description="Show help information for the casino games"
+        name="casino_help", description="Show help information for the casino games"
     )
     async def help_cmd(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
             description="Quick reference for available commands.",
@@ -228,10 +261,11 @@ class UserCog(commands.Cog):
             name="General Commands",
             value="\n".join(
                 [
-                    "/profile",
-                    "/daily",
-                    "/leaderboard",
-                    "/balance",
+                    "**/casino_profile** - View your casino profile",
+                    "**/casino_daily** - Claim your daily coin bonus",
+                    "**/casino_leaderboard** - View the top players",
+                    "**/casino_balance** - Check your coin balance",
+                    "**/casino_pity** - Luigi fuels your addiction",
                 ]
             ),
             inline=False,
@@ -241,10 +275,10 @@ class UserCog(commands.Cog):
             name="Game Commands",
             value="\n".join(
                 [
-                    "/memory_start",
-                    "/pair_start",
-                    "/lucky_start",
-                    "/poker_start",
+                    "**/casino_memorymatch** - Face Down Match Pairs",
+                    "**/casino_pairagone** - Match Pairs Till Deck's Gone",
+                    "**/casino_luckystars** - 50/50 Card Game",
+                    "**/casino_picturepoker** - Luigi's Picture Poker",
                 ]
             ),
             inline=False,

@@ -24,12 +24,14 @@ class PairAGoneCog(BaseGameCog):
         print("PairAGoneCog loaded.")
 
     ###########################################################
-    # /pair_start
+    # /casino_pairagone
     ###########################################################
-    @discord.app_commands.command(name="pair_start", description="Start a Pair-a-Gone game")
+    @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game")
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
+
+        self.log_command_invocation(interaction, "casino_pairagone")
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
@@ -40,6 +42,11 @@ class PairAGoneCog(BaseGameCog):
             new_game: PairAGone | None = None,
         ):
             game = new_game or PairAGone(user_id, bet_amount)
+            self.log_game_start(
+                inter,
+                "casino_pairagone",
+                bet_amount=bet_amount,
+            )
 
             board_bytes = render_pair_board(game)
             board_bytes.seek(0)

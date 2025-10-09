@@ -24,14 +24,16 @@ class MemoryMatchCog(BaseGameCog):
         print("MemoryMatchCog loaded.")
 
     ###########################################################
-    # /memory_start
+    # /casino_memorymatch
     ###########################################################
     @discord.app_commands.command(
-        name="memory_start", description="Start a Memory Match game"
+        name="casino_memorymatch", description="Start a Memory Match game"
     )
     async def memory_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
+
+        self.log_command_invocation(interaction, "casino_memorymatch")
 
         #defer response prevent "interaction failed" message
         #in other game cogs as well.
@@ -44,6 +46,11 @@ class MemoryMatchCog(BaseGameCog):
             new_game: MemoryMatch | None = None,
         ):
             game = new_game or MemoryMatch(user_id, bet_amount)
+            self.log_game_start(
+                inter,
+                "casino_memorymatch",
+                bet_amount=bet_amount,
+            )
 
             board_bytes = render_board_image(game)
             board_bytes.seek(0)

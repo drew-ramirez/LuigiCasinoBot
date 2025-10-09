@@ -23,14 +23,16 @@ class PicturePokerCog(BaseGameCog):
         print("PicturePokerCog loaded.")
 
     ###########################################################
-    # /poker_start
+    # /casino_picturepoker
     ###########################################################
     @discord.app_commands.command(
-        name="poker_start", description="Start a Picture Poker game"
+        name="casino_picturepoker", description="Start a Picture Poker game"
     )
     async def poker_start(self, interaction: discord.Interaction):
 
         user_id = interaction.user.id
+
+        self.log_command_invocation(interaction, "casino_picturepoker")
 
         if not interaction.response.is_done():
             await interaction.response.defer(ephemeral=True)
@@ -47,6 +49,11 @@ class PicturePokerCog(BaseGameCog):
             existing_game = entry.get("game") if isinstance(entry, dict) else None
             target_game = new_game or existing_game or PicturePoker()
             target_game.start_round(forced_bet=bet_amount)
+            self.log_game_start(
+                inter,
+                "casino_picturepoker",
+                bet_amount=bet_amount,
+            )
 
             img_bytes = render_board(target_game, reveal=False)
             if hasattr(img_bytes, "seek"):

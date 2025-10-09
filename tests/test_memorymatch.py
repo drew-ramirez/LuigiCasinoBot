@@ -35,6 +35,7 @@ def test_flip_and_match(game):
     assert result is True
     symbol_a, flipped_a, matched_a = game.board[0]
     assert matched_a and flipped_a and symbol_a == "mario"
+    assert game.last_bonus_awarded is False
 
 
 def test_mismatch_reduces_attempts(game):
@@ -45,6 +46,8 @@ def test_mismatch_reduces_attempts(game):
     result = game.check_match()
     assert result is False
     assert game.remaining_attempts == 2
+    assert game.match_streak == 0
+    assert game.last_bonus_awarded is False
 
 
 def test_hide_unmatched(game):
@@ -76,3 +79,38 @@ def test_is_game_over(game):
     game.remaining_attempts = 1
     game.board = [("mario", False, True)] * len(game.board)
     assert game.is_game_over() is True
+
+
+def test_streak_bonus_grants_attempt(game):
+    game.board = [
+        ("mario", False, False),
+        ("mario", False, False),
+        ("luigi", False, False),
+        ("luigi", False, False),
+        ("star", False, False),
+        ("star", False, False),
+    ]
+    game.revealed = []
+    game.remaining_attempts = 3
+
+    # First pair
+    game.flip_card(0)
+    game.flip_card(1)
+    assert game.check_match() is True
+    assert game.remaining_attempts == 3
+    assert game.last_bonus_awarded is False
+
+    # Second pair
+    game.flip_card(2)
+    game.flip_card(3)
+    assert game.check_match() is True
+    assert game.remaining_attempts == 3
+    assert game.last_bonus_awarded is False
+
+    # Third consecutive pair triggers bonus
+    game.flip_card(4)
+    game.flip_card(5)
+    assert game.check_match() is True
+    assert game.remaining_attempts == 4
+    assert game.last_bonus_awarded is True
+    assert game.match_streak == 0

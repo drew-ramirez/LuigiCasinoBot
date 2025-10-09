@@ -25,11 +25,12 @@ def render_board_image(game, overrides=None) -> io.BytesIO:
             sprite = faces.get_face(symbol)
         else:
             sprite = backs.get("back_full")
-        return _normalize_sprite(sprite, game)   # resize here
+        return _normalize_sprite(sprite, game)  # resize here
 
     return render_board(game, sprite_resolver)
 
-def make_board_flip_gif(game, pos: int, symbol: str, duration=200) -> io.BytesIO:
+
+def make_board_flip_gif(game, pos: int, symbol: str, duration=90) -> io.BytesIO:
     # Build a GIF of the whole board with one slot flipping
 
     # Frames of the flip: back, edge, half, face
@@ -69,15 +70,18 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=200) -> io.BytesIO
         append_images=frames[1:],
         duration=duration,
         loop=0,
-        disposal=2,   
+        disposal=2,
         optimize=False,
     )
     out.seek(0)
     return out
 
-def make_board_reverse_flip_gif(game, positions: list[int], symbols: list[str], duration=200) -> io.BytesIO:
+
+def make_board_reverse_flip_gif(
+    game, positions: list[int], symbols: list[str], duration=90
+) -> io.BytesIO:
     # Flip multiple cards back to facedown with green background normalization
-    
+
     sequences = []
     for sym in symbols:
         seq = [

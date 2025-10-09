@@ -14,6 +14,7 @@ from discord.ext import commands
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_pregame_banner
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 BetSelectedCallback = Callable[[discord.Interaction, int], Any]
 
@@ -25,7 +26,38 @@ class BaseGameCog(commands.Cog):
         self.bot = bot
         self.game_name = game_name
         self.log_label = log_label or game_name
+        self.metrics_game_key = self._compose_metric_key(self.log_label)
         self.active_games: dict[int, dict[str, Any]] = {}
+
+    @staticmethod
+    def _compose_metric_key(label: str) -> str:
+        cleaned = "".join(ch for ch in label.lower() if ch.isalnum())
+        return cleaned or "game"
+
+    def log_command_invocation(
+        self, interaction: discord.Interaction, command_name: str
+    ) -> None:
+        MetricsManager.record_command_event(
+            interaction,
+            command_name,
+            game_key=self.metrics_game_key,
+        )
+
+    def log_game_start(
+        self,
+        interaction: discord.Interaction,
+        command_name: str,
+        *,
+        bet_amount: Optional[int] = None,
+        extra: Optional[dict[str, Any]] = None,
+    ) -> None:
+        MetricsManager.record_game_start(
+            interaction,
+            self.metrics_game_key,
+            bet_amount=bet_amount,
+            source_command=command_name,
+            metadata=extra,
+        )
 
     async def present_wager_menu(
         self,

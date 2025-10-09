@@ -13,6 +13,31 @@ class MemoryMatch(BaseGame):
     MARGIN_X = 32
     MARGIN_Y = 32
 
+    # Each clear upgrades the board until we hit the cap.
+    DIFFICULTY_STEPS: List[Tuple[int, List[str]]] = [
+        (8, ["cloud", "mushroom", "flower", "star"]),
+        (12, ["cloud", "mushroom", "flower", "star", "luigi", "mario"]),
+        (
+            16,
+            ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser"],
+        ),
+        (
+            20,
+            [
+                "cloud",
+                "mushroom",
+                "flower",
+                "star",
+                "luigi",
+                "mario",
+                "goomba",
+                "bowser",
+                "boo",
+                "yoshi",
+            ],
+        ),
+    ]
+
     def __init__(self, player_id: int, bet: int, base_attempts: int = 3):
         self.player_id = player_id
         self.bet = max(1, bet)
@@ -22,22 +47,21 @@ class MemoryMatch(BaseGame):
         self.board = []           # [(symbol, is_flipped, is_matched)]
         self.symbols = []
         self.revealed = []        # positions currently flipped
+        self.match_streak = 0     # consecutive correct matches
+        self.last_bonus_awarded = False
         self.generate_board()
 
     def get_difficulty(self) -> Tuple[int, List[str]]:
-        # Decide number of cards + symbols based on stars earned
-        if self.stars < 5:
-            return 8, ["cloud", "mushroom", "flower", "star"]
-        elif self.stars < 10:
-            return 12, ["cloud", "mushroom", "flower", "star", "luigi", "mario"]
-        elif self.stars < 15:
-            return 16, ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser"]
-        else:
-            return 20, ["cloud", "mushroom", "flower", "star", "luigi", "mario", "goomba", "bowser", "boo", "yoshi"]
+        # Decide number of cards + symbols based on how many clears (stars) the player has
+        index = min(self.stars, len(self.DIFFICULTY_STEPS) - 1)
+        cards, symbols = self.DIFFICULTY_STEPS[index]
+        return cards, list(symbols)
 
     def generate_board(self):
         num_cards, symbols = self.get_difficulty()
         self.symbols = symbols
+        self.match_streak = 0
+        self.last_bonus_awarded = False
 
         layout_map = {
             8: (4, 2),
@@ -78,6 +102,7 @@ class MemoryMatch(BaseGame):
     def check_match(self) -> bool:
         # Check if two revealed cards match
         if len(self.revealed) < 2:
+            self.last_bonus_awarded = False
             return None
 
         a, b = self.revealed[-2], self.revealed[-1]
@@ -88,9 +113,20 @@ class MemoryMatch(BaseGame):
         if sa == sb:
             self.board[a] = (sa, True, True)
             self.board[b] = (sb, True, True)
+            self.match_streak += 1
+
+            bonus_awarded = False
+            while self.match_streak >= 3:
+                self.remaining_attempts += 1
+                self.match_streak -= 3
+                bonus_awarded = True
+
+            self.last_bonus_awarded = bonus_awarded
             return True
         else:
             self.remaining_attempts -= 1
+            self.match_streak = 0
+            self.last_bonus_awarded = False
             return False
 
     def hide_unmatched(self):
@@ -106,6 +142,8 @@ class MemoryMatch(BaseGame):
     def award_star(self):
         self.stars += 1
         self.remaining_attempts = self.base_attempts * 2
+        self.match_streak = 0
+        self.last_bonus_awarded = False
 
     def is_board_cleared(self) -> bool:
         # True if all cards matched
