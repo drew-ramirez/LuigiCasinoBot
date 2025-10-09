@@ -92,7 +92,6 @@ class CasinoConfigCog(commands.Cog):
             allowed_value = "\n".join(visible_allowed)
         elif allowed:
             allowed_value = (
-                "None (channels configured elsewhere or removed).\n"
                 "Use `/casino floor add` to assign channels in this server."
             )
         else:
@@ -132,7 +131,7 @@ class CasinoConfigCog(commands.Cog):
         elif manager_roles:
             manager_value = "Roles configured elsewhere (deleted or missing)."
         else:
-            manager_value = "None (Manage Server permission required)."
+            manager_value = "None"
 
         embed.add_field(
             name="Casino Manager Roles",
