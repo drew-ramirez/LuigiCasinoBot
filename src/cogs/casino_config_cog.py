@@ -154,12 +154,14 @@ class CasinoConfigCog(commands.Cog):
             value=category_value,
             inline=False,
         )
-
-        embed.add_field(
-            name="Visibility Mode",
-            value=config.visibility_mode.capitalize(),
-            inline=True,
-        )
+        
+        # rest of config kinda does this job
+        # maybe keep for later iterations
+        #embed.add_field(
+        #    name="Visibility Mode",
+        #    value=config.visibility_mode.capitalize(),
+        #    inline=True,
+        #)
         embed.add_field(
             name="Admin Commands",
             value="\n".join(
@@ -169,7 +171,7 @@ class CasinoConfigCog(commands.Cog):
                     "`/casino unset <game>` - clear a game’s public channel",
                     "`/casino floor add <#channel>` - add a general casino floor channel",
                     "`/casino floor remove <#channel>` - remove a floor channel",
-                    "`/casino category [#category]` - assign or clear the auto-create category",
+                    "`/casino category [#category]` - [WIP] assign auto-setup category",
                     "`/casino role add <@role>` - add a casino manager role",
                     "`/casino role remove <@role>` - remove a casino manager role",
                     "`/casino role list` - show current casino manager roles",

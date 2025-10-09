@@ -78,15 +78,14 @@ class UserCog(commands.Cog):
 
         embed.add_field(name="Balance", value=f"💰 {balance:,} coins", inline=True)
         embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
-        embed.add_field(name="Daily Streak", value=f"⏲️ {daily_streak:,}", inline=True)
+        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
 
+        embed.add_field(name="Daily Streak", value=f"🔥 {daily_streak} days", inline=True)
         embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
         embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
-            name="Biggest Cashout", value=f"💸 {biggest_cashout:,}", inline=True
+            name="Largest Cashout", value=f"💸 {biggest_cashout:,}", inline=False
         )
-
-        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=False)
 
         # send followup
         await interaction.followup.send(
@@ -175,7 +174,7 @@ class UserCog(commands.Cog):
         await safe_send(
             interaction,
             content=(
-                f"💰 Daily bonus claimed! You received **{reward} coins**.\n"
+                f"Daily bonus claimed! You received **{reward} coins**.\n"
                 f"Daily streak: {streak} day{'s' if streak != 1 else ''}."
             ),
             ephemeral=visibility.ephemeral,
