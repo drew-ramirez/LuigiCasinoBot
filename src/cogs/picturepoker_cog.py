@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: picturepoker_cog.py
 #
 # Description: Cog for Luigi's Casino - Picture Poker Game
@@ -11,8 +11,8 @@ from cogs.base_game_cog import BaseGameCog
 from casinogames.picturepoker.PicturePoker import PicturePoker
 from casinogames.picturepoker.PicturePokerPrint import render_board
 from casinogames.picturepoker.PicturePokerUI import make_poker_view
-from utils.ui_embeds import make_game_header
-from cogs.casino_app_group import casino_group, ensure_group_registered
+from utils.ui_embeds import make_game_header, make_gif_game_header
+from economy.EconomyManager import EconomyManager
 
 
 class PicturePokerCog(BaseGameCog):
@@ -26,14 +26,15 @@ class PicturePokerCog(BaseGameCog):
     ###########################################################
     # /casino_picturepoker
     ###########################################################
-    @casino_group.command(
-        name="picturepoker", description="Start a Picture Poker game"
+    @discord.app_commands.command(
+        name="casino_picturepoker", description="Start a Picture Poker game"
     )
     async def poker_start(self, interaction: discord.Interaction):
 
-        user_id = interaction.user.id
+        player = interaction.user
+        user_id = player.id
 
-        self.log_command_invocation(interaction, "casino picturepoker")
+        self.log_command_invocation(interaction, "casino_picturepoker")
         visibility = self.resolve_visibility(interaction)
 
         ###########################################################
@@ -50,17 +51,20 @@ class PicturePokerCog(BaseGameCog):
             target_game.start_round(forced_bet=bet_amount)
             self.log_game_start(
                 inter,
-                "casino picturepoker",
+                "casino_picturepoker",
                 bet_amount=bet_amount,
             )
+            animations_on = EconomyManager.animations_enabled(
+                inter.user.id, inter.user.name
+            )
 
-            img_bytes = render_board(target_game, reveal=False)
-            if hasattr(img_bytes, "seek"):
+            board_bytes = render_board(target_game, reveal=False)
+            if hasattr(board_bytes, "seek"):
                 try:
-                    img_bytes.seek(0)
+                    board_bytes.seek(0)
                 except Exception:
                     pass
-            file = discord.File(img_bytes, filename="poker.png")
+            board_file = discord.File(board_bytes, filename="poker.png")
 
             stats = {
                 "active_bet": target_game.bet,
@@ -70,25 +74,39 @@ class PicturePokerCog(BaseGameCog):
                 "dealer_action": "New game started! \nSelect cards to discard then submit.",
             }
 
-            header_embed = make_game_header(
-                inter.user,
-                "Picture Poker",
-                stats,
-            )
-
             view = make_poker_view(
                 target_game,
                 user_id,
                 self.cleanup_game,
+                animations_enabled=animations_on,
                 start_game_callback=start_game,
             )
 
-            await inter.response.edit_message(
-                content=None,
-                embed=header_embed,
-                attachments=[file],
-                view=view,
-            )
+            if animations_on:
+                header_text = make_gif_game_header(
+                    inter.user,
+                    "Picture Poker",
+                    stats,
+                )
+                await inter.response.edit_message(
+                    content=header_text,
+                    embed=None,
+                    attachments=[board_file],
+                    view=view,
+                )
+            else:
+                header_embed = make_game_header(
+                    inter.user,
+                    "Picture Poker",
+                    stats,
+                )
+                header_embed.set_image(url=f"attachment://{board_file.filename}")
+                await inter.response.edit_message(
+                    content=None,
+                    embed=header_embed,
+                    attachments=[board_file],
+                    view=view,
+                )
 
             message = inter.message
             if message is None:
@@ -96,13 +114,22 @@ class PicturePokerCog(BaseGameCog):
                     message = await inter.original_response()
                 except Exception:
                     message = None
+            if message is not None:
+                view.msg = message
 
             self.register_active_game(user_id, game=target_game, message=message)
+
+        layout_mode = (
+            "gif"
+            if EconomyManager.animations_enabled(user_id, player.name)
+            else "embed"
+        )
 
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
             visibility=visibility,
+            layout=layout_mode,
         )
 
 
@@ -110,5 +137,4 @@ class PicturePokerCog(BaseGameCog):
 # Cog setup
 ###########################################################
 async def setup(bot):
-    ensure_group_registered(bot.tree)
     await bot.add_cog(PicturePokerCog(bot))

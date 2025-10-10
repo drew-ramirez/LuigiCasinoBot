@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: pairagone_cog.py
 #
 # Description: Pair-a-Gone command and entry point
@@ -10,8 +10,8 @@ from cogs.base_game_cog import BaseGameCog
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_view
-from utils.ui_embeds import make_game_header
-from cogs.casino_app_group import casino_group, ensure_group_registered
+from utils.ui_embeds import make_game_header, make_gif_game_header
+from economy.EconomyManager import EconomyManager
 
 
 class PairAGoneCog(BaseGameCog):
@@ -27,12 +27,12 @@ class PairAGoneCog(BaseGameCog):
     ###########################################################
     # /casino_pairagone
     ###########################################################
-    @casino_group.command(name="pairagone", description="Start a Pair-a-Gone game")
+    @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game")
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
 
-        self.log_command_invocation(interaction, "casino pairagone")
+        self.log_command_invocation(interaction, "casino_pairagone")
         visibility = self.resolve_visibility(interaction)
 
         async def start_game(
@@ -43,44 +43,72 @@ class PairAGoneCog(BaseGameCog):
             game = new_game or PairAGone(user_id, bet_amount)
             self.log_game_start(
                 inter,
-                "casino pairagone",
+                "casino_pairagone",
                 bet_amount=bet_amount,
+            )
+            animations_on = EconomyManager.animations_enabled(
+                inter.user.id, inter.user.name
             )
 
             board_bytes = render_pair_board(game)
             board_bytes.seek(0)
-            file = discord.File(board_bytes, filename="pair_board.png")
+            board_file = discord.File(board_bytes, filename="pair_board.png")
 
             stats = {
                 "active_bet": game.bet,
                 "stars_current": game.stars,
                 "dealer_action": "Select two adjacent matching cards!",
             }
-            header_embed = make_game_header(inter.user, "Pair-a-Gone", stats)
 
             view = make_pair_view(
                 game,
                 inter.user,
                 self.cleanup_game,
+                animations_enabled=animations_on,
                 start_game_callback=start_game,
             )
 
-            await inter.response.edit_message(
-                content=None,
-                embed=header_embed,
-                attachments=[file],
-                view=view,
-            )
+            if animations_on:
+                header_text = make_gif_game_header(
+                    inter.user,
+                    "Pair-a-Gone",
+                    stats,
+                )
+                await inter.response.edit_message(
+                    content=header_text,
+                    embed=None,
+                    attachments=[board_file],
+                    view=view,
+                )
+            else:
+                header_embed = make_game_header(inter.user, "Pair-a-Gone", stats)
+                header_embed.set_image(
+                    url=f"attachment://{board_file.filename}"
+                )
+                await inter.response.edit_message(
+                    content=None,
+                    embed=header_embed,
+                    attachments=[board_file],
+                    view=view,
+                )
 
             message = await inter.original_response()
-            view.msg = message
+            if message is not None:
+                view.msg = message
 
             self.register_active_game(user_id, game=game, message=message)
+
+        layout_mode = (
+            "gif"
+            if EconomyManager.animations_enabled(user_id, player.name)
+            else "embed"
+        )
 
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
             visibility=visibility,
+            layout=layout_mode,
         )
 
 
@@ -88,5 +116,4 @@ class PairAGoneCog(BaseGameCog):
 # COG SETUP
 ###########################################################
 async def setup(bot):
-    ensure_group_registered(bot.tree)
     await bot.add_cog(PairAGoneCog(bot))

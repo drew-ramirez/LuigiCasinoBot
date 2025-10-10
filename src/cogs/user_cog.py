@@ -1,7 +1,7 @@
-﻿###########################################################
+###########################################################
 # File: user_cog.py
 #
-# Description: Generic player-facing commands for Luigi’s Casino
+# Description: Generic player-facing commands for Luigi�s Casino
 ###########################################################
 
 import discord
@@ -11,7 +11,6 @@ from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 from utils.visibility import resolve_command_visibility
-from cogs.casino_app_group import casino_group, ensure_group_registered
 
 bank = Bank()
 
@@ -48,11 +47,11 @@ class UserCog(commands.Cog):
     # PLAYER COMMANDS
     ###########################################################
 
-    @casino_group.command(
-        name="profile", description="View your casino profile"
+    @discord.app_commands.command(
+        name="casino_profile", description="View your casino profile"
     )
     async def profile(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino profile")
+        MetricsManager.record_command_event(interaction, "casino_profile")
         visibility = resolve_command_visibility(interaction, "profile")
         # defer to acknowledge the command
         await interaction.response.defer(ephemeral=visibility.ephemeral)
@@ -78,11 +77,11 @@ class UserCog(commands.Cog):
         )
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-        embed.add_field(name="Balance", value=f"💰 {balance:,} coins", inline=True)
+        embed.add_field(name="casino_balance", value=f"💰 {balance:,} coins", inline=True)
         embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
         embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
 
-        embed.add_field(name="Daily Streak", value=f"🔥 {daily_streak} days", inline=True)
+        embed.add_field(name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True)
         embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
         embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
@@ -94,11 +93,11 @@ class UserCog(commands.Cog):
             embed=embed, ephemeral=visibility.ephemeral
         )
 
-    @casino_group.command(
-        name="balance", description="Check your casino balance."
+    @discord.app_commands.command(
+        name="casino_balance", description="Check your casino balance."
     )
     async def balance(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino balance")
+        MetricsManager.record_command_event(interaction, "casino_balance")
         visibility = resolve_command_visibility(interaction, "balance")
         # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=visibility.ephemeral)
@@ -116,11 +115,11 @@ class UserCog(commands.Cog):
             ephemeral=visibility.ephemeral,
         )
 
-    @casino_group.command(
-        name="pity", description="Gambled your life-savings? Luigi's got you."
+    @discord.app_commands.command(
+        name="casino_pity", description="Gambled your life-savings? Luigi's got you."
     )
     async def pity(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino pity")
+        MetricsManager.record_command_event(interaction, "casino_pity")
         visibility = resolve_command_visibility(interaction, "pity")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
 
@@ -144,11 +143,11 @@ class UserCog(commands.Cog):
             ephemeral=visibility.ephemeral,
         )
 
-    @casino_group.command(
-        name="daily", description="Claim your daily coin bonus"
+    @discord.app_commands.command(
+        name="casino_daily", description="Claim your daily coin bonus"
     )
     async def daily(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino daily")
+        MetricsManager.record_command_event(interaction, "casino_daily")
         visibility = resolve_command_visibility(interaction, "daily")
         uid = interaction.user.id
         username = interaction.user.name
@@ -182,11 +181,11 @@ class UserCog(commands.Cog):
             ephemeral=visibility.ephemeral,
         )
 
-    @casino_group.command(
-        name="leaderboard", description="Show top casino players by coin balance"
+    @discord.app_commands.command(
+        name="casino_leaderboard", description="Show top casino players by coin balance"
     )
     async def leaderboard(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino leaderboard")
+        MetricsManager.record_command_event(interaction, "casino_leaderboard")
         visibility = resolve_command_visibility(interaction, "leaderboard")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
 
@@ -228,7 +227,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "💰",
+                "emoji": "💰 ",
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -248,7 +247,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💸",
+                "emoji": "💰",
             },
         }
 
@@ -260,11 +259,11 @@ class UserCog(commands.Cog):
             embed=embed, view=view, ephemeral=visibility.ephemeral
         )
 
-    @casino_group.command(
-        name="help", description="Show help information for the casino games"
+    @discord.app_commands.command(
+        name="casino_help", description="Show help information for the casino games"
     )
     async def help_cmd(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino help")
+        MetricsManager.record_command_event(interaction, "casino_help")
         visibility = resolve_command_visibility(interaction, "help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
@@ -276,12 +275,12 @@ class UserCog(commands.Cog):
             name="General Commands",
             value="\n".join(
                 [
-                    "**/casino profile** - View your casino profile",
-                    "**/casino daily** - Claim your daily coin bonus",
-                    "**/casino leaderboard** - View the top players",
-                    "**/casino balance** - Check your coin balance",
-                    "**/casino pity** - Luigi fuels your addiction",
-                    "**/casino animations** - Toggle animated vs static layout",
+                    "**/casino_profile** - View your casino profile",
+                    "**/casino_daily** - Claim your daily coin bonus",
+                    "**/casino_leaderboard** - View the top players",
+                    "**/casino_balance** - Check your coin balance",
+                    "**/casino_pity** - Luigi fuels your addiction",
+                    "**/casino_animations** - Toggle animated vs static layout",
                 ]
             ),
             inline=False,
@@ -291,10 +290,10 @@ class UserCog(commands.Cog):
             name="Game Commands",
             value="\n".join(
                 [
-                    "**/casino memorymatch** - Face Down Match Pairs",
-                    "**/casino pairagone** - Match Pairs Till Deck's Gone",
-                    "**/casino luckystars** - 50/50 Card Game",
-                    "**/casino picturepoker** - Luigi's Picture Poker",
+                    "**/casino_memorymatch** - Face Down Match Pairs",
+                    "**/casino_pairagone** - Match Pairs Till Deck's Gone",
+                    "**/casino_luckystars** - 50/50 Card Game",
+                    "**/casino_picturepoker** - Luigi's Picture Poker",
                 ]
             ),
             inline=False,
@@ -306,8 +305,8 @@ class UserCog(commands.Cog):
             ephemeral=visibility.ephemeral,
         )
 
-    @casino_group.command(
-        name="animations",
+    @discord.app_commands.command(
+        name="casino_animations",
         description="Toggle whether casino games play full animations or use a condensed static layout",
     )
     @app_commands.describe(
@@ -324,8 +323,8 @@ class UserCog(commands.Cog):
         interaction: discord.Interaction,
         mode: app_commands.Choice[str],
     ):
-        MetricsManager.record_command_event(interaction, "casino animations")
-        visibility = resolve_command_visibility(interaction, "casino animations")
+        MetricsManager.record_command_event(interaction, "casino_animations")
+        visibility = resolve_command_visibility(interaction, "casino_animations")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
 
         enable = mode.value == "enabled"
@@ -419,5 +418,5 @@ class LeaderboardView(discord.ui.View):
 # COG SETUP
 ###########################################################
 async def setup(bot):
-    ensure_group_registered(bot.tree)
     await bot.add_cog(UserCog(bot))
+

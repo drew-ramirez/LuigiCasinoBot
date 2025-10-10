@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: luckystars_cog.py
 #
 # Description: Cog for Luigi's Casino - Lucky Stars Game
@@ -13,7 +13,6 @@ from casinogames.luckystars.LuckyStarsPrint import render_lucky_board
 from casinogames.luckystars.LuckyStarsUI import make_lucky_controls
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
-from cogs.casino_app_group import casino_group, ensure_group_registered
 
 
 class LuckyStarsCog(BaseGameCog):
@@ -27,12 +26,12 @@ class LuckyStarsCog(BaseGameCog):
     ###########################################################
     # /casino_luckystars
     ###########################################################
-    @casino_group.command(name="luckystars", description="Start a Lucky Stars game")
+    @discord.app_commands.command(name="casino_luckystars", description="Start a Lucky Stars game")
     async def lucky_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
 
-        self.log_command_invocation(interaction, "casino luckystars")
+        self.log_command_invocation(interaction, "casino_luckystars")
         visibility = self.resolve_visibility(interaction)
 
         async def start_game(
@@ -44,7 +43,7 @@ class LuckyStarsCog(BaseGameCog):
             game.deal_round()
             self.log_game_start(
                 inter,
-                "casino luckystars",
+                "casino_luckystars",
                 bet_amount=bet_amount,
             )
 
@@ -113,5 +112,4 @@ class LuckyStarsCog(BaseGameCog):
 # Cog setup
 ###########################################################
 async def setup(bot):
-    ensure_group_registered(bot.tree)
     await bot.add_cog(LuckyStarsCog(bot))

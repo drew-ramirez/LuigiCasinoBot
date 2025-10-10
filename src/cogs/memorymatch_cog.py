@@ -12,7 +12,6 @@ from casinogames.memorymatch.MemoryMatchPrint import render_board_image
 from casinogames.memorymatch.MemoryMatchUI import make_memory_view
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
-from cogs.casino_app_group import casino_group, ensure_group_registered
 
 
 class MemoryMatchCog(BaseGameCog):
@@ -28,14 +27,14 @@ class MemoryMatchCog(BaseGameCog):
     ###########################################################
     # /casino_memorymatch
     ###########################################################
-    @casino_group.command(
-        name="memorymatch", description="Start a Memory Match game"
+    @discord.app_commands.command(
+        name="casino_memorymatch", description="Start a Memory Match game"
     )
     async def memory_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
 
-        self.log_command_invocation(interaction, "casino memorymatch")
+        self.log_command_invocation(interaction, "casino_memorymatch")
         visibility = self.resolve_visibility(interaction)
 
         async def start_game(
@@ -46,7 +45,7 @@ class MemoryMatchCog(BaseGameCog):
             game = new_game or MemoryMatch(user_id, bet_amount)
             self.log_game_start(
                 inter,
-                "casino memorymatch",
+                "casino_memorymatch",
                 bet_amount=bet_amount,
             )
 
@@ -115,5 +114,4 @@ class MemoryMatchCog(BaseGameCog):
 # Cog SETUP
 ###########################################################
 async def setup(bot):
-    ensure_group_registered(bot.tree)
     await bot.add_cog(MemoryMatchCog(bot))
