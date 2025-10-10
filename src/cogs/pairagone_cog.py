@@ -55,7 +55,7 @@ class PairAGoneCog(BaseGameCog):
                 "stars_current": game.stars,
                 "dealer_action": "Select two adjacent matching cards!",
             }
-            content = make_game_header(inter.user, "Pair-a-Gone", stats)
+            header_embed = make_game_header(inter.user, "Pair-a-Gone", stats)
 
             view = make_pair_view(
                 game,
@@ -65,7 +65,8 @@ class PairAGoneCog(BaseGameCog):
             )
 
             await inter.response.edit_message(
-                content=content,
+                content=None,
+                embed=header_embed,
                 attachments=[file],
                 view=view,
             )

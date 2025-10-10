@@ -54,6 +54,7 @@ class EconomyManager:
             "profile_level": 1,
             "daily_claim_streak": 0,
             "last_daily_claim": "",
+            "animations_enabled": True,
         }
 
         EconomyManager.COLLECTION.insert_one(new_user)
@@ -80,6 +81,27 @@ class EconomyManager:
         if bonuses is None:
             bonuses = record.get("streaks", {})
         return bonuses or {}
+
+    ###########################################################
+    # animation preference
+    ###########################################################
+    @staticmethod
+    def animations_enabled(user_id: int, username: str = "Unknown") -> bool:
+        record = EconomyManager.ensure_user(user_id, username)
+        pref = record.get("animations_enabled")
+        if pref is None:
+            return True
+        return bool(pref)
+
+    @staticmethod
+    def set_animations_enabled(
+        user_id: int, enabled: bool, username: str = "Unknown"
+    ) -> bool:
+        EconomyManager.ensure_user(user_id, username)
+        EconomyManager.COLLECTION.update_one(
+            {"user_id": user_id}, {"$set": {"animations_enabled": bool(enabled)}}
+        )
+        return bool(enabled)
 
     @staticmethod
     def star_bonus_count(user_id: int, game_key: str, username: str = "Unknown") -> int:

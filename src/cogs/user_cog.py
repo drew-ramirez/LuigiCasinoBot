@@ -5,6 +5,7 @@
 ###########################################################
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
@@ -300,6 +301,44 @@ class UserCog(commands.Cog):
         await safe_send(
             interaction,
             embed=embed,
+            ephemeral=visibility.ephemeral,
+        )
+
+    @app_commands.command(
+        name="casino_animations",
+        description="Toggle whether casino games play full animations or use a condesed static",
+    )
+    @app_commands.describe(
+        mode="Use 'enabled' for the animated layout or 'disabled' for static updates"
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="Enabled - animated layout", value="enabled"),
+            app_commands.Choice(name="Disabled - static embeds", value="disabled"),
+        ]
+    )
+    async def casino_animations(
+        self,
+        interaction: discord.Interaction,
+        mode: app_commands.Choice[str],
+    ):
+        MetricsManager.record_command_event(interaction, "casino_animations")
+        visibility = resolve_command_visibility(interaction, "casino_animations")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+
+        enable = mode.value == "enabled"
+        user = interaction.user
+        EconomyManager.set_animations_enabled(user.id, enable, user.name)
+
+        state = "enabled" if enable else "disabled"
+        detail = (
+            "Games will show animations with compatibe UI"
+            if enable
+            else "Games will show static updates with condensed UI."
+        )
+
+        await interaction.followup.send(
+            f"Animation preference **{state}**. {detail}",
             ephemeral=visibility.ephemeral,
         )
 

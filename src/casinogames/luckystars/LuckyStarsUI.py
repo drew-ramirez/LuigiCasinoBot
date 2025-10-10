@@ -60,7 +60,7 @@ class LuckyStarsView(discord.ui.View):
     ###########################################################
     # helpers
     ###########################################################
-    def _header(self, action: str | None = None) -> str:
+    def _header_embed(self, action: str | None = None) -> discord.Embed:
         stats = {
             "active_bet": self.game.bet,
             "stars_current": 0,
@@ -112,7 +112,8 @@ class LuckyStarsView(discord.ui.View):
         )
         gif.seek(0)
         await msg.edit(
-            content=self._header("Cards sliding into place..."),
+            content=None,
+            embed=self._header_embed("Cards sliding into place..."),
             attachments=[discord.File(gif, f"luckystars_round{self.game.round}.gif")],
             view=self,
         )
@@ -133,7 +134,8 @@ class LuckyStarsView(discord.ui.View):
             summary += "  You lose this round."
 
         await msg.edit(
-            content=self._header(summary),
+            content=None,
+            embed=self._header_embed(summary),
             attachments=[self._board_file(reveal=True)],
             view=None,
         )
@@ -192,7 +194,9 @@ class LuckyStarsView(discord.ui.View):
                 return
             await inter.response.defer()
             await self.msg.edit(
-                content=self._header("Thanks for playing Lucky Stars!"), view=None
+                content=None,
+                embed=self._header_embed("Thanks for playing Lucky Stars!"),
+                view=None,
             )
 
         replay_btn.callback = replay_cb

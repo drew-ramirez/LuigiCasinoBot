@@ -135,7 +135,8 @@ class PicturePokerView(discord.ui.View):
             stats = base_stats({"dealer_action": "❌ No cards selected to discard."})
             img_bytes = render_board(self.game, reveal=False)
             await msg.edit(
-                content=make_game_header(interaction.user, "Picture Poker", stats),
+                content=None,
+                embed=make_game_header(interaction.user, "Picture Poker", stats),
                 attachments=[discord.File(img_bytes, "poker.png")],
                 view=self,
             )
@@ -148,7 +149,8 @@ class PicturePokerView(discord.ui.View):
         img_hidden = render_board_with_hidden(self.game, hidden_player=discards)
         stats = base_stats({"dealer_action": "Your new cards are dealt facedown..."})
         await msg.edit(
-            content=make_game_header(interaction.user, "Picture Poker", stats),
+            content=None,
+            embed=make_game_header(interaction.user, "Picture Poker", stats),
             attachments=[discord.File(img_hidden, "poker.png")],
             view=self,
         )
@@ -162,7 +164,8 @@ class PicturePokerView(discord.ui.View):
             gif = make_deal_flip_gif(self.game, i, symbol, base, dealer=False)
             stats = base_stats({"dealer_action": f"Flipping your card {i+1}..."})
             await msg.edit(
-                content=make_game_header(interaction.user, "Picture Poker", stats),
+                content=None,
+                embed=make_game_header(interaction.user, "Picture Poker", stats),
                 attachments=[discord.File(gif, f"flip_{i}.gif")],
                 view=self,
             )
@@ -185,7 +188,8 @@ class PicturePokerView(discord.ui.View):
             }
         )
         await msg.edit(
-            content=make_game_header(interaction.user, "Picture Poker", stats),
+            content=None,
+            embed=make_game_header(interaction.user, "Picture Poker", stats),
             attachments=[discord.File(final_png, "poker.png")],
             view=self,
         )
@@ -223,7 +227,8 @@ class PicturePokerView(discord.ui.View):
         img_hidden = render_board_with_hidden(self.game, hidden_dealer=luigi_discards)
         stats = base_stats({"dealer_action": "Luigi discards some cards..."})
         await msg.edit(
-            content=make_game_header(interaction.user, "Picture Poker", stats),
+            content=None,
+            embed=make_game_header(interaction.user, "Picture Poker", stats),
             attachments=[discord.File(img_hidden, "poker.png")],
             view=None,
         )
@@ -237,7 +242,8 @@ class PicturePokerView(discord.ui.View):
             )
             stats = base_stats({"dealer_action": f"Luigi discards card {i+1}..."})
             await msg.edit(
-                content=make_game_header(interaction.user, "Picture Poker", stats),
+                content=None,
+                embed=make_game_header(interaction.user, "Picture Poker", stats),
                 attachments=[discord.File(flicker_gif, f"luigi_discard_{i}.gif")],
                 view=None,
             )
@@ -287,7 +293,8 @@ class PicturePokerView(discord.ui.View):
         )
 
         await msg.edit(
-            content=make_game_header(interaction.user, "Picture Poker", stats),
+            content=None,
+            embed=make_game_header(interaction.user, "Picture Poker", stats),
             attachments=[discord.File(final_gif, "final_reveal.gif")],
             view=None,
         )
@@ -342,7 +349,8 @@ class PicturePokerView(discord.ui.View):
                 "dealer_action": "Thanks for playing Picture Poker!",
             }
             await msg.edit(
-                content=make_game_header(btn_inter.user, "Picture Poker", stats),
+                content=None,
+                embed=make_game_header(btn_inter.user, "Picture Poker", stats),
                 view=None,
             )
             await self.on_finish(self.user_id)

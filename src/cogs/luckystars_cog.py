@@ -55,7 +55,7 @@ class LuckyStarsCog(BaseGameCog):
                 "stars_current": 0,
                 "dealer_action": "Pick a card!",
             }
-            content = make_game_header(inter.user, "Lucky Stars", stats)
+            header_embed = make_game_header(inter.user, "Lucky Stars", stats)
 
             view = make_lucky_controls(
                 game,
@@ -65,7 +65,8 @@ class LuckyStarsCog(BaseGameCog):
             )
             
             await inter.response.edit_message(
-                content=content,
+                content=None,
+                embed=header_embed,
                 attachments=[file],
                 view=view,
             )

@@ -12,7 +12,7 @@ import discord
 from discord.ext import commands
 
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
-from utils.ui_embeds import make_pregame_banner
+from utils.ui_embeds import make_gif_pregame_banner, make_pregame_banner
 from utils.visibility import CommandVisibility, resolve_command_visibility
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
@@ -72,6 +72,7 @@ class BaseGameCog(commands.Cog):
         prompt: Optional[str] = None,
         visibility: Optional[CommandVisibility] = None,
         ephemeral: Optional[bool] = None,
+        layout: str = "embed",
     ) -> None:
         """Wager used by all game cogs"""
         player = interaction.user
@@ -96,12 +97,22 @@ class BaseGameCog(commands.Cog):
             wager_options=wager_options or list(DEFAULT_WAGER_OPTIONS),
         )
 
-        banner = make_pregame_banner(self.game_name, balance, prompt=prompt)
-        await interaction.followup.send(
-            content=banner,
-            view=view,
-            ephemeral=ephemeral_flag,
-        )
+        if layout == "gif":
+            gif_banner = make_gif_pregame_banner(
+                self.game_name, balance, prompt=prompt
+            )
+            await interaction.followup.send(
+                content=gif_banner,
+                view=view,
+                ephemeral=ephemeral_flag,
+            )
+        else:
+            banner = make_pregame_banner(self.game_name, balance, prompt=prompt)
+            await interaction.followup.send(
+                embed=banner,
+                view=view,
+                ephemeral=ephemeral_flag,
+            )
 
     def register_active_game(
         self,

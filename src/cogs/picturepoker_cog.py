@@ -69,7 +69,7 @@ class PicturePokerCog(BaseGameCog):
                 "dealer_action": "New game started! \nSelect cards to discard then submit.",
             }
 
-            content = make_game_header(
+            header_embed = make_game_header(
                 inter.user,
                 "Picture Poker",
                 stats,
@@ -83,7 +83,8 @@ class PicturePokerCog(BaseGameCog):
             )
 
             await inter.response.edit_message(
-                content=content,
+                content=None,
+                embed=header_embed,
                 attachments=[file],
                 view=view,
             )
