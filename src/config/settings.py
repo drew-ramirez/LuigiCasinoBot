@@ -21,3 +21,16 @@ def fallback_allowed_channels() -> set[int]:
     if single_channel and single_channel.isdigit():
         return {int(single_channel)}
     return set()
+
+
+@lru_cache(maxsize=1)
+def dev_user_ids() -> set[int]:
+    raw = os.getenv("DEV_USER_IDS", "")
+    if not raw:
+        return set()
+    ids: set[int] = set()
+    for chunk in raw.split(","):
+        chunk = chunk.strip()
+        if chunk.isdigit():
+            ids.add(int(chunk))
+    return ids

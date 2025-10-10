@@ -23,6 +23,33 @@ GAME_COMMAND_CHOICES = [
     app_commands.Choice(name="Picture Poker", value="picturepoker"),
 ]
 
+
+async def manager_role_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    guild = interaction.guild
+    if guild is None:
+        return []
+
+    config = CasinoConfigManager.get_config(
+        guild.id,
+        fallback_channels=fallback_allowed_channels(),
+    )
+    query = (current or "").lower()
+
+    choices: list[app_commands.Choice[str]] = []
+    for role_id in sorted(config.manager_role_ids):
+        role = guild.get_role(role_id)
+        if role is None:
+            continue
+        if query and query not in role.name.lower():
+            continue
+        choices.append(app_commands.Choice(name=role.name, value=str(role.id)))
+        if len(choices) >= 25:
+            break
+
+    return choices
+
 async def ensure_manager(interaction: discord.Interaction) -> bool:
     guild = interaction.guild
     user = interaction.user
@@ -165,15 +192,14 @@ class CasinoConfigCog(commands.Cog):
             name="Admin Commands",
             value="\n".join(
                 [
-                    "`/casino config` - show this summary",
+                    "`/casino config` - show this help menu",
                     "`/casino set <game> <#channel>` - map a game to a public channel",
-                    "`/casino unset <game>` - clear a game’s public channel",
+                    "`/casino unset <game>` - clear a game's public channel",
                     "`/casino floor add <#channel>` - add a general casino floor channel",
                     "`/casino floor remove <#channel>` - remove a floor channel",
                     "`/casino category [#category]` - [WIP] assign auto-setup category",
-                    "`/casino role add <@role>` - add a casino manager role",
+                    "`/casino role add <@role>` - add a casino manager role NOTE: If you have many roles, type the role name in the box",
                     "`/casino role remove <@role>` - remove a casino manager role",
-                    "`/casino role list` - show current casino manager roles",
                 ]
             ),
             inline=False,
@@ -213,10 +239,10 @@ class CasinoConfigCog(commands.Cog):
         CasinoConfigManager.set_channel_map(
             guild.id, command_key=game.value, channel_id=channel.id
         )
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
             f"Mapped `{game.value}` to {channel.mention}.",
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
         )
 
@@ -238,10 +264,10 @@ class CasinoConfigCog(commands.Cog):
         CasinoConfigManager.set_channel_map(
             guild.id, command_key=game.value, channel_id=None
         )
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
             f"Cleared mapping for `{game.value}`.",
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
     )
 
@@ -268,10 +294,10 @@ class CasinoConfigCog(commands.Cog):
         assert guild is not None
 
         CasinoConfigManager.add_allowed_channel(guild.id, channel.id)
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
             f"Added {channel.mention} to the casino floor.",
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
         )
 
@@ -286,14 +312,14 @@ class CasinoConfigCog(commands.Cog):
         assert guild is not None
 
         CasinoConfigManager.remove_allowed_channel(guild.id, channel.id)
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
             f"Removed {channel.mention} from the casino floor.",
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
         )
 
-    @role.command(name="add", description="Add a casino manager role.")
+    @role.command(name="add", description="Add a casino manager role. NOTE: If you have many roles, type the role name in the box")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def add_role(
         self, interaction: discord.Interaction, role: discord.Role
@@ -302,34 +328,64 @@ class CasinoConfigCog(commands.Cog):
         assert guild is not None
 
         CasinoConfigManager.add_manager_role(guild.id, role.id)
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
             f"Added {role.mention} as a casino manager.",
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
         )
 
     @role.command(name="remove", description="Remove a casino manager role.")
     @app_commands.checks.has_permissions(manage_guild=True)
     async def remove_role(
-        self, interaction: discord.Interaction, role: discord.Role
+        self, interaction: discord.Interaction, role: str
     ):
         guild = interaction.guild
         assert guild is not None
 
-        CasinoConfigManager.remove_manager_role(guild.id, role.id)
-        embed = await self._build_config_embed(interaction)
+        try:
+            role_id = int(role)
+        except (TypeError, ValueError):
+            await interaction.response.send_message(
+                "Select a valid casino manager role from the suggestions.",
+                ephemeral=True,
+            )
+            return
+
+        config = CasinoConfigManager.get_config(
+            guild.id,
+            fallback_channels=fallback_allowed_channels(),
+        )
+        if role_id not in config.manager_role_ids:
+            await interaction.response.send_message(
+                "That role is not currently configured as a casino manager.",
+                ephemeral=True,
+            )
+            return
+
+        target_role = guild.get_role(role_id)
+        if target_role is None:
+            await interaction.response.send_message(
+                "That role no longer exists in this server.",
+                ephemeral=True,
+            )
+            CasinoConfigManager.remove_manager_role(guild.id, role_id)
+            return
+
+        CasinoConfigManager.remove_manager_role(guild.id, role_id)
+        #embed = await self._build_config_embed(interaction)
         await interaction.response.send_message(
-            f"Removed {role.mention} from casino managers.",
-            embed=embed,
+            f"Removed {target_role.mention} from casino managers.",
+            #embed=embed,
             ephemeral=True,
         )
 
-    @role.command(name="list", description="List current casino manager roles.")
-    @manager_check
-    async def list_roles(self, interaction: discord.Interaction):
-        embed = await self._build_config_embed(interaction)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+    @remove_role.autocomplete("role")
+    async def _remove_role_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ):
+        return await manager_role_autocomplete(interaction, current)
+
 
     @casino.command(
         name="category",
@@ -346,17 +402,18 @@ class CasinoConfigCog(commands.Cog):
 
         category_id = category.id if category else None
         CasinoConfigManager.set_category(guild.id, category_id)
-        embed = await self._build_config_embed(interaction)
+        #embed = await self._build_config_embed(interaction)
         if category:
             message = f"Set casino category to {category.mention}."
         else:
             message = "Cleared the saved casino category."
         await interaction.response.send_message(
             message,
-            embed=embed,
+            #embed=embed,
             ephemeral=True,
         )
 
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(CasinoConfigCog(bot))
+
