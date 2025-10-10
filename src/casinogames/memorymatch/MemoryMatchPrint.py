@@ -13,6 +13,18 @@ def _normalize_sprite(sprite: Image.Image, game: MemoryMatch) -> Image.Image:
         sprite = sprite.resize((game.CARD_W, game.CARD_H), Image.NEAREST)
     return sprite
 
+# tried using this to reduce the blur on image updates but I dont think it works at all
+# thoght discord was upscaling the image at first not true
+TARGET_WIDTH = 540
+def _scale_canvas(img: Image.Image) -> Image.Image:
+    """Scale the rendered board up to the target width using nearest-neighbour."""
+    if img.width >= TARGET_WIDTH:
+        return img
+    ratio = TARGET_WIDTH / img.width
+    new_height = int(round(img.height * ratio))
+    return img.resize((TARGET_WIDTH, new_height), Image.NEAREST)
+
+
 def render_board_image(game, overrides=None) -> io.BytesIO:
     # Render the current board as a single PNG image
     overrides = overrides or {}
@@ -27,7 +39,13 @@ def render_board_image(game, overrides=None) -> io.BytesIO:
             sprite = backs.get("back_full")
         return _normalize_sprite(sprite, game)  # resize here
 
-    return render_board(game, sprite_resolver)
+    board = Image.open(render_board(game, sprite_resolver)).convert("RGBA")
+    board = _scale_canvas(board)
+
+    out = io.BytesIO()
+    board.save(out, format="PNG")
+    out.seek(0)
+    return out
 
 
 def make_board_flip_gif(game, pos: int, symbol: str, duration=90) -> io.BytesIO:
@@ -42,8 +60,7 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=90) -> io.BytesIO:
         faces.get_face(symbol),
     ]
 
-    bg_bytes = render_board_image(game)
-    base_board = Image.open(bg_bytes).convert("RGBA")
+    base_board = Image.open(render_board_image(game)).convert("RGBA")
 
     slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
 
@@ -62,12 +79,15 @@ def make_board_flip_gif(game, pos: int, symbol: str, duration=90) -> io.BytesIO:
         board_img.paste(frame, (slot_x, slot_y), mask=frame)
         frames.append(board_img)
 
+    palette_frames = [
+        f.convert("P", palette=Image.ADAPTIVE, dither=Image.NONE) for f in frames
+    ]
     out = io.BytesIO()
-    frames[0].save(
+    palette_frames[0].save(
         out,
         format="GIF",
         save_all=True,
-        append_images=frames[1:],
+        append_images=palette_frames[1:],
         duration=duration,
         loop=0,
         disposal=2,
@@ -93,8 +113,7 @@ def make_board_reverse_flip_gif(
         ]
         sequences.append(seq)
 
-    bg_bytes = render_board_image(game)
-    base_board = Image.open(bg_bytes).convert("RGBA")
+    base_board = Image.open(render_board_image(game)).convert("RGBA")
 
     rects = [game.get_slot_rect(p) for p in positions]
 
@@ -120,12 +139,15 @@ def make_board_reverse_flip_gif(
         canvas.paste(f, (0, 0))
         normalized.append(canvas)
 
+    palette_frames = [
+        f.convert("P", palette=Image.ADAPTIVE, dither=Image.NONE) for f in normalized
+    ]
     out = io.BytesIO()
-    normalized[0].save(
+    palette_frames[0].save(
         out,
         format="GIF",
         save_all=True,
-        append_images=normalized[1:],
+        append_images=palette_frames[1:],
         duration=duration,
         loop=0,
         disposal=2,

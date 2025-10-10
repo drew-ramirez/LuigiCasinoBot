@@ -54,12 +54,10 @@ class EconomyManager:
             "profile_level": 1,
             "daily_claim_streak": 0,
             "last_daily_claim": "",
+            "animations_enabled": True,
         }
 
         EconomyManager.COLLECTION.insert_one(new_user)
-        print(
-            f"[DEBUG] Created new user record for {username} ({user_id}) with 1000 coins."
-        )
         return new_user
 
     ###########################################################
@@ -80,6 +78,27 @@ class EconomyManager:
         if bonuses is None:
             bonuses = record.get("streaks", {})
         return bonuses or {}
+
+    ###########################################################
+    # animation preference
+    ###########################################################
+    @staticmethod
+    def animations_enabled(user_id: int, username: str = "Unknown") -> bool:
+        record = EconomyManager.ensure_user(user_id, username)
+        pref = record.get("animations_enabled")
+        if pref is None:
+            return True
+        return bool(pref)
+
+    @staticmethod
+    def set_animations_enabled(
+        user_id: int, enabled: bool, username: str = "Unknown"
+    ) -> bool:
+        EconomyManager.ensure_user(user_id, username)
+        EconomyManager.COLLECTION.update_one(
+            {"user_id": user_id}, {"$set": {"animations_enabled": bool(enabled)}}
+        )
+        return bool(enabled)
 
     @staticmethod
     def star_bonus_count(user_id: int, game_key: str, username: str = "Unknown") -> int:
@@ -140,11 +159,6 @@ class EconomyManager:
             0, int(career_increment)
         )
         multiplier = EconomyManager.star_bonus_multiplier(new_value)
-
-        print(
-            f"[DEBUG] Updated {username} ({user_id}) star bonus for {game_key}: "
-            f"{current} -> {new_value} (career_total={career_total}, multiplier={multiplier:.2f})"
-        )
 
         return {
             "stars": new_value,
@@ -227,10 +241,6 @@ class EconomyManager:
             },
         )
 
-        print(
-            f"[DEBUG] Daily claim recorded for {username} ({user_id}) -> streak {streak}"
-        )
-
         return {
             "available": True,
             "streak": streak,
@@ -247,9 +257,6 @@ class EconomyManager:
             {"user_id": user_id}, {"$inc": {"balance": amount}}
         )
         new_balance = EconomyManager.balance(user_id, username)
-        print(
-            f"[DEBUG] Granted {amount} coins to {username} ({user_id}) -> balance {new_balance}"
-        )
         return new_balance
 
     ###########################################################
@@ -259,7 +266,6 @@ class EconomyManager:
     def wager(user_id: int, amount: int, username: str = "Unknown") -> bool:
         bal = EconomyManager.balance(user_id, username)
         if bal < amount:
-            print(f"[DEBUG] Wager denied for {username} ({user_id}): {bal} < {amount}")
             return False
 
         EconomyManager.COLLECTION.update_one(
@@ -271,9 +277,6 @@ class EconomyManager:
                     "coins_lost": amount,
                 }
             },
-        )
-        print(
-            f"[DEBUG] Wager accepted: {username} ({user_id}) bet {amount}, new balance {bal - amount}"
         )
         return True
 
@@ -292,8 +295,5 @@ class EconomyManager:
         }
         EconomyManager.COLLECTION.update_one({"user_id": user_id}, update_query)
         new_balance = EconomyManager.balance(user_id, username)
-        print(
-            f"[DEBUG] Payout: {username} ({user_id}) won {amount}, balance {new_balance}"
-        )
         return new_balance
 

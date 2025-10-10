@@ -1,11 +1,83 @@
-﻿###########################################################
+###########################################################
 # File: ui_embeds.py
 #
 # Description: Luigi's Casino UI header utilities.
 ###########################################################
 
 from typing import List, Optional
+
+import discord
+
 from economy.EconomyManager import EconomyManager
+
+# ##########################################################
+# Static embed helpers - no animations
+# ##########################################################
+
+EMBED_COLOR = discord.Color.from_rgb(24, 131, 62)  # Luigi green
+
+
+def _format_number(amount: int) -> str:
+    return f"{amount:,}"
+
+
+def make_game_header(user, game_name: str, stats: dict) -> discord.Embed:
+    """Render the embed-based header with live balance and stats."""
+    record = EconomyManager.ensure_user(user.id, user.name)
+    balance = record.get("balance", 0)
+
+    active_bet = stats.get("active_bet", 0)
+    stars_current = stats.get("stars_current", 0)
+    dealer_action = stats.get("dealer_action")
+    round_summary = stats.get("round_summary")
+
+    embed = discord.Embed(
+        title=f"🎰 Luigi's Casino – {game_name}",
+        color=EMBED_COLOR,
+    )
+    if getattr(user, "display_avatar", None):
+        embed.set_author(name=user.display_name, icon_url=user.display_avatar.url)
+        embed.set_thumbnail(url=user.display_avatar.url)
+    else:
+        embed.set_author(name=user.display_name)
+
+    embed.add_field(name="Balance", value=f"💰 {_format_number(balance)}", inline=True)
+    embed.add_field(name="Bet", value=f"💎 {_format_number(active_bet)}", inline=True)
+    embed.add_field(name="Stars", value=f"⭐ {stars_current}", inline=True)
+
+    footer_text = round_summary or dealer_action
+    if footer_text:
+        embed.add_field(name="Game Status", value=str(footer_text), inline=False)
+
+    embed.set_footer(text="Luigi's Casino")
+    return embed
+
+
+def make_pregame_banner(
+    game_name: str,
+    balance: int,
+    *,
+    prompt: Optional[str] = None,
+) -> discord.Embed:
+    """Render the embed used during wager selection."""
+    call_to_action = prompt or "Select your wager amount to begin:"
+    embed = discord.Embed(
+        title=f"🎰 Luigi's Casino – {game_name}",
+        description=call_to_action,
+        color=EMBED_COLOR,
+    )
+    embed.add_field(
+        name="Balance",
+        value=f"💰 {_format_number(balance)} coins",
+        inline=False,
+    )
+    embed.set_footer(text="Luigi's Casino")
+    return embed
+
+
+# ##########################################################
+# Animated/gif board helpers - gif board layout
+# ##########################################################
 
 BAR_WIDTH = 25  # total width of the header bar
 TOP_BORDER = "╔" + "═" * BAR_WIDTH + "╗"
@@ -29,8 +101,8 @@ def _compose_message(lines: List[str]) -> str:
     return "\n".join(message)
 
 
-def make_game_header(user, game_name: str, stats: dict) -> str:
-    """Render the standard in-game header with live balance and stats."""
+def make_gif_game_header(user, game_name: str, stats: dict) -> str:
+    """Render the classic ASCII header used alongside gif boards."""
     record = EconomyManager.ensure_user(user.id, user.name)
     balance = record.get("balance", 0)
 
@@ -50,13 +122,13 @@ def make_game_header(user, game_name: str, stats: dict) -> str:
     return _compose_message(lines)
 
 
-def make_pregame_banner(
+def make_gif_pregame_banner(
     game_name: str,
     balance: int,
     *,
     prompt: Optional[str] = None,
 ) -> str:
-    """Render the common wager selection banner shown before each game."""
+    """Render the wager selection banner for the gif/animated layout."""
     call_to_action = prompt or "Select your wager amount to begin:"
 
     lines = [

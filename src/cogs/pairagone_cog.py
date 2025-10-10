@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: pairagone_cog.py
 #
 # Description: Pair-a-Gone command and entry point
@@ -10,7 +10,8 @@ from cogs.base_game_cog import BaseGameCog
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_view
-from utils.ui_embeds import make_game_header
+from utils.ui_embeds import make_game_header, make_gif_game_header
+from economy.EconomyManager import EconomyManager
 
 
 class PairAGoneCog(BaseGameCog):
@@ -32,9 +33,7 @@ class PairAGoneCog(BaseGameCog):
         user_id = player.id
 
         self.log_command_invocation(interaction, "casino_pairagone")
-
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
+        visibility = self.resolve_visibility(interaction)
 
         async def start_game(
             inter: discord.Interaction,
@@ -47,39 +46,69 @@ class PairAGoneCog(BaseGameCog):
                 "casino_pairagone",
                 bet_amount=bet_amount,
             )
+            animations_on = EconomyManager.animations_enabled(
+                inter.user.id, inter.user.name
+            )
 
             board_bytes = render_pair_board(game)
             board_bytes.seek(0)
-            file = discord.File(board_bytes, filename="pair_board.png")
+            board_file = discord.File(board_bytes, filename="pair_board.png")
 
             stats = {
                 "active_bet": game.bet,
                 "stars_current": game.stars,
                 "dealer_action": "Select two adjacent matching cards!",
             }
-            content = make_game_header(inter.user, "Pair-a-Gone", stats)
 
             view = make_pair_view(
                 game,
                 inter.user,
                 self.cleanup_game,
+                animations_enabled=animations_on,
                 start_game_callback=start_game,
             )
 
-            await inter.response.edit_message(
-                content=content,
-                attachments=[file],
-                view=view,
-            )
+            if animations_on:
+                header_text = make_gif_game_header(
+                    inter.user,
+                    "Pair-a-Gone",
+                    stats,
+                )
+                await inter.response.edit_message(
+                    content=header_text,
+                    embed=None,
+                    attachments=[board_file],
+                    view=view,
+                )
+            else:
+                header_embed = make_game_header(inter.user, "Pair-a-Gone", stats)
+                header_embed.set_image(
+                    url=f"attachment://{board_file.filename}"
+                )
+                await inter.response.edit_message(
+                    content=None,
+                    embed=header_embed,
+                    attachments=[board_file],
+                    view=view,
+                )
 
             message = await inter.original_response()
-            view.msg = message
+            if message is not None:
+                view.msg = message
 
             self.register_active_game(user_id, game=game, message=message)
+
+        layout_mode = (
+            "gif"
+            if EconomyManager.animations_enabled(user_id, player.name)
+            else "embed"
+        )
 
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
+            visibility=visibility,
+            layout=layout_mode,
         )
 
 

@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: luckystars_cog.py
 #
 # Description: Cog for Luigi's Casino - Lucky Stars Game
@@ -11,7 +11,8 @@ from cogs.base_game_cog import BaseGameCog
 from casinogames.luckystars.LuckyStars import LuckyStars
 from casinogames.luckystars.LuckyStarsPrint import render_lucky_board
 from casinogames.luckystars.LuckyStarsUI import make_lucky_controls
-from utils.ui_embeds import make_game_header
+from utils.ui_embeds import make_game_header, make_gif_game_header
+from economy.EconomyManager import EconomyManager
 
 
 class LuckyStarsCog(BaseGameCog):
@@ -31,9 +32,7 @@ class LuckyStarsCog(BaseGameCog):
         user_id = player.id
 
         self.log_command_invocation(interaction, "casino_luckystars")
-
-        if not interaction.response.is_done():
-            await interaction.response.defer(ephemeral=True)
+        visibility = self.resolve_visibility(interaction)
 
         async def start_game(
             inter: discord.Interaction,
@@ -48,38 +47,64 @@ class LuckyStarsCog(BaseGameCog):
                 bet_amount=bet_amount,
             )
 
+            animations_on = EconomyManager.animations_enabled(
+                inter.user.id, inter.user.name
+            )
+
             board_bytes = render_lucky_board(game, reveal=False)
             board_bytes.seek(0)
-            file = discord.File(board_bytes, filename="lucky.png")
+            board_file = discord.File(board_bytes, filename="lucky.png")
 
             stats = {
                 "active_bet": game.bet,
                 "stars_current": 0,
                 "dealer_action": "Pick a card!",
             }
-            content = make_game_header(inter.user, "Lucky Stars", stats)
 
             view = make_lucky_controls(
                 game,
                 inter.user,
                 self.cleanup_game,
+                animations_enabled=animations_on,
                 start_game_callback=start_game,
             )
-            
-            await inter.response.edit_message(
-                content=content,
-                attachments=[file],
-                view=view,
-            )
+
+            if animations_on:
+                header_text = make_gif_game_header(
+                    inter.user, "Lucky Stars", stats
+                )
+                await inter.response.edit_message(
+                    content=header_text,
+                    embed=None,
+                    attachments=[board_file],
+                    view=view,
+                )
+            else:
+                header_embed = make_game_header(inter.user, "Lucky Stars", stats)
+                header_embed.set_image(url="attachment://lucky.png")
+                await inter.response.edit_message(
+                    content=None,
+                    embed=header_embed,
+                    attachments=[board_file],
+                    view=view,
+                )
 
             message = await inter.original_response()
             view.msg = message
 
             self.register_active_game(user_id, game=game, message=message)
 
+        layout_mode = (
+            "gif"
+            if EconomyManager.animations_enabled(user_id, player.name)
+            else "embed"
+        )
+
         await self.present_wager_menu(
             interaction,
             on_bet_selected=start_game,
+            visibility=visibility,
+            layout=layout_mode,
         )
 
 

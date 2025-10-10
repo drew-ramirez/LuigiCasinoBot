@@ -1,14 +1,16 @@
-﻿###########################################################
+###########################################################
 # File: user_cog.py
 #
-# Description: Generic player-facing commands for Luigi’s Casino
+# Description: Generic player-facing commands for Luigi's Casino
 ###########################################################
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
+from utils.visibility import resolve_command_visibility
 
 bank = Bank()
 
@@ -16,13 +18,15 @@ bank = Bank()
 ###########################################################
 # Safe Send Utility
 ###########################################################
-async def safe_send(interaction: discord.Interaction, **kwargs):
+async def safe_send(
+    interaction: discord.Interaction, *, ephemeral: bool = False, **kwargs
+):
     # Safely send a message even if the interaction is already acknowledged
     try:
         if interaction.response.is_done():
-            await interaction.followup.send(**kwargs)
+            await interaction.followup.send(ephemeral=ephemeral, **kwargs)
         else:
-            await interaction.response.send_message(**kwargs)
+            await interaction.response.send_message(ephemeral=ephemeral, **kwargs)
     except Exception as e:
         print(f"[ERROR] safe_send failed: {e}")
 
@@ -48,8 +52,9 @@ class UserCog(commands.Cog):
     )
     async def profile(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_profile")
+        visibility = resolve_command_visibility(interaction, "profile")
         # defer to acknowledge the command
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
 
         uid = interaction.user.id
         username = interaction.user.name
@@ -72,28 +77,32 @@ class UserCog(commands.Cog):
         )
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-        embed.add_field(name="Balance", value=f"💰 {balance:,} coins", inline=True)
+        embed.add_field(
+            name="casino_balance", value=f"💰 {balance:,} coins", inline=True
+        )
         embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
-        embed.add_field(name="Daily Streak", value=f"⏲️ {daily_streak:,}", inline=True)
+        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
 
+        embed.add_field(
+            name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True
+        )
         embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
         embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
-            name="Biggest Cashout", value=f"💸 {biggest_cashout:,}", inline=True
+            name="Largest Cashout", value=f"💸 {biggest_cashout:,}", inline=False
         )
 
-        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=False)
-
         # send followup
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.followup.send(embed=embed, ephemeral=visibility.ephemeral)
 
     @discord.app_commands.command(
         name="casino_balance", description="Check your casino balance."
     )
     async def balance(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_balance")
+        visibility = resolve_command_visibility(interaction, "balance")
         # always defer early acknowledges immediately
-        await interaction.response.defer(ephemeral=True)
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
 
         user = interaction.user
         user_id = user.id
@@ -104,7 +113,8 @@ class UserCog(commands.Cog):
 
         # follow up
         await interaction.followup.send(
-            f"{user.name}, your current balance is **{balance} coins**."
+            f"{user.name}, your current balance is **{balance} coins**.",
+            ephemeral=visibility.ephemeral,
         )
 
     @discord.app_commands.command(
@@ -112,7 +122,8 @@ class UserCog(commands.Cog):
     )
     async def pity(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_pity")
-        await interaction.response.defer(ephemeral=True)
+        visibility = resolve_command_visibility(interaction, "pity")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
 
         user = interaction.user
         user_id = user.id
@@ -124,14 +135,14 @@ class UserCog(commands.Cog):
         if balance > 5:
             await interaction.followup.send(
                 f"{user.display_name}, your balance is **{balance} coins** - keep spinning!",
-                ephemeral=True,
+                ephemeral=visibility.ephemeral,
             )
             return
 
         new_balance = EconomyManager.grant(user_id, 100, username)
         await interaction.followup.send(
             f"{user.display_name}, Luigi tossed you **100 coins**. New balance: **{new_balance}**.",
-            ephemeral=True,
+            ephemeral=visibility.ephemeral,
         )
 
     @discord.app_commands.command(
@@ -139,6 +150,7 @@ class UserCog(commands.Cog):
     )
     async def daily(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_daily")
+        visibility = resolve_command_visibility(interaction, "daily")
         uid = interaction.user.id
         username = interaction.user.name
         claim_info = EconomyManager.record_daily_claim(uid, username)
@@ -154,7 +166,7 @@ class UserCog(commands.Cog):
                     f"You've already claimed your daily reward. "
                     f"Come back in {hours}h {minutes}m."
                 ),
-                ephemeral=True,
+                ephemeral=visibility.ephemeral,
             )
             return
 
@@ -165,10 +177,10 @@ class UserCog(commands.Cog):
         await safe_send(
             interaction,
             content=(
-                f"💰 Daily bonus claimed! You received **{reward} coins**.\n"
+                f"Daily bonus claimed! You received **{reward} coins**.\n"
                 f"Daily streak: {streak} day{'s' if streak != 1 else ''}."
             ),
-            ephemeral=True,
+            ephemeral=visibility.ephemeral,
         )
 
     @discord.app_commands.command(
@@ -176,7 +188,8 @@ class UserCog(commands.Cog):
     )
     async def leaderboard(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_leaderboard")
-        await interaction.response.defer(ephemeral=True)
+        visibility = resolve_command_visibility(interaction, "leaderboard")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
 
         collection = EconomyManager.COLLECTION
 
@@ -216,7 +229,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "💰",
+                "emoji": "💰 ",
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -236,7 +249,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💸",
+                "emoji": "💰",
             },
         }
 
@@ -244,13 +257,16 @@ class UserCog(commands.Cog):
             datasets, initial_key="balance", requester=interaction.user
         )
         embed = view.build_embed()
-        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
+        await interaction.followup.send(
+            embed=embed, view=view, ephemeral=visibility.ephemeral
+        )
 
     @discord.app_commands.command(
         name="casino_help", description="Show help information for the casino games"
     )
     async def help_cmd(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_help")
+        visibility = resolve_command_visibility(interaction, "help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
             description="Quick reference for available commands.",
@@ -266,6 +282,7 @@ class UserCog(commands.Cog):
                     "**/casino_leaderboard** - View the top players",
                     "**/casino_balance** - Check your coin balance",
                     "**/casino_pity** - Luigi fuels your addiction",
+                    "**/casino_animations** - Toggle animated vs static layout",
                 ]
             ),
             inline=False,
@@ -284,7 +301,49 @@ class UserCog(commands.Cog):
             inline=False,
         )
 
-        await safe_send(interaction, embed=embed, ephemeral=True)
+        await safe_send(
+            interaction,
+            embed=embed,
+            ephemeral=visibility.ephemeral,
+        )
+
+    @discord.app_commands.command(
+        name="casino_animations",
+        description="Toggle whether casino games play full animations or use a condensed static layout",
+    )
+    @app_commands.describe(
+        mode="Use 'on for the animations or 'off' for static updates"
+    )
+    @app_commands.choices(
+        mode=[
+            app_commands.Choice(name="On", value="enabled"),
+            app_commands.Choice(name="Off", value="disabled"),
+        ]
+    )
+    async def casino_animations(
+        self,
+        interaction: discord.Interaction,
+        mode: app_commands.Choice[str],
+    ):
+        MetricsManager.record_command_event(interaction, "casino_animations")
+        visibility = resolve_command_visibility(interaction, "casino_animations")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+
+        enable = mode.value == "enabled"
+        user = interaction.user
+        EconomyManager.set_animations_enabled(user.id, enable, user.name)
+
+        state = "enabled" if enable else "disabled"
+        detail = (
+            "Games will show animations with compatibe UI"
+            if enable
+            else "Games will show static updates with condensed UI."
+        )
+
+        await interaction.followup.send(
+            f"Animation preference **{state}**. {detail}",
+            ephemeral=visibility.ephemeral,
+        )
 
 
 class LeaderboardCategorySelect(discord.ui.Select):

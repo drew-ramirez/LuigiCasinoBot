@@ -13,22 +13,14 @@ from discord.ext import commands
 from discord import app_commands
 
 from metrics.metrics_manager import MetricsRollups
+from config import CasinoConfigManager
+from config.settings import fallback_allowed_channels
 
 # load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
-_channels_env = os.getenv("CASINO_CHANNEL_IDS")
-if _channels_env:
-    ALLOWED_CHANNEL_IDS = {
-        int(v.strip()) for v in _channels_env.split(",") if v.strip().isdigit()
-    }
-else:
-    single_channel = os.getenv("CASINO_CHANNEL_ID", "1424113433712001105")
-    try:
-        ALLOWED_CHANNEL_IDS = {int(single_channel)}
-    except ValueError:
-        ALLOWED_CHANNEL_IDS = set()
+FALLBACK_ALLOWED_CHANNELS = fallback_allowed_channels()
 
 # intents
 intents = discord.Intents.default()
@@ -57,48 +49,58 @@ def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
 
 
 ###########################################################
-# Global Interaction Check (safe + synchronous)
+# Global Interaction Check
 ###########################################################
 async def casino_channel_only(interaction: discord.Interaction) -> bool:
-    # allow all if unrestricted
-    if not ALLOWED_CHANNEL_IDS:
+    guild = interaction.guild
+    if guild is None:
         return True
 
     related_ids = _extract_parent_ids(interaction)
 
-    # allow ephemeral
-    if not related_ids or interaction.guild is None:
+    decision = CasinoConfigManager.resolve_visibility(
+        guild_id=guild.id,
+        channel_id=interaction.channel_id,
+        command_key=None,
+        fallback_channels=FALLBACK_ALLOWED_CHANNELS,
+    )
+
+    if decision.config.all_public_channels:
+        if decision.config.all_public_channels.intersection(related_ids):
+            return True
+        # allow execution but leave messaging to command logic
         return True
 
-    # allow if current or parent channel is permitted
-    if ALLOWED_CHANNEL_IDS.intersection(related_ids):
-        return True
+    # legacy fallback: if no config stored but env channels provided
+    if FALLBACK_ALLOWED_CHANNELS:
+        if FALLBACK_ALLOWED_CHANNELS.intersection(related_ids):
+            return True
 
-    # otherwise build mention text for allowed channels
-    allowed_mentions = []
-    for cid in ALLOWED_CHANNEL_IDS:
-        ch = interaction.guild.get_channel(cid)
-        mention = ch.mention if ch else f"<#{cid}>"
-        allowed_mentions.append(mention)
-    channel_mention = ", ".join(allowed_mentions)
-
-    try:
+        # otherwise build mention text for allowed channels
+        allowed_mentions = []
+        for cid in FALLBACK_ALLOWED_CHANNELS:
+            ch = guild.get_channel(cid)
+            mention = ch.mention if ch else f"<#{cid}>"
+            allowed_mentions.append(mention)
+        channel_mention = ", ".join(allowed_mentions)
+        
         # respond immediately to avoid expiration
-        if not interaction.response.is_done():
-            await interaction.response.send_message(
-                f"Sorry, we're isolated testing in {channel_mention} only :).",
-                ephemeral=True,
-            )
-        else:
-            await interaction.followup.send(
-                f"Sorry, we're isolated testing in {channel_mention} only :).",
-                ephemeral=True,
-            )
-    except Exception as e:
-        print(f"[WARN] Failed to send isolation message: {e}")
+        try:
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"Sorry, we're isolated testing in {channel_mention} only :).",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"Sorry, we're isolated testing in {channel_mention} only :).",
+                    ephemeral=True,
+                )
+        except Exception as e:
+            print(f"[WARN] Failed to send isolation message: {e}")
+        return False
 
-    # returning False stops the command from executing
-    return False
+    return True
 
 
 # register the global check
@@ -132,6 +134,7 @@ COGS = [
     "cogs.user_cog",
     #"cogs.admin_cog",
     #"cogs.test_cog",
+    "cogs.casino_config_cog",
     "cogs.memorymatch_cog",
     "cogs.pairagone_cog",
     "cogs.luckystars_cog",

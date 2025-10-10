@@ -6,7 +6,7 @@
 
 import asyncio
 import io
-
+from contextlib import suppress
 import discord
 from PIL import Image
 
@@ -18,7 +18,7 @@ from casinogames.pairagone.PairAGonePrint import (
     render_pair_board_with_blanks,
 )
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
-from utils.ui_embeds import make_game_header
+from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 
 faces = load_memory_faces()
@@ -31,6 +31,8 @@ class PairControls(discord.ui.View):
         game: PairAGone,
         player: discord.User,
         on_finish=None,
+        *,
+        animations_enabled: bool,
         wager_options=None,
         start_game_callback=None,
         msg: discord.Message | None = None,
@@ -46,6 +48,7 @@ class PairControls(discord.ui.View):
         )
         self.start_game_callback = start_game_callback
         self.msg = msg
+        self.animations_enabled = animations_enabled
 
         self._build_buttons()
         self._refresh_buttons()
@@ -53,16 +56,45 @@ class PairControls(discord.ui.View):
     ###########################################################
     # Helpers
     ###########################################################
-    def _header(self, dealer_action: str | None = None) -> str:
+    def _status_stats(self, dealer_action: str | None = None) -> dict:
         action = (
             dealer_action or f"Cards remaining in deck: {self.game.remaining_in_deck()}"
         )
-        stats = {
+        return {
             "active_bet": self.game.bet,
             "stars_current": self.game.stars,
             "dealer_action": action,
         }
-        return make_game_header(self.player, "Pair-a-Gone", stats)
+
+    def _header_payload(
+        self, dealer_action: str | None = None
+    ) -> tuple[str | None, discord.Embed | None]:
+        stats = self._status_stats(dealer_action)
+        if self.animations_enabled:
+            return make_gif_game_header(self.player, "Pair-a-Gone", stats), None
+        embed = make_game_header(self.player, "Pair-a-Gone", stats)
+        return None, embed
+
+    async def _apply_status(
+        self,
+        msg: discord.Message,
+        dealer_action: str | None = None,
+        *,
+        attachments: list[discord.File] | None = None,
+        view: discord.ui.View | None,
+    ) -> None:
+        attachment_name = attachments[0].filename if attachments else None
+        content, embed = self._header_payload(dealer_action)
+        if embed and attachment_name:
+            embed.set_image(url=f"attachment://{attachment_name}")
+        edit_kwargs: dict[str, object] = {
+            "content": content,
+            "embed": embed,
+            "view": view,
+        }
+        if attachments is not None:
+            edit_kwargs["attachments"] = attachments
+        await msg.edit(**edit_kwargs)
 
     def _board_file(self, filename: str = "pair_board.png") -> discord.File:
         board_bytes = render_pair_board(self.game)
@@ -93,7 +125,7 @@ class PairControls(discord.ui.View):
             else:
                 if deck_remaining == 0:
                     child.disabled = True
-                    child.label = "\u2800" # blank button
+                    child.label = "\u2800"  # blank button
                 else:
                     child.disabled = False
                     child.label = str(i + 1)
@@ -148,7 +180,11 @@ class PairControls(discord.ui.View):
 
         if not is_match:
             self._refresh_buttons()
-            await msg.edit(content=self._header("No match!"), view=self)
+            await self._apply_status(
+                msg,
+                "No match!",
+                view=self,
+            )
             return
 
         for child in self.children:
@@ -171,10 +207,33 @@ class PairControls(discord.ui.View):
     async def _play_match_sequence(
         self, msg: discord.Message, a: int, b: int, sa: str, sb: str
     ):
-        flicker_gif = make_pair_flicker_gif(self.game, [a, b], [sa, sb], duration=70)
+        if not self.animations_enabled:
+            new_cards = self.game.remove_and_fall([a, b])
+            if new_cards:
+                action = (
+                    f"Match! Dealer replaces cards. Cards remaining: "
+                    f"{self.game.remaining_in_deck()}"
+                )
+            else:
+                action = (
+                    f"Match! Cards remaining in deck: "
+                    f"{self.game.remaining_in_deck()}"
+                )
+            await self._apply_status(
+                msg,
+                action,
+                attachments=[self._board_file()],
+                view=self,
+            )
+            return
+
+        flicker_gif = make_pair_flicker_gif(
+            self.game, [a, b], [sa, sb], duration=70
+        )
         flicker_gif.seek(0)
-        await msg.edit(
-            content=self._header("Match!"),
+        await self._apply_status(
+            msg,
+            "Match!",
             attachments=[discord.File(flicker_gif, "pair_flicker.gif")],
             view=self,
         )
@@ -183,10 +242,9 @@ class PairControls(discord.ui.View):
         new_cards = self.game.remove_and_fall([a, b])
 
         if not new_cards:
-            await msg.edit(
-                content=self._header(
-                    f"Pair-a-Gone continues! Cards remaining: {self.game.remaining_in_deck()}"
-                ),
+            await self._apply_status(
+                msg,
+                f"Pair-a-Gone continues! Cards remaining: {self.game.remaining_in_deck()}",
                 attachments=[self._board_file()],
                 view=self,
             )
@@ -196,33 +254,33 @@ class PairControls(discord.ui.View):
         blanks = [pos for pos, _ in new_cards]
         blanks_bytes = render_pair_board_with_blanks(self.game, blanks)
         blanks_bytes.seek(0)
-        await msg.edit(
-            content=self._header("Dealer is dealing new cards..."),
+        await self._apply_status(
+            msg,
+            "Dealer is dealing new cards...",
             attachments=[discord.File(blanks_bytes, "pair_board.png")],
             view=self,
         )
-        await asyncio.sleep(0.4)
+        await asyncio.sleep(0.4 if self.animations_enabled else 0.25)
 
         try:
             flip_gif = self.make_simultaneous_flip_gif(
                 self.game, new_cards, duration=80
             )
             flip_gif.seek(0)
-            await msg.edit(
-                content=self._header(
-                    f"Dealer flips new cards! Cards remaining: {self.game.remaining_in_deck()}"
-                ),
+            await self._apply_status(
+                msg,
+                f"Dealer flips new cards! Cards remaining: {self.game.remaining_in_deck()}",
                 attachments=[discord.File(flip_gif, "pair_flip.gif")],
                 view=self,
             )
             await asyncio.sleep(0.8)
         except Exception as e:
             print(f"[PairAGoneUI] flip gif failed: {e}")
+            await asyncio.sleep(0.2)
 
-        await msg.edit(
-            content=self._header(
-                f"Pair-a-Gone continues! Cards remaining: {self.game.remaining_in_deck()}"
-            ),
+        await self._apply_status(
+            msg,
+            f"Pair-a-Gone continues! Cards remaining: {self.game.remaining_in_deck()}",
             attachments=[self._board_file()],
             view=self,
         )
@@ -232,10 +290,9 @@ class PairControls(discord.ui.View):
         payout = self.game.bet * 2
         EconomyManager.payout(self.player.id, payout, self.player.name)
 
-        await msg.edit(
-            content=self._header(
-                f"Board cleared! You won {payout} coins. Stars: {self.game.stars}"
-            ),
+        await self._apply_status(
+            msg,
+            f"Board cleared! You won {payout} coins. Stars: {self.game.stars}",
             attachments=[self._board_file()],
             view=None,
         )
@@ -243,8 +300,9 @@ class PairControls(discord.ui.View):
 
     async def _handle_no_moves(self, msg: discord.Message):
         self.game.handle_game_end(won=False)
-        await msg.edit(
-            content=self._header("Too bad. No moves left."),
+        await self._apply_status(
+            msg,
+            "Too bad. No moves left.",
             attachments=[self._board_file()],
             view=None,
         )
@@ -293,16 +351,33 @@ class PairControls(discord.ui.View):
                 wager_options=self.wager_options,
             )
 
-            await msg.edit(view=wager_view)
+            try:
+                await btn_inter.edit_original_response(view=wager_view)
+            except Exception:
+                with suppress(Exception):
+                    await msg.edit(view=wager_view)
 
         async def quit_cb(btn_inter: discord.Interaction):
             if btn_inter.user.id != self.player.id:
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            await msg.edit(
-                content=self._header("Thanks for playing Pair-a-Gone!"), view=None
-            )
+            action = "Thanks for playing Pair-a-Gone!"
+            if self.animations_enabled:
+                await self._apply_status(
+                    msg,
+                    action,
+                    view=None,
+                )
+            else:
+                await self._apply_status(
+                    msg,
+                    action,
+                    attachments=[self._board_file()],
+                    view=None,
+                )
+            if self.on_finish is not None:
+                await self.on_finish(self.player.id)
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
@@ -311,7 +386,8 @@ class PairControls(discord.ui.View):
         replay_view.add_item(replay_btn)
         replay_view.add_item(quit_btn)
 
-        await msg.edit(view=replay_view)
+        with suppress(Exception):
+            await msg.edit(view=replay_view)
 
     ###########################################################################
     # Simultaneous flip gif generator
@@ -377,13 +453,18 @@ def make_pair_view(
     game: PairAGone,
     player: discord.User,
     on_finish,
+    *,
+    animations_enabled: bool,
     wager_options=None,
     start_game_callback=None,
+    msg: discord.Message | None = None,
 ) -> PairControls:
     return PairControls(
         game,
-        player, 
+        player,
         on_finish,
+        animations_enabled=animations_enabled,
         wager_options=wager_options,
         start_game_callback=start_game_callback,
+        msg=msg,
     )

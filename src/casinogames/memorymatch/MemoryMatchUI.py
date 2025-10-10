@@ -13,7 +13,7 @@ from casinogames.memorymatch.MemoryMatchPrint import (
     make_board_flip_gif,
     make_board_reverse_flip_gif,
 )
-from utils.ui_embeds import make_game_header
+from utils.ui_embeds import make_game_header, make_gif_game_header
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from economy.EconomyManager import EconomyManager
 
@@ -34,6 +34,8 @@ class MemoryMatchControls(discord.ui.View):
         game: MemoryMatch,
         player: discord.User,
         on_finish,
+        *,
+        animations_enabled: bool,
         wager_options=None,
         start_game_callback=None,
     ):
@@ -44,6 +46,7 @@ class MemoryMatchControls(discord.ui.View):
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
         self.start_game_callback = start_game_callback
         self.msg: discord.Message | None = None
+        self.animations_enabled = animations_enabled
         self._pending_star_gain: bool = False
         self._pending_next_streak: int | None = None
 
@@ -66,6 +69,49 @@ class MemoryMatchControls(discord.ui.View):
         self.clear_items()
         self._build_buttons()
 
+    BOARD_FILENAME = "memory_board.png"
+
+    def _status_payload(
+        self,
+        dealer_action: str | None = None,
+        *,
+        attachment: discord.File | None = None,
+        include_board: bool = True,
+    ) -> tuple[discord.Embed, list[discord.File]]:
+        action = dealer_action or f"Attempts left: {self.game.remaining_attempts}"
+        streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            self.player.name,
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        streak_summary = f"(⭐ bonus x{multiplier:.2f})"
+        if action:
+            action = f"{action} | {streak_summary}"
+        else:
+            action = streak_summary
+        stats = {
+            "active_bet": self.game.bet,
+            "stars_current": self.game.stars,
+            "dealer_action": action,
+        }
+        embed = make_game_header(self.player, "Memory Match", stats)
+        files: list[discord.File] = []
+        if attachment is not None:
+            embed.set_image(url=f"attachment://{attachment.filename}")
+            files.append(attachment)
+        elif include_board:
+            board_file = self._board_file()
+            embed.set_image(url=f"attachment://{board_file.filename}")
+            files.append(board_file)
+        return embed, files
+
+    def _board_file(self, filename: str | None = None) -> discord.File:
+        target_name = filename or self.BOARD_FILENAME
+        png = render_board_image(self.game)
+        png.seek(0)
+        return discord.File(png, target_name)
+
     def _status_text(self, dealer_action: str | None = None) -> str:
         action = dealer_action or f"Attempts left: {self.game.remaining_attempts}"
         streak = EconomyManager.star_bonus_count(
@@ -84,12 +130,7 @@ class MemoryMatchControls(discord.ui.View):
             "stars_current": self.game.stars,
             "dealer_action": action,
         }
-        return make_game_header(self.player, "Memory Match", stats)
-
-    def _board_file(self, filename: str = "board.png") -> discord.File:
-        png = render_board_image(self.game)
-        png.seek(0)
-        return discord.File(png, filename)
+        return make_gif_game_header(self.player, "Memory Match", stats)
 
     ###########################################################
     # callback factory
@@ -112,34 +153,57 @@ class MemoryMatchControls(discord.ui.View):
         game = self.game
         msg = self.msg or await interaction.original_response()
 
-        if not game.flip_card(pos):
-            await msg.edit(content=self._status_text("Invalid flip."), view=self)
-            return
+        if self.animations_enabled:
+            if not game.flip_card(pos):
+                await msg.edit(content=self._status_text("Invalid flip."), view=self)
+                return
 
-        symbol, _, _ = game.board[pos]
+            symbol, _, _ = game.board[pos]
 
-        # disable buttons during animation
-        for child in self.children:
-            child.disabled = True
-        await msg.edit(view=self)
+            for child in self.children:
+                child.disabled = True
+            await msg.edit(view=self)
 
-        ###########################################################
-        # flip animation
-        ###########################################################
-        gif = make_board_flip_gif(game, pos, symbol, duration=FLIP_FRAME_DURATION_MS)
-        await msg.edit(
-            content=self._status_text(f"Revealing card {pos + 1}..."),
-            attachments=[discord.File(gif, filename=f"board_flip_{pos}.gif")],
-        )
-        await asyncio.sleep(FLIP_ANIMATION_DELAY)
+            gif = make_board_flip_gif(
+                game, pos, symbol, duration=FLIP_FRAME_DURATION_MS
+            )
+            gif.seek(0)
+            await msg.edit(
+                content=self._status_text(f"Revealing card {pos + 1}..."),
+                attachments=[discord.File(gif, filename=f"memory_flip_{pos}.gif")],
+                view=self,
+            )
+            await asyncio.sleep(FLIP_ANIMATION_DELAY)
 
-        ###########################################################
-        # update static board
-        ###########################################################
-        await msg.edit(
-            content=self._status_text(),
-            attachments=[self._board_file()],
-        )
+            await msg.edit(
+                content=self._status_text(),
+                attachments=[self._board_file()],
+                view=self,
+            )
+        else:
+            if not game.flip_card(pos):
+                embed, files = self._status_payload("Invalid flip.")
+                await msg.edit(
+                    content=None,
+                    embed=embed,
+                    attachments=files,
+                    view=self,
+                )
+                return
+
+            for child in self.children:
+                child.disabled = True
+            await msg.edit(view=self)
+
+            embed, files = self._status_payload(
+                f"Revealed card {pos + 1}.",
+            )
+            await msg.edit(
+                content=None,
+                embed=embed,
+                attachments=files,
+                view=self,
+            )
 
         ###########################################################
         # match check
@@ -156,11 +220,22 @@ class MemoryMatchControls(discord.ui.View):
             await self.update_controls_for_match(game.revealed[-2:], msg)
             board_cleared = game.is_board_cleared()
             if game.last_bonus_awarded and not board_cleared:
-                await msg.edit(
-                    content=self._status_text("3-Streak, +1 attempt!"),
-                    attachments=[self._board_file()],
-                    view=self,
-                )
+                if self.animations_enabled:
+                    await msg.edit(
+                        content=self._status_text("3-Streak, +1 attempt!"),
+                        attachments=[self._board_file()],
+                        view=self,
+                    )
+                else:
+                    embed_bonus, bonus_files = self._status_payload(
+                        "3-Streak, +1 attempt!"
+                    )
+                    await msg.edit(
+                        content=None,
+                        embed=embed_bonus,
+                        attachments=bonus_files,
+                        view=self,
+                    )
                 game.last_bonus_awarded = False
             elif game.last_bonus_awarded:
                 # ensure flag does not linger if the board is cleared
@@ -190,21 +265,32 @@ class MemoryMatchControls(discord.ui.View):
         a, b = self.game.revealed[-2], self.game.revealed[-1]
         symbols = [self.game.board[a][0], self.game.board[b][0]]
 
-        gif = make_board_reverse_flip_gif(
-            self.game, [a, b], symbols, duration=UNFLIP_FRAME_DURATION_MS
-        )
-        await msg.edit(
-            content=self._status_text("Not a match!"),
-            attachments=[discord.File(gif, "board_unflip.gif")],
-        )
-
-        await asyncio.sleep(UNFLIP_ANIMATION_DELAY)
-        self.game.hide_unmatched()
-
-        await msg.edit(
-            content=self._status_text(),
-            attachments=[self._board_file()],
-        )
+        if self.animations_enabled:
+            gif = make_board_reverse_flip_gif(
+                self.game, [a, b], symbols, duration=UNFLIP_FRAME_DURATION_MS
+            )
+            gif.seek(0)
+            await msg.edit(
+                content=self._status_text("Not a match!"),
+                attachments=[discord.File(gif, "memory_unflip.gif")],
+                view=self,
+            )
+            await asyncio.sleep(UNFLIP_ANIMATION_DELAY)
+            self.game.hide_unmatched()
+            await msg.edit(
+                content=self._status_text(),
+                attachments=[self._board_file()],
+                view=self,
+            )
+        else:
+            self.game.hide_unmatched()
+            embed, files = self._status_payload("Not a match!")
+            await msg.edit(
+                content=None,
+                embed=embed,
+                attachments=files,
+                view=self,
+            )
         await self.update_controls_for_unmatch([a, b], msg)
 
     async def _handle_win(self, interaction: discord.Interaction, msg: discord.Message):
@@ -219,14 +305,19 @@ class MemoryMatchControls(discord.ui.View):
         payout = int(round(payout_base * multiplier))
         EconomyManager.payout(self.player.id, payout, self.player.name)
 
-        await msg.edit(
-            content=self._status_text(
-                f"Board cleared! You won {payout} coins \n"
-                "Continue or Exit Now?"
-            ),
-            attachments=[final_board],
-            view=None,
+        summary = (
+            f"Board cleared! You won {payout} coins \n"
+            "Continue or Exit Now?"
         )
+        if self.animations_enabled:
+            await msg.edit(
+                content=self._status_text(summary),
+                attachments=[final_board],
+                view=None,
+            )
+        else:
+            embed, files = self._status_payload(summary, attachment=final_board)
+            await msg.edit(content=None, embed=embed, attachments=files, view=None)
 
         self._pending_star_gain = True
         self._pending_next_streak = current_streak + 1
@@ -251,12 +342,20 @@ class MemoryMatchControls(discord.ui.View):
 
         self._pending_star_gain = False
 
-        await msg.edit(
-            content=self._status_text(
-                f"No attempts remaining"
-            ),
-            attachments=[self._board_file()],
-        )
+        if self.animations_enabled:
+            await msg.edit(
+                content=self._status_text("No attempts remaining"),
+                attachments=[self._board_file()],
+                view=None,
+            )
+        else:
+            embed, files = self._status_payload("No attempts remaining")
+            await msg.edit(
+                content=None,
+                embed=embed,
+                attachments=files,
+                view=None,
+            )
         await self._show_replay(msg)
 
     async def _prompt_continue(self, msg: discord.Message, next_streak: int):
@@ -308,11 +407,20 @@ class MemoryMatchControls(discord.ui.View):
                 return
             await btn_inter.response.defer()
             self._pending_star_gain = False
-            await msg.edit(
-                content=self._status_text(f"Cashed out at round {self.game.stars+1}"),
-                attachments=[],
-                view=None,
-            )
+            summary = f"Cashed out at round {self.game.stars+1}"
+            if self.animations_enabled:
+                await msg.edit(
+                    content=self._status_text(summary),
+                    attachments=[],
+                    view=None,
+                )
+            else:
+                embed, files = self._status_payload(
+                    summary, include_board=False
+                )
+                await msg.edit(
+                    content=None, embed=embed, attachments=files, view=None
+                )
             await self._show_replay(msg)
 
         continue_btn.callback = continue_cb
@@ -335,11 +443,16 @@ class MemoryMatchControls(discord.ui.View):
             note = (
                 f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
             )
-        await msg.edit(
-            content=self._status_text(f"New board ready!\n{note}"),
-            attachments=[self._board_file()],
-            view=self,
-        )
+        message = f"New board ready!\n{note}" if note else "New board ready!"
+        if self.animations_enabled:
+            await msg.edit(
+                content=self._status_text(message),
+                attachments=[self._board_file()],
+                view=self,
+            )
+        else:
+            embed, files = self._status_payload(message)
+            await msg.edit(content=None, embed=embed, attachments=files, view=self)
 
     async def _show_replay(self, msg: discord.Message):
         if self.on_finish is not None:
@@ -426,6 +539,8 @@ def make_memory_view(
     game: MemoryMatch,
     player: discord.User,
     on_finish,
+    *,
+    animations_enabled: bool,
     wager_options=None,
     start_game_callback=None,
 ) -> MemoryMatchControls:
@@ -433,6 +548,7 @@ def make_memory_view(
         game,
         player,
         on_finish,
+        animations_enabled=animations_enabled,
         wager_options=wager_options,
         start_game_callback=start_game_callback,
     )
