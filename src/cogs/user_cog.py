@@ -1,4 +1,4 @@
-###########################################################
+﻿###########################################################
 # File: user_cog.py
 #
 # Description: Generic player-facing commands for Luigi's Casino
@@ -48,7 +48,7 @@ class UserCog(commands.Cog):
     ###########################################################
 
     @discord.app_commands.command(
-        name="casino_profile", description="View your casino profile"
+        name="casino_profile", description="View your casino profile for Luigi's Casino"
     )
     async def profile(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_profile")
@@ -96,7 +96,7 @@ class UserCog(commands.Cog):
         await interaction.followup.send(embed=embed, ephemeral=visibility.ephemeral)
 
     @discord.app_commands.command(
-        name="casino_balance", description="Check your casino balance."
+        name="casino_balance", description="Check your casino balance for Luigi's Casino"
     )
     async def balance(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_balance")
@@ -146,7 +146,7 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="casino_daily", description="Claim your daily coin bonus"
+        name="casino_daily", description="Claim your daily coin bonus for Luigi's Casino"
     )
     async def daily(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_daily")
@@ -184,7 +184,7 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="casino_leaderboard", description="Show top casino players by coin balance"
+        name="casino_leaderboard", description="Show top casino players by coin balance for Luigi's Casino"
     )
     async def leaderboard(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_leaderboard")
@@ -262,14 +262,14 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
-        name="casino_help", description="Show help information for the casino games"
+        name="casino_help", description="Show help information for the casino games for Luigi's Casino"
     )
     async def help_cmd(self, interaction: discord.Interaction):
         MetricsManager.record_command_event(interaction, "casino_help")
         visibility = resolve_command_visibility(interaction, "help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
-            description="Quick reference for available commands.",
+            description="Quick reference for available commands",
             color=discord.Color.gold(),
         )
 
@@ -309,7 +309,7 @@ class UserCog(commands.Cog):
 
     @discord.app_commands.command(
         name="casino_animations",
-        description="Toggle whether casino games play full animations or use a condensed static layout",
+        description="Toggle whether casino games play full animations or use a condensed static layout for Luigi's Casino",
     )
     @app_commands.describe(
         mode="Use 'on for the animations or 'off' for static updates"

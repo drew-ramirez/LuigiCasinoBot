@@ -27,7 +27,7 @@ class PicturePokerCog(BaseGameCog):
     # /casino_picturepoker
     ###########################################################
     @discord.app_commands.command(
-        name="casino_picturepoker", description="Start a Picture Poker game"
+        name="casino_picturepoker", description="Start a Picture Poker game for Luigi's Casino"
     )
     async def poker_start(self, interaction: discord.Interaction):
 

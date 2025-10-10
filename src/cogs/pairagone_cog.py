@@ -27,7 +27,7 @@ class PairAGoneCog(BaseGameCog):
     ###########################################################
     # /casino_pairagone
     ###########################################################
-    @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game")
+    @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game for Luigi's Casino")
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id

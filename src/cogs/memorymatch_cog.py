@@ -28,7 +28,7 @@ class MemoryMatchCog(BaseGameCog):
     # /casino_memorymatch
     ###########################################################
     @discord.app_commands.command(
-        name="casino_memorymatch", description="Start a Memory Match game"
+        name="casino_memorymatch", description="Start a Memory Match game for Luigi's Casino"
     )
     async def memory_start(self, interaction: discord.Interaction):
         player = interaction.user
