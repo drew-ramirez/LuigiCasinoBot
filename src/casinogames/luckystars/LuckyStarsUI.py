@@ -16,7 +16,7 @@ from casinogames.luckystars.LuckyStarsPrint import (
     render_lucky_board,
 )
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
-from utils.ui_embeds import make_game_header
+from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 
 faces = load_memory_faces()
@@ -29,6 +29,8 @@ class LuckyStarsView(discord.ui.View):
         game: LuckyStars,
         player: discord.User,
         on_finish,
+        *,
+        animations_enabled: bool,
         wager_options=None,
         start_game_callback=None,
         message: discord.Message | None = None,
@@ -44,6 +46,7 @@ class LuckyStarsView(discord.ui.View):
         )
         self.start_game_callback = start_game_callback
         self.msg = message
+        self.animations_enabled = animations_enabled
 
         self.left_button = LuckyStarsButton("Left", 0)
         self.right_button = LuckyStarsButton("Right", 1)
@@ -60,20 +63,31 @@ class LuckyStarsView(discord.ui.View):
     ###########################################################
     # helpers
     ###########################################################
-    def _header_embed(self, action: str | None = None) -> discord.Embed:
+    def _board_file(self, *, reveal: bool = False, filename: str = "lucky.png") -> discord.File:
+        board = render_lucky_board(self.game, reveal=reveal)
+        board.seek(0)
+        return discord.File(board, filename)
+
+    def _embed_payload(
+        self, action: str | None = None, *, reveal: bool = False
+    ) -> tuple[discord.Embed, list[discord.File]]:
         stats = {
             "active_bet": self.game.bet,
             "stars_current": 0,
             "dealer_action": action or "Pick a card!",
         }
-        return make_game_header(self.player, "Lucky Stars", stats)
+        embed = make_game_header(self.player, "Lucky Stars", stats)
+        board_file = self._board_file(reveal=reveal)
+        embed.set_image(url=f"attachment://{board_file.filename}")
+        return embed, [board_file]
 
-    def _board_file(
-        self, reveal: bool = False, filename: str = "lucky.png"
-    ) -> discord.File:
-        board = render_lucky_board(self.game, reveal=reveal)
-        board.seek(0)
-        return discord.File(board, filename)
+    def _header_text(self, action: str | None = None) -> str:
+        stats = {
+            "active_bet": self.game.bet,
+            "stars_current": 0,
+            "dealer_action": action or "Pick a card!",
+        }
+        return make_gif_game_header(self.player, "Lucky Stars", stats)
 
     async def _disable_buttons(self):
         for child in self.children:
@@ -107,17 +121,26 @@ class LuckyStarsView(discord.ui.View):
         self.game.pick_card(pos)
         await self._disable_buttons()
 
-        gif, total_seconds = make_slide_animation(
-            self.game, duration=90, tail_hold_ms=1200
-        )
-        gif.seek(0)
-        await msg.edit(
-            content=None,
-            embed=self._header_embed("Cards sliding into place..."),
-            attachments=[discord.File(gif, f"luckystars_round{self.game.round}.gif")],
-            view=self,
-        )
-        await asyncio.sleep(3)
+        if self.animations_enabled:
+            gif, _ = make_slide_animation(
+                self.game, duration=70, tail_hold_ms=800
+            )
+            gif.seek(0)
+            await msg.edit(
+                content=self._header_text("Cards sliding into place..."),
+                attachments=[discord.File(gif, f"luckystars_round{self.game.round}.gif")],
+                view=self,
+            )
+            await asyncio.sleep(1.6)
+        else:
+            embed, files = self._embed_payload("Resolving your pick...", reveal=False)
+            await msg.edit(
+                content=None,
+                embed=embed,
+                attachments=files,
+                view=self,
+            )
+            await asyncio.sleep(0.5)
 
         result = self.game.resolve_round()
         player_val = result["player_val"]
@@ -133,12 +156,20 @@ class LuckyStarsView(discord.ui.View):
         else:
             summary += "  You lose this round."
 
-        await msg.edit(
-            content=None,
-            embed=self._header_embed(summary),
-            attachments=[self._board_file(reveal=True)],
-            view=None,
-        )
+        if self.animations_enabled:
+            await msg.edit(
+                content=self._header_text(summary),
+                attachments=[self._board_file(reveal=True)],
+                view=None,
+            )
+        else:
+            embed, files = self._embed_payload(summary, reveal=True)
+            await msg.edit(
+                content=None,
+                embed=embed,
+                attachments=files,
+                view=None,
+            )
 
         await self._show_replay(summary)
 
@@ -193,11 +224,21 @@ class LuckyStarsView(discord.ui.View):
                 await inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await inter.response.defer()
-            await self.msg.edit(
-                content=None,
-                embed=self._header_embed("Thanks for playing Lucky Stars!"),
-                view=None,
-            )
+            farewell = "Thanks for playing Lucky Stars!"
+            if self.animations_enabled:
+                await self.msg.edit(
+                    content=self._header_text(farewell),
+                    attachments=[self._board_file(reveal=True)],
+                    view=None,
+                )
+            else:
+                embed, files = self._embed_payload(farewell, reveal=True)
+                await self.msg.edit(
+                    content=None,
+                    embed=embed,
+                    attachments=files,
+                    view=None,
+                )
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
@@ -223,6 +264,8 @@ def make_lucky_controls(
     game: LuckyStars,
     player: discord.User,
     on_finish,
+    *,
+    animations_enabled: bool,
     wager_options=None,
     start_game_callback=None,
     message: discord.Message | None = None,
@@ -231,6 +274,7 @@ def make_lucky_controls(
         game,
         player,
         on_finish,
+        animations_enabled=animations_enabled,
         wager_options=wager_options,
         start_game_callback=start_game_callback,
         message=message,

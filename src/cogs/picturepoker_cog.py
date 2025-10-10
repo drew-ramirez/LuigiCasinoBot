@@ -12,6 +12,7 @@ from casinogames.picturepoker.PicturePoker import PicturePoker
 from casinogames.picturepoker.PicturePokerPrint import render_board
 from casinogames.picturepoker.PicturePokerUI import make_poker_view
 from utils.ui_embeds import make_game_header
+from cogs.casino_app_group import casino_group, ensure_group_registered
 
 
 class PicturePokerCog(BaseGameCog):
@@ -25,14 +26,14 @@ class PicturePokerCog(BaseGameCog):
     ###########################################################
     # /casino_picturepoker
     ###########################################################
-    @discord.app_commands.command(
-        name="casino_picturepoker", description="Start a Picture Poker game"
+    @casino_group.command(
+        name="picturepoker", description="Start a Picture Poker game"
     )
     async def poker_start(self, interaction: discord.Interaction):
 
         user_id = interaction.user.id
 
-        self.log_command_invocation(interaction, "casino_picturepoker")
+        self.log_command_invocation(interaction, "casino picturepoker")
         visibility = self.resolve_visibility(interaction)
 
         ###########################################################
@@ -49,7 +50,7 @@ class PicturePokerCog(BaseGameCog):
             target_game.start_round(forced_bet=bet_amount)
             self.log_game_start(
                 inter,
-                "casino_picturepoker",
+                "casino picturepoker",
                 bet_amount=bet_amount,
             )
 
@@ -109,4 +110,5 @@ class PicturePokerCog(BaseGameCog):
 # Cog setup
 ###########################################################
 async def setup(bot):
+    ensure_group_registered(bot.tree)
     await bot.add_cog(PicturePokerCog(bot))

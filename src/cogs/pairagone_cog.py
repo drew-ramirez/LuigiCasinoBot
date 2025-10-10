@@ -11,6 +11,7 @@ from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import render_pair_board
 from casinogames.pairagone.PairAGoneUI import make_pair_view
 from utils.ui_embeds import make_game_header
+from cogs.casino_app_group import casino_group, ensure_group_registered
 
 
 class PairAGoneCog(BaseGameCog):
@@ -26,12 +27,12 @@ class PairAGoneCog(BaseGameCog):
     ###########################################################
     # /casino_pairagone
     ###########################################################
-    @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game")
+    @casino_group.command(name="pairagone", description="Start a Pair-a-Gone game")
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
         user_id = player.id
 
-        self.log_command_invocation(interaction, "casino_pairagone")
+        self.log_command_invocation(interaction, "casino pairagone")
         visibility = self.resolve_visibility(interaction)
 
         async def start_game(
@@ -42,7 +43,7 @@ class PairAGoneCog(BaseGameCog):
             game = new_game or PairAGone(user_id, bet_amount)
             self.log_game_start(
                 inter,
-                "casino_pairagone",
+                "casino pairagone",
                 bet_amount=bet_amount,
             )
 
@@ -87,4 +88,5 @@ class PairAGoneCog(BaseGameCog):
 # COG SETUP
 ###########################################################
 async def setup(bot):
+    ensure_group_registered(bot.tree)
     await bot.add_cog(PairAGoneCog(bot))
