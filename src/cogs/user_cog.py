@@ -1,7 +1,7 @@
 ###########################################################
 # File: user_cog.py
 #
-# Description: Generic player-facing commands for Luigi�s Casino
+# Description: Generic player-facing commands for Luigi's Casino
 ###########################################################
 
 import discord
@@ -77,11 +77,15 @@ class UserCog(commands.Cog):
         )
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
-        embed.add_field(name="casino_balance", value=f"💰 {balance:,} coins", inline=True)
+        embed.add_field(
+            name="casino_balance", value=f"💰 {balance:,} coins", inline=True
+        )
         embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
         embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
 
-        embed.add_field(name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True)
+        embed.add_field(
+            name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True
+        )
         embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
         embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
@@ -89,9 +93,7 @@ class UserCog(commands.Cog):
         )
 
         # send followup
-        await interaction.followup.send(
-            embed=embed, ephemeral=visibility.ephemeral
-        )
+        await interaction.followup.send(embed=embed, ephemeral=visibility.ephemeral)
 
     @discord.app_commands.command(
         name="casino_balance", description="Check your casino balance."
@@ -310,12 +312,12 @@ class UserCog(commands.Cog):
         description="Toggle whether casino games play full animations or use a condensed static layout",
     )
     @app_commands.describe(
-        mode="Use 'enabled' for the animated layout or 'disabled' for static updates"
+        mode="Use 'on for the animations or 'off' for static updates"
     )
     @app_commands.choices(
         mode=[
-            app_commands.Choice(name="Enabled - animated layout", value="enabled"),
-            app_commands.Choice(name="Disabled - static embeds", value="disabled"),
+            app_commands.Choice(name="On", value="enabled"),
+            app_commands.Choice(name="Off", value="disabled"),
         ]
     )
     async def casino_animations(
@@ -419,4 +421,3 @@ class LeaderboardView(discord.ui.View):
 ###########################################################
 async def setup(bot):
     await bot.add_cog(UserCog(bot))
-

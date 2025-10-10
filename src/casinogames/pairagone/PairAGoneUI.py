@@ -6,7 +6,7 @@
 
 import asyncio
 import io
-
+from contextlib import suppress
 import discord
 from PIL import Image
 
@@ -351,18 +351,33 @@ class PairControls(discord.ui.View):
                 wager_options=self.wager_options,
             )
 
-            await msg.edit(view=wager_view)
+            try:
+                await btn_inter.edit_original_response(view=wager_view)
+            except Exception:
+                with suppress(Exception):
+                    await msg.edit(view=wager_view)
 
         async def quit_cb(btn_inter: discord.Interaction):
             if btn_inter.user.id != self.player.id:
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            await self._apply_status(
-                msg,
-                "Thanks for playing Pair-a-Gone!",
-                view=None,
-            )
+            action = "Thanks for playing Pair-a-Gone!"
+            if self.animations_enabled:
+                await self._apply_status(
+                    msg,
+                    action,
+                    view=None,
+                )
+            else:
+                await self._apply_status(
+                    msg,
+                    action,
+                    attachments=[self._board_file()],
+                    view=None,
+                )
+            if self.on_finish is not None:
+                await self.on_finish(self.player.id)
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
@@ -371,7 +386,8 @@ class PairControls(discord.ui.View):
         replay_view.add_item(replay_btn)
         replay_view.add_item(quit_btn)
 
-        await msg.edit(view=replay_view)
+        with suppress(Exception):
+            await msg.edit(view=replay_view)
 
     ###########################################################################
     # Simultaneous flip gif generator

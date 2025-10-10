@@ -8,6 +8,7 @@
 
 import discord
 import asyncio
+from contextlib import suppress
 from PIL import Image
 from collections import Counter
 from casinogames.picturepoker.PicturePoker import PicturePoker
@@ -59,6 +60,8 @@ class PicturePokerView(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.animations_enabled = animations_enabled
         self.msg = message
+        self._skip_player_animation = False
+        self._player_animating = False
 
         ###########################################################
         # Card toggle buttons
@@ -121,15 +124,6 @@ class PicturePokerView(discord.ui.View):
         view: discord.ui.View | None,
         interaction: discord.Interaction | None = None,
     ) -> None:
-        print(
-            "[PicturePokerUI] _apply_status "
-            f"user={getattr(user, 'id', None)} "
-            f"msg={msg.id if msg else 'None'} "
-            f"via={'interaction' if interaction else 'message'} "
-            f"view={'self' if view is self else ('None' if view is None else 'other')} "
-            f"attachments={len(attachments) if attachments else 0} "
-            f"stats={stats}"
-        )
         attachment_filename = None
         if attachments:
             attachment_filename = attachments[0].filename
@@ -146,21 +140,19 @@ class PicturePokerView(discord.ui.View):
         if attachments is not None:
             edit_kwargs["attachments"] = attachments
 
-        try:
-            if interaction is not None:
+        if interaction is not None:
+            try:
                 await interaction.edit_original_response(**edit_kwargs)
                 if self.msg is None:
-                    try:
+                    with suppress(Exception):
                         self.msg = await interaction.original_response()
-                    except Exception:
-                        pass
-            elif msg is not None:
+            except Exception:
+                if msg is not None:
+                    with suppress(Exception):
+                        await msg.edit(**edit_kwargs)
+        elif msg is not None:
+            with suppress(Exception):
                 await msg.edit(**edit_kwargs)
-            else:
-                raise RuntimeError("No interaction or message available for status update")
-            print("[PicturePokerUI] _apply_status edit complete")
-        except Exception as exc:
-            print(f"[PicturePokerUI] _apply_status edit failed: {exc!r}")
 
     ###########################################################
     # Toggle factory
@@ -189,10 +181,8 @@ class PicturePokerView(discord.ui.View):
                 await interaction.edit_original_response(view=self)
             except Exception:
                 if self.msg is not None:
-                    try:
+                    with suppress(Exception):
                         await self.msg.edit(view=self)
-                    except Exception:
-                        print("[PicturePokerUI] toggle failed to refresh view")
 
         return callback
 
@@ -200,23 +190,13 @@ class PicturePokerView(discord.ui.View):
     # Submit discards
     ###########################################################
     async def _submit(self, interaction: discord.Interaction):
-        print(
-            "[PicturePokerUI] Submit pressed "
-            f"user={interaction.user.id} selected={sorted(self.selected_discards)} "
-            f"response_done={interaction.response.is_done()}"
-        )
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
             return
 
         await interaction.response.defer()
-        print("[PicturePokerUI] Submit defer complete")
         msg = self.msg or await interaction.original_response()
         self.msg = msg
-        print(
-            "[PicturePokerUI] Submit resolved message "
-            f"has_message={msg is not None} selected={sorted(self.selected_discards)}"
-        )
 
         def base_stats(extra=None):
             stats = {
@@ -231,7 +211,6 @@ class PicturePokerView(discord.ui.View):
             stats = base_stats({"dealer_action": "❌ No cards selected to discard."})
             img_bytes = render_board(self.game, reveal=False)
             file = discord.File(img_bytes, "poker.png")
-            print("[PicturePokerUI] Submit aborted - no cards selected")
             await self._apply_status(
                 msg,
                 interaction.user,
@@ -243,114 +222,109 @@ class PicturePokerView(discord.ui.View):
             return
 
         discards = sorted(self.selected_discards)
-        print(f"[PicturePokerUI] Submit resolving discards={discards}")
         self.game.player_discard(discards)
+        self._skip_player_animation = False
+        self._player_animating = self.animations_enabled
 
-        # A) show facedown cards
-        img_hidden = render_board_with_hidden(self.game, hidden_player=discards)
-        hidden_file = discord.File(img_hidden, "poker.png")
-        stats = base_stats({"dealer_action": "Your new cards are dealt facedown..."})
-        await self._apply_status(
-            msg,
-            interaction.user,
-            stats,
-            attachments=[hidden_file],
-            view=self,
-            interaction=interaction,
-        )
-        await asyncio.sleep(0.6 if self.animations_enabled else 0.25)
+        # Disable discard-related buttons immediately so users can't resubmit.
+        for child in self.children:
+            if "Stand" in child.label:
+                child.disabled = False
+            else:
+                child.disabled = True
+        try:
+            await interaction.edit_original_response(view=self)
+        except Exception:
+            if self.msg is not None:
+                with suppress(Exception):
+                    await self.msg.edit(view=self)
 
-        # B) flip cards one by one
-        base = None
         if self.animations_enabled:
-            img_hidden.seek(0)
-            base = Image.open(img_hidden).convert("RGBA")
-        for idx, i in enumerate(discards):
-            symbol = self.game.player_hand[i]
-            print(
-                f"[PicturePokerUI] Submit flipping index={i} "
-                f"anim_enabled={self.animations_enabled}"
-            )
-            stats = base_stats({"dealer_action": f"Flipping your card {i+1}..."})
-            if self.animations_enabled and base is not None:
-                gif = make_deal_flip_gif(self.game, i, symbol, base, dealer=False)
-                file = discord.File(gif, f"flip_{i}.gif")
+            # A) show facedown cards
+            img_hidden = render_board_with_hidden(self.game, hidden_player=discards)
+            hidden_file = discord.File(img_hidden, "poker.png")
+            stats = base_stats({"dealer_action": "Your new cards are dealt facedown..."})
+            if not self._skip_player_animation:
                 await self._apply_status(
                     msg,
                     interaction.user,
                     stats,
-                    attachments=[file],
+                    attachments=[hidden_file],
                     view=self,
                     interaction=interaction,
                 )
                 await asyncio.sleep(0.6)
 
-                still_hidden = discards[idx + 1 :]
-                next_board = render_board_with_hidden(
-                    self.game, hidden_player=still_hidden
-                )
-                next_board.seek(0)
-                base = (
-                    Image.open(next_board).convert("RGBA")
-                    if still_hidden
-                    else None
-                )
-            else:
-                still_hidden = discards[idx + 1 :]
-                board_stream = render_board_with_hidden(
-                    self.game, hidden_player=still_hidden
-                )
-                file = discord.File(board_stream, "poker.png")
-                await self._apply_status(
-                    msg,
-                    interaction.user,
-                    stats,
-                    attachments=[file],
-                    view=self,
-                    interaction=interaction,
-                )
-                await asyncio.sleep(0.25)
+            # B) flip cards one by one
+            if not self._skip_player_animation:
+                img_hidden.seek(0)
+                base = Image.open(img_hidden).convert("RGBA")
+                for idx, i in enumerate(discards):
+                    if self._skip_player_animation:
+                        break
+                    symbol = self.game.player_hand[i]
+                    stats = base_stats({"dealer_action": f"Flipping your card {i+1}..."})
+                    gif = make_deal_flip_gif(self.game, i, symbol, base, dealer=False)
+                    file = discord.File(gif, f"flip_{i}.gif")
+                    await self._apply_status(
+                        msg,
+                        interaction.user,
+                        stats,
+                        attachments=[file],
+                        view=self,
+                        interaction=interaction,
+                    )
+                    await asyncio.sleep(0.6)
 
+                    still_hidden = discards[idx + 1 :]
+                    if still_hidden:
+                        next_board = render_board_with_hidden(
+                            self.game, hidden_player=still_hidden
+                        )
+                        next_board.seek(0)
+                        base = Image.open(next_board).convert("RGBA")
+                    else:
+                        base = None
         # Disable discard-related buttons
         for child in self.children:
-            if "Card" in child.label or "Submit" in child.label:
+            if "Stand" in child.label:
+                child.disabled = False
+            else:
                 child.disabled = True
 
-        final_png = render_board(self.game, reveal=False)
-        stats = base_stats(
-            {
-                "dealer_action": "Your redraw is complete.\n Press **Stand** to let Luigi play."
-            }
-        )
-        final_file = discord.File(final_png, "poker.png")
-        await self._apply_status(
-            msg,
-            interaction.user,
-            stats,
-            attachments=[final_file],
-            view=self,
-            interaction=interaction,
-        )
+        if not self._skip_player_animation:
+            final_png = render_board(self.game, reveal=False)
+            stats = base_stats(
+                {
+                    "dealer_action": "Your redraw is complete.\n Press **Stand** to let Luigi play."
+                }
+            )
+            final_file = discord.File(final_png, "poker.png")
+            await self._apply_status(
+                msg,
+                interaction.user,
+                stats,
+                attachments=[final_file],
+                view=self,
+                interaction=interaction,
+            )
         self.selected_discards.clear()
-        print("[PicturePokerUI] Submit flow completed")
+        self._player_animating = False
 
     ###########################################################
     # Stand logic (Luigi plays)
     ###########################################################
     async def _stand(self, interaction: discord.Interaction):
-        print(
-            "[PicturePokerUI] Stand pressed "
-            f"user={interaction.user.id} response_done={interaction.response.is_done()}"
-        )
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
             return
 
         await interaction.response.defer()
-        print("[PicturePokerUI] Stand defer complete")
+        self._skip_player_animation = True
+        if self._player_animating:
+            await asyncio.sleep(0)
         msg = self.msg or await interaction.original_response()
         self.msg = msg
-        print(f"[PicturePokerUI] Stand resolved message has_message={msg is not None}")
 
         def base_stats(extra=None):
             stats = {
@@ -368,37 +342,30 @@ class PicturePokerView(discord.ui.View):
             i for i, c in enumerate(self.game.luigi_hand) if c not in keep
         ]
         self.game.luigi_discard()
-        print(
-            "[PicturePokerUI] Stand after luigi_discard "
-            f"luigi_discards={luigi_discards} counts={counts}"
-        )
 
-        # A) Luigi's facedown cards
-        img_hidden = render_board_with_hidden(self.game, hidden_dealer=luigi_discards)
-        hidden_file = discord.File(img_hidden, "poker.png")
-        stats = base_stats({"dealer_action": "Luigi discards some cards..."})
-        await self._apply_status(
-            msg,
-            interaction.user,
-            stats,
-            attachments=[hidden_file],
-            view=None,
-            interaction=interaction,
-        )
-        await asyncio.sleep(0.6 if self.animations_enabled else 0.25)
-
-        # B) Flicker animation
-        base_board = None
         if self.animations_enabled:
+            # A) Luigi's facedown cards
+            img_hidden = render_board_with_hidden(self.game, hidden_dealer=luigi_discards)
+            hidden_file = discord.File(img_hidden, "poker.png")
+            stats = base_stats({"dealer_action": "Luigi discards some cards..."})
+            await self._apply_status(
+                msg,
+                interaction.user,
+                stats,
+                attachments=[hidden_file],
+                view=None,
+                interaction=interaction,
+            )
+            await asyncio.sleep(0.6)
+
+            # B) Flicker animation
             img_hidden.seek(0)
             base_board = Image.open(img_hidden).convert("RGBA")
-        for idx, i in enumerate(luigi_discards):
-            stats = base_stats({"dealer_action": f"Luigi discards card {i+1}..."})
-            if self.animations_enabled and base_board is not None:
+            for idx, i in enumerate(luigi_discards):
+                stats = base_stats({"dealer_action": f"Luigi discards card {i+1}..."})
                 flicker_gif = make_discard_flicker_gif(
                     self.game, i, base_board, dealer=True
                 )
-                print(f"[PicturePokerUI] Stand animated discard idx={i}")
                 file = discord.File(flicker_gif, f"luigi_discard_{i}.gif")
                 await self._apply_status(
                     msg,
@@ -409,24 +376,8 @@ class PicturePokerView(discord.ui.View):
                     interaction=interaction,
                 )
                 await asyncio.sleep(0.6)
-            else:
-                board_stream = render_board_with_hidden(
-                    self.game, hidden_dealer=luigi_discards
-                )
-                file = discord.File(board_stream, "poker.png")
-                print(f"[PicturePokerUI] Stand static discard idx={i}")
-                await self._apply_status(
-                    msg,
-                    interaction.user,
-                    stats,
-                    attachments=[file],
-                    view=None,
-                    interaction=interaction,
-                )
-                await asyncio.sleep(0.25)
 
-        await asyncio.sleep(0.3 if self.animations_enabled else 0.15)
-
+            await asyncio.sleep(0.3)
         # C) Final reveal + payout logic
         try:
             result = self.game.resolve_round()
@@ -440,10 +391,6 @@ class PicturePokerView(discord.ui.View):
         bet_amount = result.get("bet", self.game.bet)
         delta_symbol = ""
         coins_display = coins
-        print(
-            "[PicturePokerUI] Stand resolve outcome="
-            f"{outcome} coins={coins} bet={bet_amount}"
-        )
 
         if outcome == "win":
             payout_total = bet_amount + coins
@@ -486,7 +433,6 @@ class PicturePokerView(discord.ui.View):
             view=None,
             interaction=interaction,
         )
-        print("[PicturePokerUI] Stand flow completed; awaiting replay buttons")
 
         # D) Replay / Quit buttons
         replay_btn = discord.ui.Button(
@@ -525,7 +471,12 @@ class PicturePokerView(discord.ui.View):
                 wager_options=self.wager_options,
             )
 
-            await msg.edit(view=wager_view)
+            try:
+                await btn_inter.edit_original_response(view=wager_view)
+            except Exception:
+                if msg is not None:
+                    with suppress(Exception):
+                        await msg.edit(view=wager_view)
 
         async def quit_cb(btn_inter: discord.Interaction):
             if btn_inter.user.id != self.user_id:
@@ -537,14 +488,26 @@ class PicturePokerView(discord.ui.View):
                 "stars_current": self.game.stars,
                 "dealer_action": "Thanks for playing Picture Poker!",
             }
-            await self._apply_status(
-                msg,
-                btn_inter.user,
-                stats,
-                attachments=None,
-                view=None,
-                interaction=btn_inter,
-            )
+            if self.animations_enabled:
+                await self._apply_status(
+                    msg,
+                    btn_inter.user,
+                    stats,
+                    attachments=None,
+                    view=None,
+                    interaction=btn_inter,
+                )
+            else:
+                board_png = render_board(self.game, reveal=True)
+                attachment = discord.File(board_png, "poker.png")
+                await self._apply_status(
+                    msg,
+                    btn_inter.user,
+                    stats,
+                    attachments=[attachment],
+                    view=None,
+                    interaction=btn_inter,
+                )
             await self.on_finish(self.user_id)
 
         replay_btn.callback = replay_cb
@@ -554,7 +517,12 @@ class PicturePokerView(discord.ui.View):
         replay_view.add_item(replay_btn)
         replay_view.add_item(quit_btn)
 
-        await msg.edit(view=replay_view)
+        try:
+            await interaction.edit_original_response(view=replay_view)
+        except Exception:
+            if msg is not None:
+                with suppress(Exception):
+                    await msg.edit(view=replay_view)
 
 
 ###########################################################
