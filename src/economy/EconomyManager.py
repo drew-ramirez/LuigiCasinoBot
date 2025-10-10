@@ -58,9 +58,6 @@ class EconomyManager:
         }
 
         EconomyManager.COLLECTION.insert_one(new_user)
-        print(
-            f"[DEBUG] Created new user record for {username} ({user_id}) with 1000 coins."
-        )
         return new_user
 
     ###########################################################
@@ -163,11 +160,6 @@ class EconomyManager:
         )
         multiplier = EconomyManager.star_bonus_multiplier(new_value)
 
-        print(
-            f"[DEBUG] Updated {username} ({user_id}) star bonus for {game_key}: "
-            f"{current} -> {new_value} (career_total={career_total}, multiplier={multiplier:.2f})"
-        )
-
         return {
             "stars": new_value,
             "career_total": career_total,
@@ -249,10 +241,6 @@ class EconomyManager:
             },
         )
 
-        print(
-            f"[DEBUG] Daily claim recorded for {username} ({user_id}) -> streak {streak}"
-        )
-
         return {
             "available": True,
             "streak": streak,
@@ -269,9 +257,6 @@ class EconomyManager:
             {"user_id": user_id}, {"$inc": {"balance": amount}}
         )
         new_balance = EconomyManager.balance(user_id, username)
-        print(
-            f"[DEBUG] Granted {amount} coins to {username} ({user_id}) -> balance {new_balance}"
-        )
         return new_balance
 
     ###########################################################
@@ -281,7 +266,6 @@ class EconomyManager:
     def wager(user_id: int, amount: int, username: str = "Unknown") -> bool:
         bal = EconomyManager.balance(user_id, username)
         if bal < amount:
-            print(f"[DEBUG] Wager denied for {username} ({user_id}): {bal} < {amount}")
             return False
 
         EconomyManager.COLLECTION.update_one(
@@ -293,9 +277,6 @@ class EconomyManager:
                     "coins_lost": amount,
                 }
             },
-        )
-        print(
-            f"[DEBUG] Wager accepted: {username} ({user_id}) bet {amount}, new balance {bal - amount}"
         )
         return True
 
@@ -314,8 +295,5 @@ class EconomyManager:
         }
         EconomyManager.COLLECTION.update_one({"user_id": user_id}, update_query)
         new_balance = EconomyManager.balance(user_id, username)
-        print(
-            f"[DEBUG] Payout: {username} ({user_id}) won {amount}, balance {new_balance}"
-        )
         return new_balance
 
