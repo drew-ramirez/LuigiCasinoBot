@@ -6,8 +6,9 @@
 ###########################################################
 
 from __future__ import annotations
+import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, Optional, TYPE_CHECKING
 
 from economy.EconomyManager import db
 
@@ -30,16 +31,46 @@ class MetricsManager:
     def _safe_id(target: Any) -> Optional[int]:
         return getattr(target, "id", None) if target is not None else None
 
+    @staticmethod
+    async def _run_async(callable_: Callable[[], None]) -> None:
+        await asyncio.to_thread(callable_)
+
     @classmethod
-    def record_command_event(
+    def _dispatch_write(
+        cls,
+        callback: Callable[[], None],
+        label: str,
+        *,
+        immediate: bool = False,
+    ) -> None:
+        """Execute Mongo writes without blocking the event loop."""
+        def guarded() -> None:
+            try:
+                callback()
+            except Exception as exc:  # pragma: no cover - logging should not break gameplay
+                print(f"[WARN] {label} failed: {exc}")
+
+        if immediate:
+            guarded()
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            guarded()
+            return
+
+        loop.create_task(cls._run_async(guarded))
+
+    @classmethod
+    def _command_doc(
         cls,
         interaction: "discord.Interaction",
         command_name: str,
         *,
         game_key: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """Persist a single slash-command invocation."""
+    ) -> Dict[str, Any]:
         doc: Dict[str, Any] = {
             "command": command_name,
             "user_id": cls._safe_id(getattr(interaction, "user", None)),
@@ -51,14 +82,54 @@ class MetricsManager:
             doc["game_key"] = game_key
         if metadata:
             doc["metadata"] = metadata
-
-        try:
-            cls.COMMAND_COLLECTION.insert_one(doc)
-        except Exception as exc:  # pragma: no cover - logging should not break gameplay
-            print(f"[WARN] MetricsManager command insert failed: {exc}")
+        return doc
 
     @classmethod
-    def record_game_start(
+    def record_command_event(
+        cls,
+        interaction: "discord.Interaction",
+        command_name: str,
+        *,
+        game_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        immediate: bool = False,
+    ) -> None:
+        """Persist a single slash-command invocation."""
+        doc = cls._command_doc(
+            interaction,
+            command_name,
+            game_key=game_key,
+            metadata=metadata,
+        )
+        cls._dispatch_write(
+            lambda: cls.COMMAND_COLLECTION.insert_one(doc),
+            "MetricsManager command insert",
+            immediate=immediate,
+        )
+
+    @classmethod
+    async def record_command_event_async(
+        cls,
+        interaction: "discord.Interaction",
+        command_name: str,
+        *,
+        game_key: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Async helper to await completion for testing or batch jobs."""
+        doc = cls._command_doc(
+            interaction,
+            command_name,
+            game_key=game_key,
+            metadata=metadata,
+        )
+
+        await cls._run_async(
+            lambda: cls.COMMAND_COLLECTION.insert_one(doc)
+        )
+
+    @classmethod
+    def _game_doc(
         cls,
         interaction: "discord.Interaction",
         game_key: str,
@@ -66,8 +137,7 @@ class MetricsManager:
         bet_amount: Optional[int] = None,
         source_command: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
-    ) -> None:
-        """Log that a user has started a new game session."""
+    ) -> Dict[str, Any]:
         doc: Dict[str, Any] = {
             "game_key": game_key,
             "user_id": cls._safe_id(getattr(interaction, "user", None)),
@@ -81,11 +151,53 @@ class MetricsManager:
             doc["command"] = source_command
         if metadata:
             doc["metadata"] = metadata
+        return doc
 
-        try:
-            cls.GAME_COLLECTION.insert_one(doc)
-        except Exception as exc:  # pragma: no cover - logging should not break gameplay
-            print(f"[WARN] MetricsManager game insert failed: {exc}")
+    @classmethod
+    def record_game_start(
+        cls,
+        interaction: "discord.Interaction",
+        game_key: str,
+        *,
+        bet_amount: Optional[int] = None,
+        source_command: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        immediate: bool = False,
+    ) -> None:
+        """Log that a user has started a new game session."""
+        doc = cls._game_doc(
+            interaction,
+            game_key,
+            bet_amount=bet_amount,
+            source_command=source_command,
+            metadata=metadata,
+        )
+        cls._dispatch_write(
+            lambda: cls.GAME_COLLECTION.insert_one(doc),
+            "MetricsManager game insert",
+            immediate=immediate,
+        )
+
+    @classmethod
+    async def record_game_start_async(
+        cls,
+        interaction: "discord.Interaction",
+        game_key: str,
+        *,
+        bet_amount: Optional[int] = None,
+        source_command: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        doc = cls._game_doc(
+            interaction,
+            game_key,
+            bet_amount=bet_amount,
+            source_command=source_command,
+            metadata=metadata,
+        )
+        await cls._run_async(
+            lambda: cls.GAME_COLLECTION.insert_one(doc)
+        )
 
 
 class MetricsRollups:

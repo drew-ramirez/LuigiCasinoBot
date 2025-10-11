@@ -51,10 +51,10 @@ class UserCog(commands.Cog):
         name="casino_profile", description="View your casino profile for Luigi's Casino"
     )
     async def profile(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_profile")
         visibility = resolve_command_visibility(interaction, "profile")
         # defer to acknowledge the command
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_profile")
 
         uid = interaction.user.id
         username = interaction.user.name
@@ -99,10 +99,10 @@ class UserCog(commands.Cog):
         name="casino_balance", description="Check your casino balance for Luigi's Casino"
     )
     async def balance(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_balance")
         visibility = resolve_command_visibility(interaction, "balance")
         # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_balance")
 
         user = interaction.user
         user_id = user.id
@@ -121,9 +121,9 @@ class UserCog(commands.Cog):
         name="casino_pity", description="Gambled your life-savings? Luigi's got you."
     )
     async def pity(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_pity")
         visibility = resolve_command_visibility(interaction, "pity")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_pity")
 
         user = interaction.user
         user_id = user.id
@@ -149,8 +149,9 @@ class UserCog(commands.Cog):
         name="casino_daily", description="Claim your daily coin bonus for Luigi's Casino"
     )
     async def daily(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_daily")
         visibility = resolve_command_visibility(interaction, "daily")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_daily")
         uid = interaction.user.id
         username = interaction.user.name
         claim_info = EconomyManager.record_daily_claim(uid, username)
@@ -187,9 +188,9 @@ class UserCog(commands.Cog):
         name="casino_leaderboard", description="Show top casino players by coin balance for Luigi's Casino"
     )
     async def leaderboard(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_leaderboard")
         visibility = resolve_command_visibility(interaction, "leaderboard")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_leaderboard")
 
         collection = EconomyManager.COLLECTION
 
@@ -265,8 +266,8 @@ class UserCog(commands.Cog):
         name="casino_help", description="Show help information for the casino games for Luigi's Casino"
     )
     async def help_cmd(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_help")
         visibility = resolve_command_visibility(interaction, "help")
+        MetricsManager.record_command_event(interaction, "casino_help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
             description="Quick reference for available commands",
@@ -325,9 +326,9 @@ class UserCog(commands.Cog):
         interaction: discord.Interaction,
         mode: app_commands.Choice[str],
     ):
-        MetricsManager.record_command_event(interaction, "casino_animations")
         visibility = resolve_command_visibility(interaction, "casino_animations")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_animations")
 
         enable = mode.value == "enabled"
         user = interaction.user

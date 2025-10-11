@@ -36,12 +36,17 @@ class BaseGameCog(commands.Cog):
         return cleaned or "game"
 
     def log_command_invocation(
-        self, interaction: discord.Interaction, command_name: str
+        self,
+        interaction: discord.Interaction,
+        command_name: str,
+        *,
+        immediate: bool = False,
     ) -> None:
         MetricsManager.record_command_event(
             interaction,
             command_name,
             game_key=self.metrics_game_key,
+            immediate=immediate,
         )
 
     def log_game_start(
@@ -51,6 +56,7 @@ class BaseGameCog(commands.Cog):
         *,
         bet_amount: Optional[int] = None,
         extra: Optional[dict[str, Any]] = None,
+        immediate: bool = False,
     ) -> None:
         MetricsManager.record_game_start(
             interaction,
@@ -58,6 +64,7 @@ class BaseGameCog(commands.Cog):
             bet_amount=bet_amount,
             source_command=command_name,
             metadata=extra,
+            immediate=immediate,
         )
 
     def resolve_visibility(self, interaction: discord.Interaction) -> CommandVisibility:
