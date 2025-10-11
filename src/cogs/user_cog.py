@@ -51,10 +51,10 @@ class UserCog(commands.Cog):
         name="casino_profile", description="View your casino profile for Luigi's Casino"
     )
     async def profile(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_profile")
         visibility = resolve_command_visibility(interaction, "profile")
         # defer to acknowledge the command
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_profile")
 
         uid = interaction.user.id
         username = interaction.user.name
@@ -99,10 +99,10 @@ class UserCog(commands.Cog):
         name="casino_balance", description="Check your casino balance for Luigi's Casino"
     )
     async def balance(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_balance")
         visibility = resolve_command_visibility(interaction, "balance")
         # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_balance")
 
         user = interaction.user
         user_id = user.id
@@ -121,9 +121,9 @@ class UserCog(commands.Cog):
         name="casino_pity", description="Gambled your life-savings? Luigi's got you."
     )
     async def pity(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_pity")
         visibility = resolve_command_visibility(interaction, "pity")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_pity")
 
         user = interaction.user
         user_id = user.id
@@ -146,11 +146,38 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
+        name="casino_music", description="Queue up Luigi's Casino soundtrack"
+    )
+    async def casino_music(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_music")
+        visibility = resolve_command_visibility(interaction, "music")
+
+        music_url = "https://youtu.be/AqY4RtNeJOI?si=qUD9RQdktk2K9WDO"
+        thumbnail_url = "https://img.youtube.com/vi/AqY4RtNeJOI/hqdefault.jpg"
+
+        embed = discord.Embed(
+            title="Luigi's Casino Radio",
+            url=music_url,
+            description=(
+                "Ante Up the atmosphere with our favorite casino lounge music.\n"
+                "[Click Here to play on YouTube](https://youtu.be/AqY4RtNeJOI?si=qUD9RQdktk2K9WDO)"
+            ),
+            color=discord.Color.gold(),
+        )
+        embed.set_image(url=thumbnail_url)
+        await safe_send(
+            interaction,
+            embed=embed,
+            ephemeral=visibility.ephemeral,
+        )
+
+    @discord.app_commands.command(
         name="casino_daily", description="Claim your daily coin bonus for Luigi's Casino"
     )
     async def daily(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_daily")
         visibility = resolve_command_visibility(interaction, "daily")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_daily")
         uid = interaction.user.id
         username = interaction.user.name
         claim_info = EconomyManager.record_daily_claim(uid, username)
@@ -187,9 +214,9 @@ class UserCog(commands.Cog):
         name="casino_leaderboard", description="Show top casino players by coin balance for Luigi's Casino"
     )
     async def leaderboard(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_leaderboard")
         visibility = resolve_command_visibility(interaction, "leaderboard")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_leaderboard")
 
         collection = EconomyManager.COLLECTION
 
@@ -229,7 +256,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "💰 ",
+                "emoji": "\U0001F4B0",
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -249,7 +276,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💰",
+                "emoji": "💸",
             },
         }
 
@@ -265,8 +292,8 @@ class UserCog(commands.Cog):
         name="casino_help", description="Show help information for the casino games for Luigi's Casino"
     )
     async def help_cmd(self, interaction: discord.Interaction):
-        MetricsManager.record_command_event(interaction, "casino_help")
         visibility = resolve_command_visibility(interaction, "help")
+        MetricsManager.record_command_event(interaction, "casino_help")
         embed = discord.Embed(
             title="📜 Luigi's Casino Help",
             description="Quick reference for available commands",
@@ -282,6 +309,7 @@ class UserCog(commands.Cog):
                     "**/casino_leaderboard** - View the top players",
                     "**/casino_balance** - Check your coin balance",
                     "**/casino_pity** - Luigi fuels your addiction",
+                    "**/casino_music** - Stream the casino soundtrack, Youtube Link",
                     "**/casino_animations** - Toggle animated vs static layout",
                 ]
             ),
@@ -325,9 +353,9 @@ class UserCog(commands.Cog):
         interaction: discord.Interaction,
         mode: app_commands.Choice[str],
     ):
-        MetricsManager.record_command_event(interaction, "casino_animations")
         visibility = resolve_command_visibility(interaction, "casino_animations")
         await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_animations")
 
         enable = mode.value == "enabled"
         user = interaction.user
