@@ -16,8 +16,8 @@ import discord
 from economy.EconomyManager import db
 
 # Keys for casino games where we always keep responses private unless a specific
-# public channel is mapped. Adding new games? Update this set so visibility
-# logic stays aligned with the command registry.
+# public channel is mapped. (FOR ANY NEW GAMES): Update this set so visibility
+# logic stays aligned with the command registery from discord
 DEFAULT_GAME_COMMAND_KEYS: set[str] = {
     "memorymatch",
     "pairagone",
@@ -248,7 +248,7 @@ class CasinoConfigManager:
 
         normalized_command_key = command_key.lower() if isinstance(command_key, str) else None
 
-        # Game commands remain private (unless they have an explicit home channel),
+        # game commands remain private (unless they have a home channel),
         # while generic utility commands can surface publicly in casino floor channels.
         is_game_command = False
         if normalized_command_key:

@@ -78,7 +78,7 @@ class UserCog(commands.Cog):
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
         embed.add_field(
-            name="casino_balance", value=f"💰 {balance:,} coins", inline=True
+            name="Casino Balance", value=f"💰 {balance:,} coins", inline=True
         )
         embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
         embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
