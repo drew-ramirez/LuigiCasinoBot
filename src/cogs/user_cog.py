@@ -146,6 +146,32 @@ class UserCog(commands.Cog):
         )
 
     @discord.app_commands.command(
+        name="casino_music", description="Queue up Luigi's Casino soundtrack"
+    )
+    async def casino_music(self, interaction: discord.Interaction):
+        MetricsManager.record_command_event(interaction, "casino_music")
+        visibility = resolve_command_visibility(interaction, "music")
+
+        music_url = "https://youtu.be/AqY4RtNeJOI?si=qUD9RQdktk2K9WDO"
+        thumbnail_url = "https://img.youtube.com/vi/AqY4RtNeJOI/hqdefault.jpg"
+
+        embed = discord.Embed(
+            title="Luigi's Casino Radio",
+            url=music_url,
+            description=(
+                "Ante Up the atmosphere with our favorite casino lounge music.\n"
+                "[Click Here to play on YouTube](https://youtu.be/AqY4RtNeJOI?si=qUD9RQdktk2K9WDO)"
+            ),
+            color=discord.Color.gold(),
+        )
+        embed.set_image(url=thumbnail_url)
+        await safe_send(
+            interaction,
+            embed=embed,
+            ephemeral=visibility.ephemeral,
+        )
+
+    @discord.app_commands.command(
         name="casino_daily", description="Claim your daily coin bonus for Luigi's Casino"
     )
     async def daily(self, interaction: discord.Interaction):
@@ -230,7 +256,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "💰 ",
+                "emoji": "\U0001F4B0",
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -250,7 +276,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💰",
+                "emoji": "💸",
             },
         }
 
@@ -283,6 +309,7 @@ class UserCog(commands.Cog):
                     "**/casino_leaderboard** - View the top players",
                     "**/casino_balance** - Check your coin balance",
                     "**/casino_pity** - Luigi fuels your addiction",
+                    "**/casino_music** - Stream the casino soundtrack, Youtube Link",
                     "**/casino_animations** - Toggle animated vs static layout",
                 ]
             ),
