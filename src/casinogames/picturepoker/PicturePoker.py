@@ -18,6 +18,7 @@ class PicturePoker:
 
     SYMBOLS = ["cloud", "mushroom", "flower", "luigi", "mario", "star"]
 
+    # best to worst ordering for tie resolution.
     SYMBOL_ORDER = {
         "cloud": 0,
         "mushroom": 1,
@@ -117,6 +118,20 @@ class PicturePoker:
                 new_hand.append(self._draw_cards(1)[0])
         self.luigi_hand = new_hand
 
+    def _hand_signature(self, hand: list[str]) -> tuple[int, ...]:
+        """Build a tie break signature: group by count, then by Luigi's ranking order."""
+        counts = Counter(hand)
+        sorted_symbols = sorted(
+            counts.items(),
+            key=lambda item: (-item[1], self.SYMBOL_ORDER[item[0]]),
+        )
+
+        signature: list[int] = []
+        for symbol, count in sorted_symbols:
+            symbol_value = self.SYMBOL_ORDER[symbol]
+            signature.extend([symbol_value] * count)
+        return tuple(signature)
+
     def evaluate_hand(self, hand: list[str]) -> tuple[int, str]:
         counts = Counter(hand).values()
         count_sorted = sorted(counts, reverse=True)
@@ -165,10 +180,10 @@ class PicturePoker:
             }
 
         else:
-            p_high = max(self.SYMBOL_ORDER[c] for c in self.player_hand)
-            l_high = max(self.SYMBOL_ORDER[c] for c in self.luigi_hand)
+            p_signature = self._hand_signature(self.player_hand)
+            l_signature = self._hand_signature(self.luigi_hand)
 
-            if p_high > l_high:
+            if p_signature < l_signature:
                 mult = self.MULTIPLIER.get(p_rank, 0)
                 winnings = self.bet * mult
                 self.stars += 1
@@ -180,7 +195,7 @@ class PicturePoker:
                     "stars": self.stars,
                     "bet": self.bet,
                 }
-            elif p_high < l_high:
+            elif p_signature > l_signature:
                 if self.stars > 0:
                     self.stars -= 1
                 self.result = {
