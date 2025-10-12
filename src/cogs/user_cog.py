@@ -4,9 +4,6 @@
 # Description: Generic player-facing commands for Luigi's Casino
 ###########################################################
 
-import json
-import os
-
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -15,6 +12,15 @@ from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 from utils.visibility import resolve_command_visibility
 from casinogames.picturepoker.PicturePoker import PicturePoker
+from utils.emoji_config import (
+    get_cashout_emoji,
+    get_cashout_component_emoji,
+    get_coin_emoji,
+    get_coin_component_emoji,
+    get_star_emoji,
+    get_star_component_emoji,
+    picture_poker_emojis,
+)
 
 bank = Bank()
 
@@ -49,31 +55,7 @@ class UserCog(commands.Cog):
             "mario": "Mario",
             "star": "Star",
         }
-        default_symbol_emojis = {
-            "cloud": "☁️",
-            "mushroom": "🍄",
-            "flower": "🌸",
-            "luigi":"🟩",
-            "mario": "🟥",
-            "star": "⭐",
-        }
-
-        symbol_emojis = dict(default_symbol_emojis)
-        raw_overrides = os.getenv("CASINO_POKER_EMOJIS", "").strip()
-        if raw_overrides:
-            try:
-                overrides = json.loads(raw_overrides)
-            except json.JSONDecodeError:
-                print("[WARN] CASINO_POKER_EMOJIS is not valid JSON; using defaults.")
-            else:
-                if isinstance(overrides, dict):
-                    for key, value in overrides.items():
-                        normalized_key = str(key).lower()
-                        if (
-                            normalized_key in PicturePoker.SYMBOL_ORDER
-                            and isinstance(value, str)
-                        ):
-                            symbol_emojis[normalized_key] = value
+        symbol_emojis = dict(picture_poker_emojis())
 
         ordered_symbols = sorted(
             PicturePoker.SYMBOL_ORDER.items(), key=lambda item: item[1]
@@ -150,18 +132,38 @@ class UserCog(commands.Cog):
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
         embed.add_field(
-            name="Casino Balance", value=f"💰 {balance:,} coins", inline=True
+            name="Casino Balance",
+            value=f"{get_coin_emoji()} {balance:,} coins",
+            inline=True,
         )
-        embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
-        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
+        embed.add_field(
+            name="Games Played",
+            value=f"🎲 {games_played:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Career Stars",
+            value=f"{get_star_emoji()} {career_stars:,}",
+            inline=True,
+        )
 
         embed.add_field(
             name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True
         )
-        embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
-        embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
-            name="Largest Cashout", value=f"💸 {biggest_cashout:,}", inline=False
+            name="Coins Won",
+            value=f"📈{coins_won:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Coins Lost",
+            value=f"📉 {coins_lost:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Largest Cashout",
+            value=f"{get_cashout_emoji()} {biggest_cashout:,}",
+            inline=False,
         )
 
         # send followup
@@ -363,7 +365,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "\U0001F4B0",
+                "emoji": get_coin_component_emoji(),
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -383,7 +385,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💸",
+                "emoji": get_cashout_component_emoji(),
             },
         }
 

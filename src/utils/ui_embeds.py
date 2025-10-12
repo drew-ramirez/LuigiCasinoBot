@@ -9,12 +9,16 @@ from typing import List, Optional
 import discord
 
 from economy.EconomyManager import EconomyManager
+from utils.emoji_config import get_coin_emoji, get_star_emoji
 
 # ##########################################################
 # Static embed helpers - no animations
 # ##########################################################
 
 EMBED_COLOR = discord.Color.from_rgb(24, 131, 62)  # Luigi green
+COIN_EMOJI = get_coin_emoji()
+BET_EMOJI = "💎"
+STAR_EMOJI = get_star_emoji()
 
 
 def _format_number(amount: int) -> str:
@@ -41,9 +45,15 @@ def make_game_header(user, game_name: str, stats: dict) -> discord.Embed:
     else:
         embed.set_author(name=user.display_name)
 
-    embed.add_field(name="Balance", value=f"💰 {_format_number(balance)}", inline=True)
-    embed.add_field(name="Bet", value=f"💎 {_format_number(active_bet)}", inline=True)
-    embed.add_field(name="Stars", value=f"⭐ {stars_current}", inline=True)
+    embed.add_field(
+        name="Balance",
+        value=f"{COIN_EMOJI} {_format_number(balance)}",
+        inline=True,
+    )
+    embed.add_field(
+        name="Bet", value=f"{BET_EMOJI} {_format_number(active_bet)}", inline=True
+    )
+    embed.add_field(name="Stars", value=f"{STAR_EMOJI} {stars_current}", inline=True)
 
     footer_text = round_summary or dealer_action
     if footer_text:
@@ -68,7 +78,7 @@ def make_pregame_banner(
     )
     embed.add_field(
         name="Balance",
-        value=f"💰 {_format_number(balance)} coins",
+        value=f"{COIN_EMOJI} {_format_number(balance)} coins",
         inline=False,
     )
     embed.set_footer(text="Luigi's Casino")
@@ -112,7 +122,11 @@ def make_gif_game_header(user, game_name: str, stats: dict) -> str:
     round_summary = stats.get("round_summary")
 
     title = f"🎰 Luigi’s Casino - {game_name}"
-    line1 = f"💰 Balance: {balance:,}   💎 Bet: {active_bet}   ⭐ Stars: {stars_current}"
+    line1 = (
+        f"{COIN_EMOJI} Balance: {balance:,}   "
+        f"{BET_EMOJI} Bet: {active_bet}   "
+        f"{STAR_EMOJI} Stars: {stars_current}"
+    )
     footer = round_summary or dealer_action
 
     lines = [title, line1]
@@ -133,7 +147,7 @@ def make_gif_pregame_banner(
 
     lines = [
         f"🎰 Luigi’s Casino - {game_name}",
-        f"💰 Balance: {balance:,} coins",
+        f"{COIN_EMOJI} Balance: {balance:,} coins",
         call_to_action,
     ]
 
