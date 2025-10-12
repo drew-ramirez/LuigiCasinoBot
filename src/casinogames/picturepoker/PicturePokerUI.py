@@ -22,18 +22,83 @@ from casinogames.picturepoker.PicturePokerPrint import (
 from utils.bet_selector import DEFAULT_WAGER_OPTIONS, BetSelectView
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
+from utils.emoji_config import get_coin_emoji, picture_poker_emojis
 
 
 ###########################################################
 # Helper: Round Summary Formatter
 ###########################################################
+def _feature_symbol(rank: str, hand: list[str]) -> str:
+    if not hand:
+        return ""
+
+    order = PicturePoker.SYMBOL_ORDER
+    counts = Counter(hand)
+    normalized_rank = (rank or "").lower()
+
+    def pick(symbols: list[str]) -> str:
+        if not symbols:
+            return ""
+        return max(symbols, key=lambda sym: order.get(sym, -1))
+
+    if normalized_rank in {"five_kind", "four_kind"}:
+        return pick([sym for sym, cnt in counts.items() if cnt >= 4])
+
+    if normalized_rank == "full_house":
+        triple = pick([sym for sym, cnt in counts.items() if cnt == 3])
+        if triple:
+            return triple
+
+    if normalized_rank == "three_kind":
+        triple = pick([sym for sym, cnt in counts.items() if cnt == 3])
+        if triple:
+            return triple
+
+    if normalized_rank == "two_pair":
+        return pick([sym for sym, cnt in counts.items() if cnt == 2])
+
+    if normalized_rank == "one_pair":
+        pair = pick([sym for sym, cnt in counts.items() if cnt == 2])
+        if pair:
+            return pair
+
+    return pick(hand)
+
+
 def format_round_summary(result, delta_symbol=""):
-    dealer_name = result["luigi_rank"].replace("_", " ").title()
-    player_name = result["player_rank"].replace("_", " ").title()
+    dealer_rank_raw = result["luigi_rank"]
+    player_rank_raw = result["player_rank"]
     outcome = result["outcome"].upper()
-    delta_symbol = delta_symbol
     coins = result["coins"]
-    return f"DEALER: {dealer_name}  🆚  PLAYER: {player_name} \n  🏆 {outcome} 💰  ({delta_symbol}{coins})"
+
+    rank_icons = picture_poker_emojis()
+    dealer_label = PicturePoker.HAND_NAMES.get(
+        dealer_rank_raw, dealer_rank_raw.replace("_", " ").title()
+    )
+    player_label = PicturePoker.HAND_NAMES.get(
+        player_rank_raw, player_rank_raw.replace("_", " ").title()
+    )
+
+    dealer_feature_symbol = _feature_symbol(
+        dealer_rank_raw, result.get("luigi_hand", [])
+    )
+    player_feature_symbol = _feature_symbol(
+        player_rank_raw, result.get("player_hand", [])
+    )
+
+    dealer_icon = rank_icons.get(dealer_feature_symbol, "🎲")
+    player_icon = rank_icons.get(player_feature_symbol, "🎲")
+
+    comparison = "="
+    if outcome == "WIN":
+        comparison = "<"  # Luigi < player
+    elif outcome == "LOSE":
+        comparison = ">"
+
+    return (
+        f"{dealer_icon} {dealer_label} {comparison} {player_icon} {player_label}\n"
+        f"🏆 {outcome} {get_coin_emoji()}  ({delta_symbol}{coins})"
+    )
 
 
 ###########################################################
@@ -406,6 +471,8 @@ class PicturePokerView(discord.ui.View):
 
         summary_result = dict(result)
         summary_result["coins"] = coins_display
+        summary_result["luigi_hand"] = list(self.game.luigi_hand)
+        summary_result["player_hand"] = list(self.game.player_hand)
 
         summary = format_round_summary(summary_result, delta_symbol)
 

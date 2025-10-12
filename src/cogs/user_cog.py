@@ -11,6 +11,16 @@ from economy.bank import Bank
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 from utils.visibility import resolve_command_visibility
+from casinogames.picturepoker.PicturePoker import PicturePoker
+from utils.emoji_config import (
+    get_cashout_emoji,
+    get_cashout_component_emoji,
+    get_coin_emoji,
+    get_coin_component_emoji,
+    get_star_emoji,
+    get_star_component_emoji,
+    picture_poker_emojis,
+)
 
 bank = Bank()
 
@@ -34,6 +44,50 @@ async def safe_send(
 class UserCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+
+    @staticmethod
+    def _picture_poker_reference() -> tuple[list[str], list[str]]:
+        symbol_labels = {
+            "cloud": "Lakitu's Cloud",
+            "mushroom": "Super Mushroom",
+            "flower": "Fire Flower",
+            "luigi": "Luigi",
+            "mario": "Mario",
+            "star": "Star",
+        }
+        symbol_emojis = dict(picture_poker_emojis())
+
+        ordered_symbols = sorted(
+            PicturePoker.SYMBOL_ORDER.items(), key=lambda item: item[1]
+        )
+        symbol_lines: list[str] = []
+        for idx, (symbol, _) in enumerate(ordered_symbols):
+            label = symbol_labels.get(symbol, symbol.title())
+            emoji = symbol_emojis.get(symbol, symbol_emojis.get(symbol.lower(), ""))
+            qualifier = ""
+            if idx == 0:
+                qualifier = " (best)"
+            elif idx == len(ordered_symbols) - 1:
+                qualifier = " (worst)"
+            symbol_lines.append(f"{emoji} {label}{qualifier}")
+
+        ordered_hands = sorted(
+            PicturePoker.HAND_RANKS.items(), key=lambda item: item[1], reverse=True
+        )
+        payout_lines: list[str] = []
+        for hand_key, _ in ordered_hands:
+            display = PicturePoker.HAND_NAMES.get(
+                hand_key, hand_key.replace("_", " ").title()
+            )
+            if hand_key == "junk":
+                payout_lines.append(
+                    f"• {display}: no payout (only ties if both are junk)"
+                )
+                continue
+            multiplier = PicturePoker.MULTIPLIER.get(hand_key, 0)
+            payout_lines.append(f"• {display}: x{multiplier} payout")
+
+        return symbol_lines, payout_lines
 
     ###########################################################
     # EVENTS
@@ -78,18 +132,38 @@ class UserCog(commands.Cog):
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
 
         embed.add_field(
-            name="casino_balance", value=f"💰 {balance:,} coins", inline=True
+            name="Casino Balance",
+            value=f"{get_coin_emoji()} {balance:,} coins",
+            inline=True,
         )
-        embed.add_field(name="Games Played", value=f"🎲 {games_played:,}", inline=True)
-        embed.add_field(name="Career Stars", value=f"🌟 {career_stars:,}", inline=True)
+        embed.add_field(
+            name="Games Played",
+            value=f"🎲 {games_played:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Career Stars",
+            value=f"{get_star_emoji()} {career_stars:,}",
+            inline=True,
+        )
 
         embed.add_field(
             name="Daily Streak", value=f"⏲️ {daily_streak} days", inline=True
         )
-        embed.add_field(name="Coins Won", value=f"📈 {coins_won:,}", inline=True)
-        embed.add_field(name="Coins Lost", value=f"📉 {coins_lost:,}", inline=True)
         embed.add_field(
-            name="Largest Cashout", value=f"💸 {biggest_cashout:,}", inline=False
+            name="Coins Won",
+            value=f"📈{coins_won:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Coins Lost",
+            value=f"📉 {coins_lost:,}",
+            inline=True,
+        )
+        embed.add_field(
+            name="Largest Cashout",
+            value=f"{get_cashout_emoji()} {biggest_cashout:,}",
+            inline=False,
         )
 
         # send followup
@@ -114,6 +188,41 @@ class UserCog(commands.Cog):
         # follow up
         await interaction.followup.send(
             f"{user.name}, your current balance is **{balance} coins**.",
+            ephemeral=visibility.ephemeral,
+        )
+
+    @discord.app_commands.command(
+        name="casino_pokerkey",
+        description="Show Picture Poker symbol priority and hand payouts",
+    )
+    async def poker_key(self, interaction: discord.Interaction):
+        visibility = resolve_command_visibility(interaction, "pokerkey")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_pokerkey")
+
+        symbol_lines, payout_lines = self._picture_poker_reference()
+
+        embed = discord.Embed(
+            title="Picture Poker Rank Reference",
+            description=(
+                "Ties are settled via Symbol Priority\n"
+                "Payouts multiply your bet when you beat Luigi."
+            ),
+            color=discord.Color.green(),
+        )
+        embed.add_field(
+            name="Symbol Priority (best to worst)",
+            value="\n".join(symbol_lines),
+            inline=False,
+        )
+        embed.add_field(
+            name="Hand Payouts",
+            value="\n".join(payout_lines),
+            inline=False,
+        )
+
+        await interaction.followup.send(
+            embed=embed,
             ephemeral=visibility.ephemeral,
         )
 
@@ -256,7 +365,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,} coins",
                 ),
                 "select_label": "Coin Balance",
-                "emoji": "\U0001F4B0",
+                "emoji": get_coin_component_emoji(),
             },
             "games": {
                 "label": "Top 10 players with the most games played.",
@@ -276,7 +385,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Largest Cashout",
-                "emoji": "💸",
+                "emoji": get_cashout_component_emoji(),
             },
         }
 
@@ -324,7 +433,17 @@ class UserCog(commands.Cog):
                     "**/casino_pairagone** - Match Pairs Till Deck's Gone",
                     "**/casino_luckystars** - 50/50 Card Game",
                     "**/casino_picturepoker** - Luigi's Picture Poker",
+                    "**/casino_pokerkey** - Picture Poker ranks & payouts guide",
                 ]
+            ),
+            inline=False,
+        )
+
+        symbol_lines, payout_lines = self._picture_poker_reference()
+        embed.add_field(
+            name="Picture Poker Quick Reference",
+            value=(
+                f"{' → '.join(line.split(' ', 1)[0] for line in symbol_lines)}"
             ),
             inline=False,
         )

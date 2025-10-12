@@ -15,6 +15,16 @@ import discord
 
 from economy.EconomyManager import db
 
+# Keys for casino games where we always keep responses private unless a specific
+# public channel is mapped. (FOR ANY NEW GAMES): Update this set so visibility
+# logic stays aligned with the command registery from discord
+DEFAULT_GAME_COMMAND_KEYS: set[str] = {
+    "memorymatch",
+    "pairagone",
+    "luckystars",
+    "picturepoker",
+}
+
 
 @dataclass
 class GuildCasinoConfig:
@@ -233,12 +243,27 @@ class CasinoConfigManager:
         if command_key:
             home_channel = config.channel_map.get(command_key)
 
-        is_public = False
+        normalized_channel_id = int(channel_id)
+        is_allowed_channel = normalized_channel_id in config.allowed_channels
+
+        normalized_command_key = command_key.lower() if isinstance(command_key, str) else None
+
+        # game commands remain private (unless they have a home channel),
+        # while generic utility commands can surface publicly in casino floor channels.
+        is_game_command = False
+        if normalized_command_key:
+            channel_map_keys = {key.lower() for key in config.channel_map}
+            if normalized_command_key in channel_map_keys:
+                is_game_command = True
+            elif normalized_command_key in DEFAULT_GAME_COMMAND_KEYS:
+                is_game_command = True
+
         if home_channel is not None:
-            is_public = channel_id == home_channel
-        elif command_key is None:
-            if int(channel_id) in config.allowed_channels:
-                is_public = True
+            is_public = normalized_channel_id == home_channel
+        elif not is_game_command:
+            is_public = is_allowed_channel
+        else:
+            is_public = False
 
         return VisibilityDecision(
             is_public=is_public,
