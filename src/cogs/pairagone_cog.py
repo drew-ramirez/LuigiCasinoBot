@@ -40,7 +40,19 @@ class PairAGoneCog(BaseGameCog):
             bet_amount: int,
             new_game: PairAGone | None = None,
         ):
-            game = new_game or PairAGone(user_id, bet_amount)
+            if new_game is None:
+                initial_stars = EconomyManager.star_bonus_count(
+                    user_id,
+                    PairAGone.GAME_KEY,
+                    inter.user.name,
+                )
+                game = PairAGone(
+                    user_id,
+                    bet_amount,
+                    initial_stars=initial_stars,
+                )
+            else:
+                game = new_game
             self.log_game_start(
                 inter,
                 "casino_pairagone",

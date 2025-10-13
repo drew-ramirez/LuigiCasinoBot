@@ -39,8 +39,20 @@ class LuckyStarsCog(BaseGameCog):
             bet_amount: int,
             new_game: LuckyStars | None = None,
         ):
-            game = new_game or LuckyStars(bet_amount)
-            game.deal_round()
+            if new_game is None:
+                initial_stars = EconomyManager.star_bonus_count(
+                    user_id,
+                    LuckyStars.GAME_KEY,
+                    inter.user.name,
+                )
+                game = LuckyStars(
+                    bet_amount,
+                    initial_stars=initial_stars,
+                )
+            else:
+                game = new_game
+            if game.left_card is None or game.right_card is None:
+                game.deal_round()
             self.log_game_start(
                 inter,
                 "casino_luckystars",
@@ -55,10 +67,11 @@ class LuckyStarsCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="lucky.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(game.stars)
             stats = {
                 "active_bet": game.bet,
-                "stars_current": 0,
-                "dealer_action": "Pick a card!",
+                "stars_current": game.stars,
+                "dealer_action": f"Pick a card! | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_lucky_controls(

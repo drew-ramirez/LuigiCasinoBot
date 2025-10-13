@@ -9,6 +9,7 @@ from casinogames.core.BaseGame import BaseGame
 
 
 class PairAGone(BaseGame):
+    GAME_KEY = "pairagone"
     COLS = 5
     ROWS = 4
 
@@ -16,14 +17,21 @@ class PairAGone(BaseGame):
     EXTRA_SYMBOLS = ["goomba", "bowser", "boo", "yoshi"]
     STAR_THRESHOLDS = [1, 3, 5, 7]  # star milestones to unlock extra symbols
 
-    def __init__(self, player_id: int, bet: int):
+    def __init__(
+        self,
+        player_id: int,
+        bet: int,
+        *,
+        initial_stars: int = 0,
+    ):
         super().__init__(player_id)
         self.bet = max(1, bet)
 
         # progression state
-        self.stars = 0
+        self.stars = max(0, int(initial_stars))
         self.level = 1
         self.unlocked = set(self.BASE_SYMBOLS)
+        self._apply_initial_unlocks()
 
         # round state
         self.deck = []
@@ -158,6 +166,16 @@ class PairAGone(BaseGame):
             self._check_unlock_progression()
         else:
             self.stars = max(0, self.stars - 1)
+
+    def _apply_initial_unlocks(self):
+        """
+        Unlock symbols based on any carry-over stars so the deck reflects the current progression.
+        """
+        self.level = 1
+        for idx, threshold in enumerate(self.STAR_THRESHOLDS):
+            if self.stars >= threshold:
+                self.unlocked.add(self.EXTRA_SYMBOLS[idx])
+                self.level += 1
 
     def _check_unlock_progression(self):
         for i, threshold in enumerate(self.STAR_THRESHOLDS):

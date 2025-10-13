@@ -26,7 +26,7 @@ backs = load_memory_backs()
 
 
 class PairControls(discord.ui.View):
-    GAME_KEY = "pairagone"
+    GAME_KEY = PairAGone.GAME_KEY
 
     def __init__(
         self,
@@ -69,9 +69,9 @@ class PairControls(discord.ui.View):
         )
         multiplier = EconomyManager.star_bonus_multiplier(streak)
         if action:
-            action = f"{action} | Bonus x{multiplier:.2f}"
+            action = f"{action} | (⭐ bonus x{multiplier:.2f})"
         else:
-            action = f"Bonus x{multiplier:.2f}"
+            action = f"(⭐ bonus x{multiplier:.2f})"
         return {
             "active_bet": self.game.bet,
             "stars_current": self.game.stars,
@@ -381,7 +381,16 @@ class PairControls(discord.ui.View):
                 async def on_bet_selected(
                     inner_inter: discord.Interaction, bet_amount: int
                 ):
-                    new_game = PairAGone(self.player.id, bet_amount)
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.player.id,
+                        self.GAME_KEY,
+                        player_name,
+                    )
+                    new_game = PairAGone(
+                        self.player.id,
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    )
                     await self.start_game_callback(
                         inner_inter,
                         bet_amount,

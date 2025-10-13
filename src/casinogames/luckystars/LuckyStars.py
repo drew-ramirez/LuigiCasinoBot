@@ -9,6 +9,7 @@ from typing import Optional
 
 
 class LuckyStars:
+    GAME_KEY = "luckystars"
     CARD_W = 136
     CARD_H = 207
     GAP_X = 80
@@ -16,8 +17,9 @@ class LuckyStars:
     MARGIN_X = 32
     MARGIN_Y = 32
 
-    def __init__(self, bet: int):
+    def __init__(self, bet: int, *, initial_stars: int = 0):
         self.bet = max(1, bet)
+        self.stars = max(0, int(initial_stars))
         self.round = 0
         self.left_card: Optional[int] = None
         self.right_card: Optional[int] = None

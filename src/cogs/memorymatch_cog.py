@@ -42,7 +42,19 @@ class MemoryMatchCog(BaseGameCog):
             bet_amount: int,
             new_game: MemoryMatch | None = None,
         ):
-            game = new_game or MemoryMatch(user_id, bet_amount)
+            if new_game is None:
+                initial_stars = EconomyManager.star_bonus_count(
+                    user_id,
+                    MemoryMatch.GAME_KEY,
+                    inter.user.name,
+                )
+                game = MemoryMatch(
+                    user_id,
+                    bet_amount,
+                    initial_stars=initial_stars,
+                )
+            else:
+                game = new_game
             self.log_game_start(
                 inter,
                 "casino_memorymatch",

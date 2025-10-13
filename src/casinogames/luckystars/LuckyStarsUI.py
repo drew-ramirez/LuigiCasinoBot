@@ -68,13 +68,20 @@ class LuckyStarsView(discord.ui.View):
         board.seek(0)
         return discord.File(board, filename)
 
+    def _annotate_action(self, action: str | None = None) -> str:
+        multiplier = EconomyManager.star_bonus_multiplier(self.game.stars)
+        bonus_text = f"(⭐ bonus x{multiplier:.2f})"
+        if action:
+            return f"{action} | {bonus_text}"
+        return bonus_text
+
     def _embed_payload(
         self, action: str | None = None, *, reveal: bool = False
     ) -> tuple[discord.Embed, list[discord.File]]:
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": 0,
-            "dealer_action": action or "Pick a card!",
+            "stars_current": self.game.stars,
+            "dealer_action": self._annotate_action(action or "Pick a card!"),
         }
         embed = make_game_header(self.player, "Lucky Stars", stats)
         board_file = self._board_file(reveal=reveal)
@@ -84,8 +91,8 @@ class LuckyStarsView(discord.ui.View):
     def _header_text(self, action: str | None = None) -> str:
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": 0,
-            "dealer_action": action or "Pick a card!",
+            "stars_current": self.game.stars,
+            "dealer_action": self._annotate_action(action or "Pick a card!"),
         }
         return make_gif_game_header(self.player, "Lucky Stars", stats)
 
@@ -148,13 +155,44 @@ class LuckyStarsView(discord.ui.View):
         outcome = result["outcome"]
 
         summary = f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
+        player_name = getattr(self.player, "name", "Unknown")
+        current_multiplier = EconomyManager.star_bonus_multiplier(self.game.stars)
+        streak_info: dict[str, float | int]
 
         if outcome == "win":
-            payout = self.game.bet * 2
-            EconomyManager.payout(self.player.id, payout, self.player.name)
+            base_payout = self.game.bet * 2
+            payout = int(round(base_payout * current_multiplier))
+            EconomyManager.payout(self.player.id, payout, player_name)
             summary += f"  You win {payout} coins!"
+            streak_info = EconomyManager.adjust_star_bonus(
+                self.player.id,
+                LuckyStars.GAME_KEY,
+                delta=1,
+                username=player_name,
+                career_increment=1,
+            )
         else:
             summary += "  You lose this round."
+            if self.game.stars > 0:
+                streak_info = EconomyManager.adjust_star_bonus(
+                    self.player.id,
+                    LuckyStars.GAME_KEY,
+                    delta=-1,
+                    username=player_name,
+                )
+            else:
+                record = EconomyManager.ensure_user(self.player.id, player_name)
+                streak_info = {
+                    "stars": 0,
+                    "career_total": record.get("career_stars_total", 0),
+                    "multiplier": EconomyManager.star_bonus_multiplier(0),
+                }
+
+        self.game.stars = int(streak_info["stars"])
+        summary += (
+            f""
+            #f" Next bonus x{streak_info['multiplier']:.2f}."
+        )
 
         if self.animations_enabled:
             await msg.edit(
@@ -203,10 +241,18 @@ class LuckyStarsView(discord.ui.View):
             async def on_bet_selected(
                 inner_inter: discord.Interaction, bet_amount: int
             ):
+                initial_stars = EconomyManager.star_bonus_count(
+                    self.player.id,
+                    LuckyStars.GAME_KEY,
+                    player_name,
+                )
                 await self.start_game_callback(
                     inner_inter,
                     bet_amount,
-                    new_game=LuckyStars(bet_amount),
+                    new_game=LuckyStars(
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    ),
                 )
 
             player_name = getattr(self.player, "display_name", self.player.name)

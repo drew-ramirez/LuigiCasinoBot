@@ -27,7 +27,7 @@ UNFLIP_ANIMATION_DELAY = 0.45
 
 class MemoryMatchControls(discord.ui.View):
     #persistent view for Memory Match with per-card callbacks
-    GAME_KEY = "memorymatch"
+    GAME_KEY = MemoryMatch.GAME_KEY
 
     def __init__(
         self,
@@ -442,7 +442,7 @@ class MemoryMatchControls(discord.ui.View):
         next_target = self._pending_next_streak
         if next_target:
             note = (
-                f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
+                #f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
             )
         message = f"New board ready!\n{note}" if note else "New board ready!"
         if self.animations_enabled:
@@ -477,7 +477,16 @@ class MemoryMatchControls(discord.ui.View):
                         )
                         return
 
-                    new_game = MemoryMatch(self.player.id, bet_amount)
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.player.id,
+                        self.GAME_KEY,
+                        self.player.name,
+                    )
+                    new_game = MemoryMatch(
+                        self.player.id,
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    )
                     await self.start_game_callback(
                         inner_inter,
                         bet_amount,
