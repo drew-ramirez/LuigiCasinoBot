@@ -26,6 +26,8 @@ backs = load_memory_backs()
 
 
 class PairControls(discord.ui.View):
+    GAME_KEY = "pairagone"
+
     def __init__(
         self,
         game: PairAGone,
@@ -60,6 +62,16 @@ class PairControls(discord.ui.View):
         action = (
             dealer_action or f"Cards remaining in deck: {self.game.remaining_in_deck()}"
         )
+        streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            getattr(self.player, "name", "Unknown"),
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        if action:
+            action = f"{action} | Bonus x{multiplier:.2f}"
+        else:
+            action = f"Bonus x{multiplier:.2f}"
         return {
             "active_bet": self.game.bet,
             "stars_current": self.game.stars,
@@ -286,19 +298,54 @@ class PairControls(discord.ui.View):
         )
 
     async def _handle_board_cleared(self, msg: discord.Message):
+        player_name = getattr(self.player, "name", "Unknown")
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            player_name,
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(current_streak)
+        base_payout = self.game.bet * 2
+        payout = int(round(base_payout * multiplier))
+
         self.game.handle_game_end(won=True)
-        payout = self.game.bet * 2
-        EconomyManager.payout(self.player.id, payout, self.player.name)
+        EconomyManager.payout(self.player.id, payout, player_name)
+
+        streak_info = EconomyManager.adjust_star_bonus(
+            self.player.id,
+            self.GAME_KEY,
+            delta=1,
+            username=player_name,
+            career_increment=1,
+        )
+
+        summary = (
+            f"Board cleared! You won {payout} coins. Stars: {self.game.stars}. "
+            f"Streak: {streak_info['stars']} (Career {streak_info['career_total']})"
+        )
 
         await self._apply_status(
             msg,
-            f"Board cleared! You won {payout} coins. Stars: {self.game.stars}",
+            summary,
             attachments=[self._board_file()],
             view=None,
         )
         await self._show_replay(msg)
 
     async def _handle_no_moves(self, msg: discord.Message):
+        player_name = getattr(self.player, "name", "Unknown")
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            player_name,
+        )
+        if current_streak > 0:
+            EconomyManager.adjust_star_bonus(
+                self.player.id,
+                self.GAME_KEY,
+                delta=-1,
+                username=player_name,
+            )
         self.game.handle_game_end(won=False)
         await self._apply_status(
             msg,

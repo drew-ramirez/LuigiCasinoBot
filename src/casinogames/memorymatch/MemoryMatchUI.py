@@ -47,8 +47,8 @@ class MemoryMatchControls(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.msg: discord.Message | None = None
         self.animations_enabled = animations_enabled
-        self._pending_star_gain: bool = False
         self._pending_next_streak: int | None = None
+        self._last_streak_info: dict | None = None
 
         self._build_buttons()
 
@@ -305,8 +305,20 @@ class MemoryMatchControls(discord.ui.View):
         payout = int(round(payout_base * multiplier))
         EconomyManager.payout(self.player.id, payout, self.player.name)
 
+        streak_info = EconomyManager.adjust_star_bonus(
+            self.player.id,
+            self.GAME_KEY,
+            delta=1,
+            username=self.player.name,
+            career_increment=1,
+        )
+        self._last_streak_info = streak_info
+        self._pending_next_streak = streak_info["stars"] + 1
+        self.game.award_star()
+
         summary = (
-            f"Board cleared! You won {payout} coins \n"
+            f"Board cleared! You won {payout} coins.\n"
+            f"Star streak: {streak_info['stars']} | Career stars: {streak_info['career_total']}\n"
             "Continue or Exit Now?"
         )
         if self.animations_enabled:
@@ -319,8 +331,6 @@ class MemoryMatchControls(discord.ui.View):
             embed, files = self._status_payload(summary, attachment=final_board)
             await msg.edit(content=None, embed=embed, attachments=files, view=None)
 
-        self._pending_star_gain = True
-        self._pending_next_streak = current_streak + 1
         await self._prompt_continue(
             msg,
             next_streak=self._pending_next_streak,
@@ -340,7 +350,7 @@ class MemoryMatchControls(discord.ui.View):
                 username=self.player.name,
             )
 
-        self._pending_star_gain = False
+        self._last_streak_info = None
 
         if self.animations_enabled:
             await msg.edit(
@@ -374,31 +384,22 @@ class MemoryMatchControls(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            streak_info = None
-            if self._pending_star_gain:
-                streak_info = EconomyManager.adjust_star_bonus(
-                    self.player.id,
-                    self.GAME_KEY,
-                    delta=1,
-                    username=self.player.name,
-                    career_increment=1,
-                )
-                self._pending_star_gain = False
-                self._pending_next_streak = streak_info["stars"] + 1
-                self.game.next_level()
-            else:
+            if self._last_streak_info is None:
                 current = EconomyManager.star_bonus_count(
                     self.player.id,
                     self.GAME_KEY,
                     self.player.name,
                 )
-                streak_info = {
+                self._last_streak_info = {
                     "stars": current,
                     "career_total": EconomyManager.ensure_user(
                         self.player.id, self.player.name
                     ).get("career_stars_total", 0),
                     "multiplier": EconomyManager.star_bonus_multiplier(current),
                 }
+            streak_info = self._last_streak_info
+            self._last_streak_info = None
+            self.game.generate_board()
             await self._start_next_round(msg, streak_info=streak_info)
 
         async def cash_out_cb(btn_inter: discord.Interaction):
@@ -406,8 +407,8 @@ class MemoryMatchControls(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            self._pending_star_gain = False
-            summary = f"Cashed out at round {self.game.stars+1}"
+            self._last_streak_info = None
+            summary = f"Cashed out at round {self.game.stars}"
             if self.animations_enabled:
                 await msg.edit(
                     content=self._status_text(summary),
