@@ -69,9 +69,9 @@ class PairControls(discord.ui.View):
         )
         multiplier = EconomyManager.star_bonus_multiplier(streak)
         if action:
-            action = f"{action} | (⭐ bonus x{multiplier:.2f})"
+            action = f"{action} \n(⭐ bonus x{multiplier:.2f})"
         else:
-            action = f"(⭐ bonus x{multiplier:.2f})"
+            action = f"\n(⭐ bonus x{multiplier:.2f})"
         return {
             "active_bet": self.game.bet,
             "stars_current": self.game.stars,
@@ -223,7 +223,7 @@ class PairControls(discord.ui.View):
             new_cards = self.game.remove_and_fall([a, b])
             if new_cards:
                 action = (
-                    f"Match! Dealer replaces cards. Cards remaining: "
+                    f"Match! Cards in Deck: "
                     f"{self.game.remaining_in_deck()}"
                 )
             else:
