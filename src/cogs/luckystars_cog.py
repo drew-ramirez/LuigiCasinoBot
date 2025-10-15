@@ -40,14 +40,14 @@ class LuckyStarsCog(BaseGameCog):
             new_game: LuckyStars | None = None,
         ):
             if new_game is None:
-                initial_stars = EconomyManager.star_bonus_count(
+                EconomyManager.reset_star_bonus(
                     user_id,
                     LuckyStars.GAME_KEY,
                     inter.user.name,
                 )
                 game = LuckyStars(
                     bet_amount,
-                    initial_stars=initial_stars,
+                    initial_stars=0,
                 )
             else:
                 game = new_game
