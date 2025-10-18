@@ -23,7 +23,7 @@ from utils.emoji_config import (
 )
 
 bank = Bank()
-GAMES_EMOJI = discord.PartialEmoji(name="\N{GAME DIE}")
+GAMES_EMOJI = "\N{GAME DIE}"
 
 
 ###########################################################

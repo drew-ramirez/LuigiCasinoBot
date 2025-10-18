@@ -169,7 +169,6 @@ class LuckyStarsView(discord.ui.View):
             payout = int(round(base_payout * current_multiplier))
             EconomyManager.payout(self.player.id, payout, self._player_name)
             summary += f"  You win {payout} coins!"
-            self.game.stars += 1
             streak_info = EconomyManager.adjust_star_bonus(
                 self.player.id,
                 LuckyStars.GAME_KEY,
@@ -178,9 +177,9 @@ class LuckyStarsView(discord.ui.View):
                 career_increment=1,
             )
             self._star_streak = int(streak_info["stars"])
+            self.game.stars = self._star_streak
         else:
             summary += "  You lose this round."
-            self.game.stars = 0
             if self._star_streak > 0:
                 streak_info = EconomyManager.adjust_star_bonus(
                     self.player.id,
@@ -197,6 +196,7 @@ class LuckyStarsView(discord.ui.View):
                     "multiplier": EconomyManager.star_bonus_multiplier(0),
                 }
                 self._star_streak = 0
+            self.game.stars = self._star_streak
 
         if self.animations_enabled:
             await msg.edit(

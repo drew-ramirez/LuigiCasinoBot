@@ -45,9 +45,15 @@ class PicturePokerCog(BaseGameCog):
             bet_amount: int,
             new_game: PicturePoker | None = None,
         ):
-            entry = self.active_games.get(user_id) or {}
-            existing_game = entry.get("game") if isinstance(entry, dict) else None
-            target_game = new_game or existing_game or PicturePoker()
+            if new_game is None:
+                EconomyManager.reset_star_bonus(
+                    user_id,
+                    PicturePoker.GAME_KEY,
+                    inter.user.name,
+                )
+                target_game = PicturePoker()
+            else:
+                target_game = new_game
             target_game.start_round(forced_bet=bet_amount)
             self.log_game_start(
                 inter,

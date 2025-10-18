@@ -545,8 +545,6 @@ class PicturePokerView(discord.ui.View):
             await btn_inter.response.defer()
 
             def make_wager_callback():
-                new_game = PicturePoker()
-
                 async def on_bet_selected(
                     inner_inter: discord.Interaction, bet_amount: int
                 ):
@@ -555,6 +553,13 @@ class PicturePokerView(discord.ui.View):
                             "Unable to start new game right now.", ephemeral=True
                         )
                         return
+
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.user_id,
+                        PicturePoker.GAME_KEY,
+                        inner_inter.user.name,
+                    )
+                    new_game = PicturePoker(starting_stars=initial_stars)
 
                     await self.start_game_callback(
                         inner_inter, bet_amount, new_game=new_game
