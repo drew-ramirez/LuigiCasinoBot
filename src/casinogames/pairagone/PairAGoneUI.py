@@ -192,9 +192,13 @@ class PairControls(discord.ui.View):
 
         if not is_match:
             self._refresh_buttons()
+            attachments = None
+            if not self.animations_enabled:
+                attachments = [self._board_file()]
             await self._apply_status(
                 msg,
                 "No match!",
+                attachments=attachments,
                 view=self,
             )
             return
