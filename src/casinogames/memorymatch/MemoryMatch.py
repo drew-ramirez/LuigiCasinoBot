@@ -52,6 +52,7 @@ class MemoryMatch(BaseGame):
         self.base_attempts = max(1, base_attempts)
         self.remaining_attempts = self.base_attempts
         self.stars = max(0, int(initial_stars))
+        self.session_stars = 0
         self.board = []           # [(symbol, is_flipped, is_matched)]
         self.symbols = []
         self.revealed = []        # positions currently flipped
@@ -149,6 +150,7 @@ class MemoryMatch(BaseGame):
 
     def award_star(self):
         self.stars += 1
+        self.session_stars += 1
         self.remaining_attempts = self.base_attempts * 2
         self.match_streak = 0
         self.last_bonus_awarded = False

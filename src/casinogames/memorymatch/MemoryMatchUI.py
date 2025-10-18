@@ -90,9 +90,10 @@ class MemoryMatchControls(discord.ui.View):
             action = f"{action} | {streak_summary}"
         else:
             action = streak_summary
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": session_stars,
             "dealer_action": action,
         }
         embed = make_game_header(self.player, "Memory Match", stats)
@@ -125,9 +126,10 @@ class MemoryMatchControls(discord.ui.View):
             action = f"{action} | {streak_summary}"
         else:
             action = streak_summary
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": session_stars,
             "dealer_action": action,
         }
         return make_gif_game_header(self.player, "Memory Match", stats)
@@ -316,9 +318,10 @@ class MemoryMatchControls(discord.ui.View):
         self._pending_next_streak = streak_info["stars"] + 1
         self.game.award_star()
 
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         summary = (
             f"Board cleared! You won {payout} coins.\n"
-            f"Star streak: {streak_info['stars']} | Career stars: {streak_info['career_total']}\n"
+            f"Round wins this session: {session_stars}\n"
             "Continue or Exit Now?"
         )
         if self.animations_enabled:
@@ -408,7 +411,8 @@ class MemoryMatchControls(discord.ui.View):
                 return
             await btn_inter.response.defer()
             self._last_streak_info = None
-            summary = f"Cashed out at round {self.game.stars}"
+            session_stars = getattr(self.game, "session_stars", self.game.stars)
+            summary = f"Cashed out at round {session_stars}"
             if self.animations_enabled:
                 await msg.edit(
                     content=self._status_text(summary),

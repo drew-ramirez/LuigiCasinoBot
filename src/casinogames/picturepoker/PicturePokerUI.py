@@ -469,6 +469,37 @@ class PicturePokerView(discord.ui.View):
             coins_display = bet_amount
             delta_symbol = "+"
 
+        player_name = getattr(user, "name", "Unknown")
+        streak_info: dict[str, float | int]
+        current_streak = EconomyManager.star_bonus_count(
+            user.id,
+            PicturePoker.GAME_KEY,
+            player_name,
+        )
+
+        if outcome == "win":
+            streak_info = EconomyManager.adjust_star_bonus(
+                user.id,
+                PicturePoker.GAME_KEY,
+                delta=1,
+                username=player_name,
+                career_increment=1,
+            )
+        elif outcome == "lose" and current_streak > 0:
+            streak_info = EconomyManager.adjust_star_bonus(
+                user.id,
+                PicturePoker.GAME_KEY,
+                delta=-1,
+                username=player_name,
+            )
+        else:
+            record = EconomyManager.ensure_user(user.id, player_name)
+            streak_info = {
+                "stars": current_streak,
+                "career_total": record.get("career_stars_total", 0),
+                "multiplier": EconomyManager.star_bonus_multiplier(current_streak),
+            }
+
         summary_result = dict(result)
         summary_result["coins"] = coins_display
         summary_result["luigi_hand"] = list(self.game.luigi_hand)

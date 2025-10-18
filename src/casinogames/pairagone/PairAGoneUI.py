@@ -74,7 +74,7 @@ class PairControls(discord.ui.View):
             action = f"\n(⭐ bonus x{multiplier:.2f})"
         return {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": getattr(self.game, "session_stars", self.game.stars),
             "dealer_action": action,
         }
 
@@ -323,8 +323,9 @@ class PairControls(discord.ui.View):
             career_increment=1,
         )
 
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         summary = (
-            f"Board cleared! You won {payout} coins. Stars: {self.game.stars}. "
+            f"Board cleared! You won {payout} coins. Stars this session: {session_stars}. "
             f"Streak: {streak_info['stars']} (Career {streak_info['career_total']})"
         )
 

@@ -9,6 +9,7 @@ from collections import Counter
 
 
 class PicturePoker:
+    GAME_KEY = "picturepoker"
     CARD_W = 136
     CARD_H = 207
     GAP_X = 24

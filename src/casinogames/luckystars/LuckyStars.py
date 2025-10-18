@@ -19,7 +19,8 @@ class LuckyStars:
 
     def __init__(self, bet: int, *, initial_stars: int = 0):
         self.bet = max(1, bet)
-        self.stars = max(0, int(initial_stars))
+        self.initial_stars = max(0, int(initial_stars))
+        self.stars = 0
         self.round = 0
         self.left_card: Optional[int] = None
         self.right_card: Optional[int] = None

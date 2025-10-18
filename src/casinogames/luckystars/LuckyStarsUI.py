@@ -47,6 +47,12 @@ class LuckyStarsView(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.msg = message
         self.animations_enabled = animations_enabled
+        self._player_name = getattr(player, "name", "Unknown")
+        self._star_streak = EconomyManager.star_bonus_count(
+            player.id,
+            LuckyStars.GAME_KEY,
+            self._player_name,
+        )
 
         self.left_button = LuckyStarsButton("Left", 0)
         self.right_button = LuckyStarsButton("Right", 1)
@@ -69,7 +75,7 @@ class LuckyStarsView(discord.ui.View):
         return discord.File(board, filename)
 
     def _annotate_action(self, action: str | None = None) -> str:
-        multiplier = EconomyManager.star_bonus_multiplier(self.game.stars)
+        multiplier = EconomyManager.star_bonus_multiplier(self._star_streak)
         bonus_text = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             return f"{action} | {bonus_text}"
@@ -155,44 +161,42 @@ class LuckyStarsView(discord.ui.View):
         outcome = result["outcome"]
 
         summary = f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
-        player_name = getattr(self.player, "name", "Unknown")
-        current_multiplier = EconomyManager.star_bonus_multiplier(self.game.stars)
+        current_multiplier = EconomyManager.star_bonus_multiplier(self._star_streak)
         streak_info: dict[str, float | int]
 
         if outcome == "win":
             base_payout = self.game.bet * 2
             payout = int(round(base_payout * current_multiplier))
-            EconomyManager.payout(self.player.id, payout, player_name)
+            EconomyManager.payout(self.player.id, payout, self._player_name)
             summary += f"  You win {payout} coins!"
+            self.game.stars += 1
             streak_info = EconomyManager.adjust_star_bonus(
                 self.player.id,
                 LuckyStars.GAME_KEY,
                 delta=1,
-                username=player_name,
+                username=self._player_name,
                 career_increment=1,
             )
+            self._star_streak = int(streak_info["stars"])
         else:
             summary += "  You lose this round."
-            if self.game.stars > 0:
+            self.game.stars = 0
+            if self._star_streak > 0:
                 streak_info = EconomyManager.adjust_star_bonus(
                     self.player.id,
                     LuckyStars.GAME_KEY,
                     delta=-1,
-                    username=player_name,
+                    username=self._player_name,
                 )
+                self._star_streak = int(streak_info["stars"])
             else:
-                record = EconomyManager.ensure_user(self.player.id, player_name)
+                record = EconomyManager.ensure_user(self.player.id, self._player_name)
                 streak_info = {
                     "stars": 0,
                     "career_total": record.get("career_stars_total", 0),
                     "multiplier": EconomyManager.star_bonus_multiplier(0),
                 }
-
-        self.game.stars = int(streak_info["stars"])
-        summary += (
-            f""
-            #f" Next bonus x{streak_info['multiplier']:.2f}."
-        )
+                self._star_streak = 0
 
         if self.animations_enabled:
             await msg.edit(

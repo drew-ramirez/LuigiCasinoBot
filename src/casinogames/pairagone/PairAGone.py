@@ -29,6 +29,7 @@ class PairAGone(BaseGame):
 
         # progression state
         self.stars = max(0, int(initial_stars))
+        self.session_stars = 0
         self.level = 1
         self.unlocked = set(self.BASE_SYMBOLS)
         self._apply_initial_unlocks()
@@ -163,9 +164,11 @@ class PairAGone(BaseGame):
     def handle_game_end(self, won: bool):
         if won:
             self.stars += 1
+            self.session_stars += 1
             self._check_unlock_progression()
         else:
             self.stars = max(0, self.stars - 1)
+            self.session_stars = max(0, self.session_stars - 1)
 
     def _apply_initial_unlocks(self):
         """
