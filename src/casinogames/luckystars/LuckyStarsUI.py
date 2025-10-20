@@ -75,7 +75,9 @@ class LuckyStarsView(discord.ui.View):
         return discord.File(board, filename)
 
     def _annotate_action(self, action: str | None = None) -> str:
-        multiplier = EconomyManager.star_bonus_multiplier(self._star_streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            self._star_streak, LuckyStars.GAME_KEY
+        )
         bonus_text = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             return f"{action} | {bonus_text}"
@@ -161,7 +163,9 @@ class LuckyStarsView(discord.ui.View):
         outcome = result["outcome"]
 
         summary = f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
-        current_multiplier = EconomyManager.star_bonus_multiplier(self._star_streak)
+        current_multiplier = EconomyManager.star_bonus_multiplier(
+            self._star_streak, LuckyStars.GAME_KEY
+        )
         streak_info: dict[str, float | int]
 
         if outcome == "win":
@@ -193,7 +197,9 @@ class LuckyStarsView(discord.ui.View):
                 streak_info = {
                     "stars": 0,
                     "career_total": record.get("career_stars_total", 0),
-                    "multiplier": EconomyManager.star_bonus_multiplier(0),
+                    "multiplier": EconomyManager.star_bonus_multiplier(
+                        0, LuckyStars.GAME_KEY
+                    ),
                 }
                 self._star_streak = 0
             self.game.stars = self._star_streak

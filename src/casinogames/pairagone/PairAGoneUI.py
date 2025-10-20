@@ -67,7 +67,7 @@ class PairControls(discord.ui.View):
             self.GAME_KEY,
             getattr(self.player, "name", "Unknown"),
         )
-        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        multiplier = EconomyManager.star_bonus_multiplier(streak, self.GAME_KEY)
         if action:
             action = f"{action} \n(⭐ bonus x{multiplier:.2f})"
         else:
@@ -308,7 +308,7 @@ class PairControls(discord.ui.View):
             self.GAME_KEY,
             player_name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(current_streak)
+        multiplier = EconomyManager.star_bonus_multiplier(current_streak, self.GAME_KEY)
         base_payout = self.game.bet * 2
         payout = int(round(base_payout * multiplier))
 

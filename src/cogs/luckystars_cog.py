@@ -67,7 +67,9 @@ class LuckyStarsCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="lucky.png")
 
-            multiplier = EconomyManager.star_bonus_multiplier(game.stars)
+            multiplier = EconomyManager.star_bonus_multiplier(
+                game.stars, LuckyStars.GAME_KEY
+            )
             stats = {
                 "active_bet": game.bet,
                 "stars_current": game.stars,

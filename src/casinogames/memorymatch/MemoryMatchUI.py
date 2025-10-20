@@ -84,7 +84,9 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            streak, MemoryMatch.GAME_KEY
+        )
         streak_summary = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             action = f"{action} | {streak_summary}"
@@ -120,7 +122,9 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            streak, MemoryMatch.GAME_KEY
+        )
         streak_summary = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             action = f"{action} | {streak_summary}"
@@ -302,7 +306,9 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(current_streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            current_streak, MemoryMatch.GAME_KEY
+        )
         payout_base = self.game.bet * 2
         payout = int(round(payout_base * multiplier))
         EconomyManager.payout(self.player.id, payout, self.player.name)
@@ -372,7 +378,9 @@ class MemoryMatchControls(discord.ui.View):
         await self._show_replay(msg)
 
     async def _prompt_continue(self, msg: discord.Message, next_streak: int):
-        multiplier_next = EconomyManager.star_bonus_multiplier(next_streak)
+        multiplier_next = EconomyManager.star_bonus_multiplier(
+            next_streak, MemoryMatch.GAME_KEY
+        )
         continue_btn = discord.ui.Button(
             label=f"Continue (next bonus x{multiplier_next:.2f})",
             style=discord.ButtonStyle.green,
@@ -398,7 +406,9 @@ class MemoryMatchControls(discord.ui.View):
                     "career_total": EconomyManager.ensure_user(
                         self.player.id, self.player.name
                     ).get("career_stars_total", 0),
-                    "multiplier": EconomyManager.star_bonus_multiplier(current),
+                    "multiplier": EconomyManager.star_bonus_multiplier(
+                        current, MemoryMatch.GAME_KEY
+                    ),
                 }
             streak_info = self._last_streak_info
             self._last_streak_info = None

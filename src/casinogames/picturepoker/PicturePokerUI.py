@@ -497,7 +497,9 @@ class PicturePokerView(discord.ui.View):
             streak_info = {
                 "stars": current_streak,
                 "career_total": record.get("career_stars_total", 0),
-                "multiplier": EconomyManager.star_bonus_multiplier(current_streak),
+                "multiplier": EconomyManager.star_bonus_multiplier(
+                    current_streak, PicturePoker.GAME_KEY
+                ),
             }
 
         summary_result = dict(result)
