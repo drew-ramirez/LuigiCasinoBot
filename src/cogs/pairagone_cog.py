@@ -66,10 +66,14 @@ class PairAGoneCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="pair_board.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                getattr(game, "session_stars", game.stars),
+                PairAGone.GAME_KEY,
+            )
             stats = {
                 "active_bet": game.bet,
                 "stars_current": getattr(game, "session_stars", game.stars),
-                "dealer_action": "Select two adjacent matching cards!",
+                "dealer_action": f"Select two adjacent matching cards! | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_pair_view(

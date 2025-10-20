@@ -69,10 +69,13 @@ class MemoryMatchCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="memory_board.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                game.stars, MemoryMatch.GAME_KEY
+            )
             stats = {
                 "active_bet": game.bet,
                 "stars_current": game.stars,
-                "dealer_action": f"Attempts left: {game.remaining_attempts}",
+                "dealer_action": f"Attempts left: {game.remaining_attempts} | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_memory_view(

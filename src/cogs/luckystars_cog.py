@@ -39,6 +39,8 @@ class LuckyStarsCog(BaseGameCog):
             bet_amount: int,
             new_game: LuckyStars | None = None,
         ):
+            if not inter.response.is_done():
+                await inter.response.defer()
             if new_game is None:
                 EconomyManager.reset_star_bonus(
                     user_id,

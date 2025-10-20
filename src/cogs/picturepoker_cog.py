@@ -72,12 +72,18 @@ class PicturePokerCog(BaseGameCog):
                     pass
             board_file = discord.File(board_bytes, filename="poker.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                target_game.stars, PicturePoker.GAME_KEY
+            )
             stats = {
                 "active_bet": target_game.bet,
                 "stars_current": target_game.stars,
                 "round": target_game.round,
-                "multiplier": 1.0,
-                "dealer_action": "New game started! \nSelect cards to discard then submit.",
+                "multiplier": multiplier,
+                "dealer_action": (
+                    "New game started! \n Select cards to discard then submit.\n"
+                    f" (⭐ bonus x{multiplier:.2f})"
+                ),
             }
 
             view = make_poker_view(
