@@ -198,7 +198,7 @@ class MemoryMatchControls(discord.ui.View):
             await msg.edit(view=self)
 
             embed, files = self._status_payload(
-                f"Revealed card {pos + 1}.",
+                f"Attempts left: {self.game.remaining_attempts}",
             )
             await msg.edit(
                 content=None,

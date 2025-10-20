@@ -68,7 +68,7 @@ class PairAGoneCog(BaseGameCog):
 
             stats = {
                 "active_bet": game.bet,
-                "stars_current": game.stars,
+                "stars_current": getattr(game, "session_stars", game.stars),
                 "dealer_action": "Select two adjacent matching cards!",
             }
 
