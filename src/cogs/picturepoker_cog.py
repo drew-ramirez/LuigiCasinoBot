@@ -59,6 +59,7 @@ class PicturePokerCog(BaseGameCog):
                 inter,
                 "casino_picturepoker",
                 bet_amount=bet_amount,
+                game=target_game,
             )
             animations_on = EconomyManager.animations_enabled(
                 inter.user.id, inter.user.name

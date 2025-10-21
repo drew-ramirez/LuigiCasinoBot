@@ -56,9 +56,10 @@ class BaseGameCog(commands.Cog):
         *,
         bet_amount: Optional[int] = None,
         extra: Optional[dict[str, Any]] = None,
-        immediate: bool = False,
-    ) -> None:
-        MetricsManager.record_game_start(
+        game: Any | None = None,
+        immediate: bool = True,
+    ) -> Optional[Any]:
+        session_id = MetricsManager.record_game_start(
             interaction,
             self.metrics_game_key,
             bet_amount=bet_amount,
@@ -66,6 +67,9 @@ class BaseGameCog(commands.Cog):
             metadata=extra,
             immediate=immediate,
         )
+        if game is not None and session_id is not None:
+            setattr(game, "metrics_session_id", session_id)
+        return session_id
 
     def resolve_visibility(self, interaction: discord.Interaction) -> CommandVisibility:
         return resolve_command_visibility(interaction, self.metrics_game_key)

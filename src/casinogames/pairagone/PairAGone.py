@@ -32,7 +32,7 @@ class PairAGone(BaseGame):
         self.session_stars = 0
         self.level = 1
         self.unlocked = set(self.BASE_SYMBOLS)
-        self._apply_initial_unlocks()
+        self._sync_unlocks()
 
         # round state
         self.deck = []
@@ -165,25 +165,19 @@ class PairAGone(BaseGame):
         if won:
             self.stars += 1
             self.session_stars += 1
-            self._check_unlock_progression()
         else:
             self.stars = max(0, self.stars - 1)
             self.session_stars = max(0, self.session_stars - 1)
+        self._sync_unlocks()
 
-    def _apply_initial_unlocks(self):
-        """
-        Unlock symbols based on any carry-over stars so the deck reflects the current progression.
-        """
+    def _sync_unlocks(self):
+        previous_unlocked = getattr(self, "unlocked", set()).copy()
+        self.unlocked = set(self.BASE_SYMBOLS)
         self.level = 1
         for idx, threshold in enumerate(self.STAR_THRESHOLDS):
-            if self.stars >= threshold:
-                self.unlocked.add(self.EXTRA_SYMBOLS[idx])
-                self.level += 1
-
-    def _check_unlock_progression(self):
-        for i, threshold in enumerate(self.STAR_THRESHOLDS):
-            sym = self.EXTRA_SYMBOLS[i]
-            if self.stars >= threshold and sym not in self.unlocked:
-                self.unlocked.add(sym)
-                print(f"[PairAGone] unlocked new symbol: {sym}")
+            symbol = self.EXTRA_SYMBOLS[idx]
+            if self.session_stars >= threshold:
+                self.unlocked.add(symbol)
+                if symbol not in previous_unlocked:
+                    print(f"[PairAGone] unlocked new symbol this session: {symbol}")
                 self.level += 1

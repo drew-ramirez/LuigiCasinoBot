@@ -59,6 +59,7 @@ class MemoryMatchCog(BaseGameCog):
                 inter,
                 "casino_memorymatch",
                 bet_amount=bet_amount,
+                game=game,
             )
 
             animations_on = EconomyManager.animations_enabled(

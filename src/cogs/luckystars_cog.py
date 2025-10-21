@@ -59,6 +59,7 @@ class LuckyStarsCog(BaseGameCog):
                 inter,
                 "casino_luckystars",
                 bet_amount=bet_amount,
+                game=game,
             )
 
             animations_on = EconomyManager.animations_enabled(

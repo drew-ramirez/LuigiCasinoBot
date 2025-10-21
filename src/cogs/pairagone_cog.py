@@ -57,6 +57,7 @@ class PairAGoneCog(BaseGameCog):
                 inter,
                 "casino_pairagone",
                 bet_amount=bet_amount,
+                game=game,
             )
             animations_on = EconomyManager.animations_enabled(
                 inter.user.id, inter.user.name

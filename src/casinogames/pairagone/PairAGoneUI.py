@@ -20,6 +20,7 @@ from casinogames.pairagone.PairAGonePrint import (
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 faces = load_memory_faces()
 backs = load_memory_backs()
@@ -314,6 +315,18 @@ class PairControls(discord.ui.View):
 
         self.game.handle_game_end(won=True)
         EconomyManager.payout(self.player.id, payout, player_name)
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="win",
+            payout=payout,
+            net=int(payout - self.game.bet),
+            metadata={
+                "remaining_deck": self.game.remaining_in_deck(),
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
 
         streak_info = EconomyManager.adjust_star_bonus(
             self.player.id,
@@ -358,6 +371,18 @@ class PairControls(discord.ui.View):
             attachments=[self._board_file()],
             view=None,
         )
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="loss",
+            payout=0,
+            net=int(-self.game.bet),
+            metadata={
+                "remaining_deck": self.game.remaining_in_deck(),
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
         await self._show_replay(msg)
 
     async def _show_replay(self, msg: discord.Message):
@@ -437,6 +462,19 @@ class PairControls(discord.ui.View):
                     attachments=[self._board_file()],
                     view=None,
                 )
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="quit",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "remaining_deck": self.game.remaining_in_deck(),
+                        "session_stars": getattr(self.game, "session_stars", self.game.stars),
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
             if self.on_finish is not None:
                 await self.on_finish(self.player.id)
 

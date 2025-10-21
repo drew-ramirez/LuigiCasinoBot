@@ -23,6 +23,7 @@ from utils.bet_selector import DEFAULT_WAGER_OPTIONS, BetSelectView
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 from utils.emoji_config import get_coin_emoji, picture_poker_emojis
+from metrics.metrics_manager import MetricsManager
 
 
 ###########################################################
@@ -456,18 +457,28 @@ class PicturePokerView(discord.ui.View):
         bet_amount = result.get("bet", self.game.bet)
         delta_symbol = ""
         coins_display = coins
+        session_id = getattr(self.game, "metrics_session_id", None)
+        payout_logged = 0
+        net_logged = 0
+        outcome_tag = outcome or "push"
 
         if outcome == "win":
             payout_total = bet_amount + coins
             EconomyManager.payout(user.id, payout_total, user.name)
             delta_symbol = "+"
+            payout_logged = int(payout_total)
+            net_logged = int(coins)
         elif outcome == "lose":
             delta_symbol = "-"
             coins_display = bet_amount
+            payout_logged = 0
+            net_logged = int(-bet_amount)
         else:
             EconomyManager.payout(user.id, bet_amount, user.name)
             coins_display = bet_amount
             delta_symbol = "+"
+            payout_logged = int(bet_amount)
+            net_logged = 0
 
         player_name = getattr(user, "name", "Unknown")
         streak_info: dict[str, float | int]
@@ -533,6 +544,19 @@ class PicturePokerView(discord.ui.View):
             view=None,
             interaction=interaction,
         )
+
+        MetricsManager.record_game_result(
+            session_id,
+            result=outcome_tag,
+            payout=payout_logged,
+            net=net_logged,
+            metadata={
+                "player_rank": result.get("player_rank"),
+                "dealer_rank": result.get("luigi_rank"),
+                "round": result.get("round", self.game.round),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
 
         # D) Replay / Quit buttons
         replay_btn = discord.ui.Button(

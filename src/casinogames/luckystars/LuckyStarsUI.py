@@ -18,6 +18,7 @@ from casinogames.luckystars.LuckyStarsPrint import (
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 faces = load_memory_faces()
 backs = load_memory_backs()
@@ -173,6 +174,19 @@ class LuckyStarsView(discord.ui.View):
             payout = int(round(base_payout * current_multiplier))
             EconomyManager.payout(self.player.id, payout, self._player_name)
             summary += f"  You win {payout} coins!"
+            session_id = getattr(self.game, "metrics_session_id", None)
+            MetricsManager.record_game_result(
+                session_id,
+                result="win",
+                payout=payout,
+                net=int(payout - self.game.bet),
+                metadata={
+                    "player_card": player_val,
+                    "dealer_card": dealer_val,
+                    "round": self.game.round,
+                },
+            )
+            setattr(self.game, "metrics_logged", True)
             streak_info = EconomyManager.adjust_star_bonus(
                 self.player.id,
                 LuckyStars.GAME_KEY,
@@ -184,6 +198,19 @@ class LuckyStarsView(discord.ui.View):
             self.game.stars = self._star_streak
         else:
             summary += "  You lose this round."
+            session_id = getattr(self.game, "metrics_session_id", None)
+            MetricsManager.record_game_result(
+                session_id,
+                result="loss",
+                payout=0,
+                net=int(-self.game.bet),
+                metadata={
+                    "player_card": player_val,
+                    "dealer_card": dealer_val,
+                    "round": self.game.round,
+                },
+            )
+            setattr(self.game, "metrics_logged", True)
             if self._star_streak > 0:
                 streak_info = EconomyManager.adjust_star_bonus(
                     self.player.id,
@@ -295,6 +322,20 @@ class LuckyStarsView(discord.ui.View):
                     attachments=files,
                     view=None,
                 )
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="quit",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "round": self.game.round,
+                        "player_card": None,
+                        "dealer_card": None,
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
