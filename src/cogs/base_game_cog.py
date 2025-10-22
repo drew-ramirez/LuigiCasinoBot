@@ -6,6 +6,7 @@
 # gonna be docstringing everything here since reusable
 ###########################################################
 
+import asyncio
 from typing import Any, Callable, Optional
 
 import discord
@@ -23,12 +24,27 @@ BetSelectedCallback = Callable[[discord.Interaction, int], Any]
 class BaseGameCog(commands.Cog):
     """Base mixin for Luigi's Casino game Cogs"""
 
-    def __init__(self, bot, game_name: str, log_label: Optional[str] = None):
+    DEFAULT_SESSION_TIMEOUT_SECONDS = 60
+
+    def __init__(
+        self,
+        bot,
+        game_name: str,
+        log_label: Optional[str] = None,
+        *,
+        session_timeout_seconds: Optional[int] = None,
+    ):
         self.bot = bot
         self.game_name = game_name
         self.log_label = log_label or game_name
         self.metrics_game_key = self._compose_metric_key(self.log_label)
+        self.session_timeout_seconds = (
+            self.DEFAULT_SESSION_TIMEOUT_SECONDS
+            if session_timeout_seconds is None
+            else session_timeout_seconds
+        )
         self.active_games: dict[int, dict[str, Any]] = {}
+        self._timeout_tasks: dict[int, asyncio.Task[Any]] = {}
 
     @staticmethod
     def _compose_metric_key(label: str) -> str:
@@ -131,15 +147,203 @@ class BaseGameCog(commands.Cog):
         *,
         game: Any,
         message: Optional[discord.Message] = None,
+        view: Optional[discord.ui.View] = None,
     ) -> None:
         """Track the running game session for cleanup"""
+        existing_entry = self.active_games.pop(user_id, None)
+        if existing_entry:
+            self._cancel_timeout(user_id)
+            try:
+                asyncio.create_task(
+                    self._abandon_active_game(
+                        user_id,
+                        existing_entry,
+                    )
+                )
+            except RuntimeError:
+                # If no running loop is available, fall back to an immediate mark.
+                existing_game = existing_entry.get("game")
+                if existing_game is not None and not getattr(
+                    existing_game, "metrics_logged", False
+                ):
+                    metadata = self._collect_timeout_metadata(existing_game)
+                    metadata["timeout_type"] = "replaced"
+                    MetricsManager.record_game_timeout(
+                        getattr(existing_game, "metrics_session_id", None),
+                        reason="abandoned",
+                        metadata=metadata,
+                        immediate=True,
+                    )
+                    setattr(existing_game, "metrics_logged", True)
+                self._stop_view(existing_entry.get("view"))
+                self._schedule_message_update(
+                    existing_entry.get("message"),
+                    view=None,
+                    error_label="clear abandoned view",
+                    user_id=user_id,
+                )
+
         self.active_games[user_id] = {
             "game": game,
             "message": message,
+            "view": view,
         }
+        self._schedule_timeout(user_id)
 
     async def cleanup_game(self, user_id: int):
         """Remove tracked games once they end"""
-        if user_id in self.active_games:
-            self.active_games.pop(user_id, None)
+        self._cancel_timeout(user_id)
+        entry = self.active_games.pop(user_id, None)
+        if entry:
+            self._stop_view(entry.get("view"))
             print(f"[{self.log_label}] Cleaned up game for {user_id}")
+
+    def _schedule_timeout(self, user_id: int) -> None:
+        timeout = self.session_timeout_seconds
+        if timeout is None or timeout <= 0:
+            return
+        self._cancel_timeout(user_id)
+        task = asyncio.create_task(self._auto_timeout_game(user_id, timeout))
+        self._timeout_tasks[user_id] = task
+
+    def _cancel_timeout(self, user_id: int) -> None:
+        task = self._timeout_tasks.pop(user_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    @staticmethod
+    def _collect_timeout_metadata(game: Any) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        for attr in (
+            "remaining_attempts",
+            "session_stars",
+            "stars",
+            "round",
+            "turn",
+            "turns",
+            "score",
+        ):
+            value = getattr(game, attr, None)
+            if isinstance(value, (int, float, str)):
+                metadata[attr] = value
+        return metadata
+
+    def _finalize_timeout_cleanup(
+        self,
+        user_id: int,
+        entry: dict[str, Any],
+        *,
+        reason: str,
+    ) -> None:
+        current_entry = self.active_games.get(user_id)
+        if current_entry is entry:
+            self.active_games.pop(user_id, None)
+            print(f"[{self.log_label}] {reason} game for {user_id}")
+
+    async def _auto_timeout_game(self, user_id: int, timeout: int) -> None:
+        current_task = asyncio.current_task()
+        try:
+            await asyncio.sleep(timeout)
+            entry = self.active_games.get(user_id)
+            if not entry:
+                return
+            game = entry.get("game")
+            if game is None or getattr(game, "metrics_logged", False):
+                return
+
+            session_id = getattr(game, "metrics_session_id", None)
+            metadata = self._collect_timeout_metadata(game)
+            metadata["timeout_after_seconds"] = timeout
+            metadata["timeout_type"] = "auto"
+
+            MetricsManager.record_game_timeout(
+                session_id,
+                metadata=metadata,
+            )
+            setattr(game, "metrics_logged", True)
+
+            message = entry.get("message")
+            if message is not None:
+                try:
+                    self._stop_view(entry.get("view"))
+                    await message.edit(view=None)
+                except Exception as exc:  # pragma: no cover - defensive log
+                    print(
+                        f"[{self.log_label}] Failed to disable timed out view for {user_id}: {exc}"
+                    )
+
+            self._finalize_timeout_cleanup(
+                user_id,
+                entry,
+                reason="Timed out",
+            )
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._timeout_tasks.get(user_id) is current_task:
+                self._timeout_tasks.pop(user_id, None)
+
+    async def _abandon_active_game(
+        self,
+        user_id: int,
+        entry: dict[str, Any],
+    ) -> None:
+        game = entry.get("game")
+        if game is not None and not getattr(game, "metrics_logged", False):
+            metadata = self._collect_timeout_metadata(game)
+            metadata["timeout_type"] = "replaced"
+            MetricsManager.record_game_timeout(
+                getattr(game, "metrics_session_id", None),
+                reason="abandoned",
+                metadata=metadata,
+            )
+            setattr(game, "metrics_logged", True)
+
+        message = entry.get("message")
+        if message is not None:
+            try:
+                self._stop_view(entry.get("view"))
+                await message.edit(view=None)
+            except Exception as exc:  # pragma: no cover - defensive log
+                print(
+                    f"[{self.log_label}] Failed to disable abandoned view for {user_id}: {exc}"
+                )
+        print(f"[{self.log_label}] Abandoned game replaced for {user_id}")
+
+    def _schedule_message_update(
+        self,
+        message: Optional[discord.Message],
+        *,
+        view: Optional[discord.ui.View],
+        error_label: str,
+        user_id: int,
+    ) -> None:
+        if message is None:
+            return
+
+        async def runner() -> None:
+            try:
+                await message.edit(view=view)
+            except Exception as exc:  # pragma: no cover - best effort
+                print(
+                    f"[{self.log_label}] Failed to {error_label} for {user_id}: {exc}"
+                )
+
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(runner())
+        except RuntimeError:
+            try:
+                self.bot.loop.create_task(runner())
+            except Exception as exc:  # pragma: no cover - best effort
+                print(
+                    f"[{self.log_label}] Could not schedule {error_label} for {user_id}: {exc}"
+                )
+
+    @staticmethod
+    def _stop_view(view: Optional[discord.ui.View]) -> None:
+        if isinstance(view, discord.ui.View):
+            for item in view.children:
+                if hasattr(item, "disabled"):
+                    item.disabled = True
+            view.stop()

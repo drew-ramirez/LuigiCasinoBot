@@ -113,7 +113,12 @@ class PairAGoneCog(BaseGameCog):
             if message is not None:
                 view.msg = message
 
-            self.register_active_game(user_id, game=game, message=message)
+            self.register_active_game(
+                user_id,
+                game=game,
+                message=message,
+                view=view,
+            )
 
         layout_mode = (
             "gif"

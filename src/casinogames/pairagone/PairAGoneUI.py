@@ -338,8 +338,7 @@ class PairControls(discord.ui.View):
 
         session_stars = getattr(self.game, "session_stars", self.game.stars)
         summary = (
-            f"Board cleared! You won {payout} coins. Stars this session: {session_stars}. "
-            f"Streak: {streak_info['stars']} (Career {streak_info['career_total']})"
+            f"Board cleared! You won {payout} coins."
         )
 
         await self._apply_status(

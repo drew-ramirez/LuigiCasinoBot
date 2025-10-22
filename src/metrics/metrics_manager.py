@@ -32,6 +32,17 @@ class MetricsManager:
         return getattr(target, "id", None) if target is not None else None
 
     @staticmethod
+    def _normalize_id(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                from bson import ObjectId  # type: ignore
+
+                return ObjectId(value)
+            except Exception:
+                return value
+        return value
+
+    @staticmethod
     async def _run_async(callable_: Callable[[], None]) -> None:
         await asyncio.to_thread(callable_)
 
@@ -203,17 +214,7 @@ class MetricsManager:
         if session_id is None:
             return
 
-        def normalize_id(value: Any) -> Any:
-            if isinstance(value, str):
-                try:
-                    from bson import ObjectId  # type: ignore
-
-                    return ObjectId(value)
-                except Exception:
-                    return value
-            return value
-
-        target_id = normalize_id(session_id)
+        target_id = cls._normalize_id(session_id)
 
         def op() -> None:
             update: Dict[str, Any] = {
@@ -238,6 +239,64 @@ class MetricsManager:
         cls._dispatch_write(
             op,
             "MetricsManager game result update",
+            immediate=immediate,
+        )
+
+    @classmethod
+    def record_game_timeout(
+        cls,
+        session_id: Any,
+        *,
+        reason: str = "timeout",
+        metadata: Optional[Dict[str, Any]] = None,
+        immediate: bool = False,
+    ) -> None:
+        """Mark an incomplete session as a loss caused by abandonment or timeout."""
+        if session_id is None:
+            return
+
+        target_id = cls._normalize_id(session_id)
+
+        def op() -> None:
+            session_doc = cls.GAME_COLLECTION.find_one({"_id": target_id})
+            if not session_doc or session_doc.get("result") is not None:
+                return
+
+            stamped = cls._utcnow()
+            bet_amount = session_doc.get("bet_amount") or 0
+            try:
+                wager = abs(int(bet_amount))
+            except (TypeError, ValueError):
+                wager = 0
+
+            update: Dict[str, Any] = {
+                "result": "loss",
+                "payout": 0,
+                "net": -wager,
+                "completed_at": stamped,
+                "completion_reason": reason,
+                "timeout_logged_at": stamped,
+            }
+
+            started_at = session_doc.get("timestamp")
+            if isinstance(started_at, datetime):
+                update["duration_seconds"] = max(
+                    0.0,
+                    (stamped - started_at).total_seconds(),
+                )
+
+            if metadata:
+                update.update(metadata)
+
+            cls.GAME_COLLECTION.update_one(
+                {"_id": target_id},
+                {"$set": update},
+                upsert=False,
+            )
+
+        cls._dispatch_write(
+            op,
+            "MetricsManager game timeout update",
             immediate=immediate,
         )
 
