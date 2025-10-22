@@ -4,7 +4,7 @@
 # Description: Cog for Luigi's Casino - Picture Poker Game
 ###########################################################
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import discord
 from discord.ext import commands
@@ -46,8 +46,8 @@ class PicturePokerCog(BaseGameCog):
         }
 
     @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str], dict[str, Any]]:
-        def renderer(status: str) -> dict[str, Any]:
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
             stats = {
                 "active_bet": view.game.bet,
                 "stars_current": getattr(view.game, "stars", 0),
@@ -65,6 +65,8 @@ class PicturePokerCog(BaseGameCog):
                 stats,
                 attachment_filename=board_file.filename,
             )
+            if colour is not None and embed is not None:
+                embed.colour = colour
             return {
                 "content": content,
                 "embed": embed,

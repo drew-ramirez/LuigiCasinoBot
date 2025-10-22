@@ -4,7 +4,7 @@
 # Description: Luigi's Casino Memory Match command logic
 ###########################################################
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import discord
 from discord.ext import commands
@@ -34,8 +34,8 @@ class MemoryMatchCog(BaseGameCog):
         }
 
     @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str], dict[str, Any]]:
-        def renderer(status: str) -> dict[str, Any]:
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
             if getattr(view, "animations_enabled", False):
                 content = view._status_text(status)
                 files = [view._board_file()]
@@ -45,6 +45,8 @@ class MemoryMatchCog(BaseGameCog):
                     "attachments": files,
                 }
             embed, files = view._status_payload(status)
+            if colour is not None:
+                embed.colour = colour
             return {
                 "content": None,
                 "embed": embed,

@@ -4,7 +4,7 @@
 # Description: Pair-a-Gone command and entry point
 ###########################################################
 
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 import discord
 from discord.ext import commands
@@ -40,12 +40,14 @@ class PairAGoneCog(BaseGameCog):
         }
 
     @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str], dict[str, Any]]:
-        def renderer(status: str) -> dict[str, Any]:
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
             board = view._board_file()
             content, embed = view._header_payload(status)
             if embed is not None:
                 embed.set_image(url=f"attachment://{board.filename}")
+                if colour is not None:
+                    embed.colour = colour
             return {
                 "content": content,
                 "embed": embed,

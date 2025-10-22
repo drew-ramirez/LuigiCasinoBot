@@ -21,7 +21,7 @@ from metrics.metrics_manager import MetricsManager
 BetSelectedCallback = Callable[[discord.Interaction, int], Any]
 TimeoutMetadataCallback = Callable[[Any], dict[str, Any]]
 CleanupPayload = Dict[str, Any]
-CleanupRenderer = Callable[[str], Any]
+CleanupRenderer = Callable[[str, Optional[discord.Colour]], Any]
 
 
 class BaseGameCog(commands.Cog):
@@ -352,10 +352,13 @@ class BaseGameCog(commands.Cog):
         renderer = entry.get("cleanup_renderer")
         if renderer is not None:
             try:
-                result = renderer(status_message)
+                result = renderer(status_message, colour)
                 if asyncio.iscoroutine(result):
                     result = await result
                 if isinstance(result, dict):
+                    embed_obj = result.get("embed")
+                    if colour is not None and isinstance(embed_obj, discord.Embed):
+                        embed_obj.colour = colour
                     return result
             except Exception as exc:  # pragma: no cover - best effort
                 print(f"[{self.log_label}] Cleanup renderer failed: {exc}")
