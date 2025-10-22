@@ -82,8 +82,6 @@ class LuckyStarsCog(BaseGameCog):
             bet_amount: int,
             new_game: LuckyStars | None = None,
         ):
-            if not inter.response.is_done():
-                await inter.response.defer()
             if new_game is None:
                 EconomyManager.reset_star_bonus(
                     user_id,
@@ -150,8 +148,14 @@ class LuckyStarsCog(BaseGameCog):
                     view=view,
                 )
 
-            message = await inter.original_response()
-            view.msg = message
+            message = inter.message
+            if message is None:
+                try:
+                    message = await inter.original_response()
+                except Exception:
+                    message = None
+            if message is not None:
+                view.msg = message
 
             await self.register_active_game(
                 user_id,

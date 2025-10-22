@@ -396,7 +396,7 @@ class UserCog(commands.Cog):
             if getattr(self.bot, "user", None) is not None
             else None
         )
-        
+
         view = LeaderboardView(
             datasets,
             initial_key="balance",
@@ -480,19 +480,19 @@ class UserCog(commands.Cog):
 
         datasets = {
             "balance": {
-                "label": "Top 10 players in this server with the highest coin balance.",
+                "label": "Top 10 players in this server with the highest\n coin balance.",
                 "entries": balance_entries,
                 "select_label": "Coin Balance",
                 "emoji": get_coin_component_emoji(),
             },
             "games": {
-                "label": "Top 10 players in this server with the most games played.",
+                "label": "Top 10 players in this server with the most\n games played.",
                 "entries": games_entries,
                 "select_label": "Games Played",
                 "emoji": GAMES_EMOJI,
             },
             "cashout": {
-                "label": "Top 10 players in this server with the largest cashout.",
+                "label": "Top 10 players in this server with the\n largest cashout.",
                 "entries": cashout_entries,
                 "select_label": "Largest Cashout",
                 "emoji": get_cashout_component_emoji(),
