@@ -5,6 +5,7 @@
 ###########################################################
 
 import discord
+from typing import Optional
 from discord import app_commands
 from discord.ext import commands
 from economy.bank import Bank
@@ -390,8 +391,17 @@ class UserCog(commands.Cog):
             },
         }
 
+        guild = interaction.guild
         view = LeaderboardView(
-            datasets, initial_key="balance", requester=interaction.user
+            datasets,
+            initial_key="balance",
+            requester=interaction.user,
+            title=(
+                f"🏆 {guild.name} Leaderboard"
+                if guild is not None
+                else "🏆 Luigi's Casino Leaderboard"
+            ),
+            thumbnail_url=guild.icon.url if guild and guild.icon else None,
         )
         embed = view.build_embed()
         await interaction.followup.send(
@@ -489,7 +499,11 @@ class UserCog(commands.Cog):
         }
 
         view = LeaderboardView(
-            datasets, initial_key="balance", requester=interaction.user
+            datasets,
+            initial_key="balance",
+            requester=interaction.user,
+            title=f"🏆 {guild.name} Leaderboard",
+            thumbnail_url=guild.icon.url if guild.icon else None,
         )
         embed = view.build_embed()
         await interaction.followup.send(
@@ -624,12 +638,20 @@ class LeaderboardCategorySelect(discord.ui.Select):
 
 class LeaderboardView(discord.ui.View):
     def __init__(
-        self, datasets: dict[str, dict], initial_key: str, requester: discord.User
+        self,
+        datasets: dict[str, dict],
+        initial_key: str,
+        requester: discord.User,
+        *,
+        title: Optional[str] = None,
+        thumbnail_url: Optional[str] = None,
     ):
         super().__init__(timeout=120)
         self.datasets = datasets
         self.current_key = initial_key
         self.requester_id = requester.id
+        self.custom_title = title
+        self.thumbnail_url = thumbnail_url
         self.select_component = LeaderboardCategorySelect(self)
         self.add_item(self.select_component)
 
@@ -637,10 +659,12 @@ class LeaderboardView(discord.ui.View):
         data = self.datasets[self.current_key]
         # base embed
         embed = discord.Embed(
-            title="🏆 Luigi's Casino Leaderboard",
+            title=self.custom_title or "🏆 Luigi's Casino Leaderboard",
             description=data["label"],
             color=discord.Color.gold(),
         )
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         entries = data.get("entries", [])
         if entries:
             lines = []
