@@ -7,7 +7,7 @@
 ###########################################################
 
 import asyncio
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Dict
 
 import discord
 from discord.ext import commands
@@ -20,6 +20,8 @@ from metrics.metrics_manager import MetricsManager
 
 BetSelectedCallback = Callable[[discord.Interaction, int], Any]
 TimeoutMetadataCallback = Callable[[Any], dict[str, Any]]
+CleanupPayload = Dict[str, Any]
+CleanupRenderer = Callable[[str], Any]
 
 
 class BaseGameCog(commands.Cog):
@@ -150,6 +152,7 @@ class BaseGameCog(commands.Cog):
         message: Optional[discord.Message] = None,
         view: Optional[discord.ui.View] = None,
         timeout_metadata: Optional[TimeoutMetadataCallback] = None,
+        cleanup_renderer: Optional[CleanupRenderer] = None,
     ) -> None:
         """Track the running game session for cleanup"""
         existing_entry = self.active_games.pop(user_id, None)
@@ -165,6 +168,7 @@ class BaseGameCog(commands.Cog):
             "message": message,
             "view": view,
             "metadata": timeout_metadata,
+            "cleanup_renderer": cleanup_renderer,
         }
         self._schedule_timeout(user_id)
 
@@ -255,15 +259,11 @@ class BaseGameCog(commands.Cog):
             )
             setattr(game, "metrics_logged", True)
 
-            message = entry.get("message")
-            if message is not None:
-                try:
-                    self._stop_view(entry.get("view"))
-                    await message.edit(view=None)
-                except Exception as exc:  # pragma: no cover - defensive log
-                    print(
-                        f"[{self.log_label}] Failed to disable timed out view for {user_id}: {exc}"
-                    )
+            await self._finalize_session_message(
+                entry,
+                "Session timed out. Thaks for playing!",
+                colour=discord.Colour.red(),
+            )
 
             self._finalize_timeout_cleanup(
                 user_id,
@@ -303,27 +303,11 @@ class BaseGameCog(commands.Cog):
         entry: dict[str, Any],
         user_id: int,
     ) -> None:
-        view = entry.get("view")
-        self._stop_view(view)
-        message = entry.get("message") or getattr(view, "msg", None)
-        if message is None:
-            return
-
-        try:
-            notice = discord.Embed(
-                description="New session detected, thanks for playing!",
-                colour=discord.Colour.orange(),
-            )
-            await message.edit(
-                content=None,
-                embed=notice,
-                attachments=[],
-                view=None,
-            )
-        except discord.NotFound:
-            return
-        except Exception as exc:  # pragma: no cover - best effort
-            print(f"[{self.log_label}] Failed to notify abandoned session for {user_id}: {exc}")
+        await self._finalize_session_message(
+            entry,
+            "New session detected, thanks for playing!",
+            colour=discord.Colour.orange(),
+        )
 
     @staticmethod
     def _stop_view(view: Optional[discord.ui.View]) -> None:
@@ -332,3 +316,52 @@ class BaseGameCog(commands.Cog):
                 if hasattr(item, "disabled"):
                     item.disabled = True
             view.stop()
+
+    async def _finalize_session_message(
+        self,
+        entry: dict[str, Any],
+        status_message: str,
+        *,
+        colour: discord.Colour | None = None,
+    ) -> None:
+        view = entry.get("view")
+        self._stop_view(view)
+        message = entry.get("message") or getattr(view, "msg", None)
+        if message is None:
+            return
+
+        payload = await self._render_cleanup_payload(entry, status_message, colour=colour)
+        payload.setdefault("view", None)
+        if "attachments" not in payload or payload.get("attachments") is None:
+            payload["attachments"] = []
+
+        try:
+            await message.edit(**payload)
+        except discord.NotFound:
+            return
+        except Exception as exc:  # pragma: no cover - best effort
+            print(f"[{self.log_label}] Failed to apply cleanup message for {entry.get('game')}: {exc}")
+
+    async def _render_cleanup_payload(
+        self,
+        entry: dict[str, Any],
+        status_message: str,
+        *,
+        colour: discord.Colour | None = None,
+    ) -> CleanupPayload:
+        renderer = entry.get("cleanup_renderer")
+        if renderer is not None:
+            try:
+                result = renderer(status_message)
+                if asyncio.iscoroutine(result):
+                    result = await result
+                if isinstance(result, dict):
+                    return result
+            except Exception as exc:  # pragma: no cover - best effort
+                print(f"[{self.log_label}] Cleanup renderer failed: {exc}")
+
+        embed = discord.Embed(
+            description=status_message,
+            colour=colour or discord.Colour.orange(),
+        )
+        return {"content": None, "embed": embed}

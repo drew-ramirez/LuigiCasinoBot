@@ -109,7 +109,7 @@ class PicturePokerView(discord.ui.View):
     def __init__(
         self,
         game: PicturePoker,
-        user_id: int,
+        player: discord.abc.User,
         on_finish,
         *,
         animations_enabled: bool,
@@ -119,7 +119,8 @@ class PicturePokerView(discord.ui.View):
     ):
         super().__init__(timeout=None)
         self.game = game
-        self.user_id = user_id
+        self.player = player
+        self.user_id = player.id
         self.selected_discards = set()
         self.on_finish = on_finish  # callback to Cog cleanup/restart
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
@@ -659,7 +660,7 @@ class PicturePokerView(discord.ui.View):
 ###########################################################
 def make_poker_view(
     game: PicturePoker,
-    user_id: int,
+    player: discord.abc.User,
     on_finish,
     *,
     animations_enabled: bool,
@@ -669,7 +670,7 @@ def make_poker_view(
 ) -> PicturePokerView:
     return PicturePokerView(
         game,
-        user_id,
+        player,
         on_finish,
         animations_enabled=animations_enabled,
         wager_options=wager_options,

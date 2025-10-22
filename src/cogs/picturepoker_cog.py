@@ -4,7 +4,7 @@
 # Description: Cog for Luigi's Casino - Picture Poker Game
 ###########################################################
 
-from typing import Any
+from typing import Any, Callable
 
 import discord
 from discord.ext import commands
@@ -44,6 +44,34 @@ class PicturePokerCog(BaseGameCog):
             "dealer_rank": dealer_rank,
             "round": getattr(game, "round", None),
         }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str], dict[str, Any]]:
+        def renderer(status: str) -> dict[str, Any]:
+            stats = {
+                "active_bet": view.game.bet,
+                "stars_current": getattr(view.game, "stars", 0),
+                "dealer_action": status,
+            }
+            board_bytes = render_board(view.game, reveal=True)
+            if hasattr(board_bytes, "seek"):
+                try:
+                    board_bytes.seek(0)
+                except Exception:
+                    pass
+            board_file = discord.File(board_bytes, "poker.png")
+            content, embed = view._header_payload(
+                view.player,
+                stats,
+                attachment_filename=board_file.filename,
+            )
+            return {
+                "content": content,
+                "embed": embed,
+                "attachments": [board_file],
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -115,7 +143,7 @@ class PicturePokerCog(BaseGameCog):
 
             view = make_poker_view(
                 target_game,
-                user_id,
+                inter.user,
                 self.cleanup_game,
                 animations_enabled=animations_on,
                 start_game_callback=start_game,
@@ -157,11 +185,12 @@ class PicturePokerCog(BaseGameCog):
                 view.msg = message
 
             await self.register_active_game(
-                user_id,
+                inter.user.id,
                 game=target_game,
                 message=message,
                 view=view,
                 timeout_metadata=self._picturepoker_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
             )
 
         layout_mode = (

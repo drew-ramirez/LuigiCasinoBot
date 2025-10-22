@@ -4,7 +4,7 @@
 # Description: Cog for Luigi's Casino - Lucky Stars Game
 ###########################################################
 
-from typing import Any
+from typing import Any, Callable
 
 import discord
 from discord.ext import commands
@@ -41,6 +41,24 @@ class LuckyStarsCog(BaseGameCog):
             "dealer_card": dealer_card,
             "round": getattr(game, "round", None),
         }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str], dict[str, Any]]:
+        def renderer(status: str) -> dict[str, Any]:
+            if getattr(view, "animations_enabled", False):
+                return {
+                    "content": view._header_text(status),
+                    "embed": None,
+                    "attachments": [view._board_file(reveal=True)],
+                }
+            embed, files = view._embed_payload(status, reveal=True)
+            return {
+                "content": None,
+                "embed": embed,
+                "attachments": files,
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -139,6 +157,7 @@ class LuckyStarsCog(BaseGameCog):
                 message=message,
                 view=view,
                 timeout_metadata=self._luckystars_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
             )
 
         layout_mode = (
