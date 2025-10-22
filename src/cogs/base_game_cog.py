@@ -261,7 +261,7 @@ class BaseGameCog(commands.Cog):
 
             await self._finalize_session_message(
                 entry,
-                "Session timed out. Thaks for playing!",
+                "Session timed out. Thanks for playing!",
                 colour=discord.Colour.red(),
             )
 
