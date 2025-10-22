@@ -647,7 +647,7 @@ class LeaderboardView(discord.ui.View):
         title: Optional[str] = None,
         thumbnail_url: Optional[str] = None,
     ):
-        super().__init__(timeout=120)
+        super().__init__(timeout=480)
         self.datasets = datasets
         self.current_key = initial_key
         self.requester_id = requester.id

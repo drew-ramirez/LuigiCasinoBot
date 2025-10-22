@@ -27,7 +27,7 @@ CleanupRenderer = Callable[[str, Optional[discord.Colour]], Any]
 class BaseGameCog(commands.Cog):
     """Base mixin for Luigi's Casino game Cogs"""
 
-    DEFAULT_SESSION_TIMEOUT_SECONDS = 60
+    DEFAULT_SESSION_TIMEOUT_SECONDS = 480
 
     def __init__(
         self,
