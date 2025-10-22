@@ -391,17 +391,18 @@ class UserCog(commands.Cog):
             },
         }
 
-        guild = interaction.guild
+        bot_avatar = (
+            self.bot.user.display_avatar.url  # type: ignore[attr-defined]
+            if getattr(self.bot, "user", None) is not None
+            else None
+        )
+        
         view = LeaderboardView(
             datasets,
             initial_key="balance",
             requester=interaction.user,
-            title=(
-                f"🏆 {guild.name} Leaderboard"
-                if guild is not None
-                else "🏆 Luigi's Casino Leaderboard"
-            ),
-            thumbnail_url=guild.icon.url if guild and guild.icon else None,
+            title="🏆 Luigi's Casino Leaderboard",
+            thumbnail_url=bot_avatar,
         )
         embed = view.build_embed()
         await interaction.followup.send(

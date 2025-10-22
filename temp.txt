@@ -1,0 +1,31 @@
+            },
+            "cashout": {
+                "label": "Top 10 players with the largest cashout.",
+                "entries": build_entries(
+                    list(collection.find().sort("biggest_cashout", -1).limit(10)),
+                    "biggest_cashout",
+                    lambda v: f"{v:,}",
+                ),
+                "select_label": "Largest Cashout",
+                "emoji": get_cashout_component_emoji(),
+            },
+        }
+
+        guild = interaction.guild
+        view = LeaderboardView(
+            datasets,
+            initial_key="balance",
+            requester=interaction.user,
+            title=(
+                f"?? {guild.name} Leaderboard"
+                if guild is not None
+                else "?? Luigi's Casino Leaderboard"
+            ),
+            thumbnail_url=(
+                guild.icon.url
+                if guild and guild.icon
+                else "https://cdn.discordapp.com/attachments/1152358584709773373/1280564152075026472/luigi_croupier.jpg"
+            ),
+        )
+        embed = view.build_embed()
+        await interaction.followup.send(
