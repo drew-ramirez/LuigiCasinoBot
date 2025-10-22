@@ -123,7 +123,7 @@ class MemoryMatchCog(BaseGameCog):
             message = await inter.original_response()
             view.msg = message
 
-            self.register_active_game(
+            await self.register_active_game(
                 user_id,
                 game=game,
                 message=message,

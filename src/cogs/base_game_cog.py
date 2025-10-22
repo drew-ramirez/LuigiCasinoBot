@@ -142,7 +142,7 @@ class BaseGameCog(commands.Cog):
                 ephemeral=ephemeral_flag,
             )
 
-    def register_active_game(
+    async def register_active_game(
         self,
         user_id: int,
         *,
@@ -155,38 +155,10 @@ class BaseGameCog(commands.Cog):
         existing_entry = self.active_games.pop(user_id, None)
         if existing_entry:
             self._cancel_timeout(user_id)
-            try:
-                asyncio.create_task(
-                    self._abandon_active_game(
-                        user_id,
-                        existing_entry,
-                    )
-                )
-            except RuntimeError:
-                # If no running loop is available, fall back to an immediate mark.
-                existing_game = existing_entry.get("game")
-                if existing_game is not None and not getattr(
-                    existing_game, "metrics_logged", False
-                ):
-                    metadata = self._collect_timeout_metadata(
-                        existing_game,
-                        existing_entry.get("metadata"),
-                    )
-                    metadata["timeout_type"] = "replaced"
-                    MetricsManager.record_game_timeout(
-                        getattr(existing_game, "metrics_session_id", None),
-                        reason="abandoned",
-                        metadata=metadata,
-                        immediate=True,
-                    )
-                    setattr(existing_game, "metrics_logged", True)
-                self._stop_view(existing_entry.get("view"))
-                self._schedule_message_update(
-                    existing_entry.get("message"),
-                    view=None,
-                    error_label="clear abandoned view",
-                    user_id=user_id,
-                )
+            await self._abandon_active_game(
+                user_id,
+                existing_entry,
+            )
 
         self.active_games[user_id] = {
             "game": game,
@@ -323,46 +295,35 @@ class BaseGameCog(commands.Cog):
             )
             setattr(game, "metrics_logged", True)
 
-        message = entry.get("message")
-        if message is not None:
-            try:
-                self._stop_view(entry.get("view"))
-                await message.edit(view=None)
-            except Exception as exc:  # pragma: no cover - defensive log
-                print(
-                    f"[{self.log_label}] Failed to disable abandoned view for {user_id}: {exc}"
-                )
+        await self._notify_abandoned_session(entry, user_id)
         print(f"[{self.log_label}] Abandoned game replaced for {user_id}")
 
-    def _schedule_message_update(
+    async def _notify_abandoned_session(
         self,
-        message: Optional[discord.Message],
-        *,
-        view: Optional[discord.ui.View],
-        error_label: str,
+        entry: dict[str, Any],
         user_id: int,
     ) -> None:
+        view = entry.get("view")
+        self._stop_view(view)
+        message = entry.get("message") or getattr(view, "msg", None)
         if message is None:
             return
 
-        async def runner() -> None:
-            try:
-                await message.edit(view=view)
-            except Exception as exc:  # pragma: no cover - best effort
-                print(
-                    f"[{self.log_label}] Failed to {error_label} for {user_id}: {exc}"
-                )
-
         try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(runner())
-        except RuntimeError:
-            try:
-                self.bot.loop.create_task(runner())
-            except Exception as exc:  # pragma: no cover - best effort
-                print(
-                    f"[{self.log_label}] Could not schedule {error_label} for {user_id}: {exc}"
-                )
+            notice = discord.Embed(
+                description="New session detected, thanks for playing!",
+                colour=discord.Colour.orange(),
+            )
+            await message.edit(
+                content=None,
+                embed=notice,
+                attachments=[],
+                view=None,
+            )
+        except discord.NotFound:
+            return
+        except Exception as exc:  # pragma: no cover - best effort
+            print(f"[{self.log_label}] Failed to notify abandoned session for {user_id}: {exc}")
 
     @staticmethod
     def _stop_view(view: Optional[discord.ui.View]) -> None:

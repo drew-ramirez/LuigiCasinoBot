@@ -132,7 +132,7 @@ class PairAGoneCog(BaseGameCog):
             if message is not None:
                 view.msg = message
 
-            self.register_active_game(
+            await self.register_active_game(
                 user_id,
                 game=game,
                 message=message,
