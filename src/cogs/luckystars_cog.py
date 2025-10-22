@@ -4,6 +4,8 @@
 # Description: Cog for Luigi's Casino - Lucky Stars Game
 ###########################################################
 
+from typing import Any
+
 import discord
 from discord.ext import commands
 
@@ -18,6 +20,27 @@ from economy.EconomyManager import EconomyManager
 class LuckyStarsCog(BaseGameCog):
     def __init__(self, bot):
         super().__init__(bot, "Lucky Stars", log_label="LuckyStars")
+
+    @staticmethod
+    def _luckystars_timeout_metadata(game: LuckyStars) -> dict[str, Any]:
+        left_card = getattr(game, "left_card", None)
+        right_card = getattr(game, "right_card", None)
+        picked = getattr(game, "picked", None)
+        if picked == 0:
+            player_card = left_card
+            dealer_card = right_card
+        elif picked == 1:
+            player_card = right_card
+            dealer_card = left_card
+        else:
+            player_card = None
+            dealer_card = None
+
+        return {
+            "player_card": player_card,
+            "dealer_card": dealer_card,
+            "round": getattr(game, "round", None),
+        }
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -115,6 +138,7 @@ class LuckyStarsCog(BaseGameCog):
                 game=game,
                 message=message,
                 view=view,
+                timeout_metadata=self._luckystars_timeout_metadata,
             )
 
         layout_mode = (

@@ -4,6 +4,8 @@
 # Description: Luigi's Casino Memory Match command logic
 ###########################################################
 
+from typing import Any
+
 import discord
 from discord.ext import commands
 from cogs.base_game_cog import BaseGameCog
@@ -19,6 +21,17 @@ class MemoryMatchCog(BaseGameCog):
 
     def __init__(self, bot):
         super().__init__(bot, "Memory Match", log_label="MemoryMatch")
+
+    @staticmethod
+    def _memorymatch_timeout_metadata(game: MemoryMatch) -> dict[str, Any]:
+        return {
+            "remaining_attempts": getattr(game, "remaining_attempts", None),
+            "session_stars": getattr(
+                game,
+                "session_stars",
+                getattr(game, "stars", None),
+            ),
+        }
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -115,6 +128,7 @@ class MemoryMatchCog(BaseGameCog):
                 game=game,
                 message=message,
                 view=view,
+                timeout_metadata=self._memorymatch_timeout_metadata,
             )
 
         layout_mode = (

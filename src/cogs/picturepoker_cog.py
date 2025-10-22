@@ -4,6 +4,8 @@
 # Description: Cog for Luigi's Casino - Picture Poker Game
 ###########################################################
 
+from typing import Any
+
 import discord
 from discord.ext import commands
 
@@ -18,6 +20,30 @@ from economy.EconomyManager import EconomyManager
 class PicturePokerCog(BaseGameCog):
     def __init__(self, bot):
         super().__init__(bot, "Picture Poker", log_label="PicturePoker")
+
+    @staticmethod
+    def _picturepoker_timeout_metadata(game: PicturePoker) -> dict[str, Any]:
+        player_rank = None
+        dealer_rank = None
+        try:
+            player_hand = getattr(game, "player_hand", None)
+            if player_hand:
+                _, player_rank = game.evaluate_hand(player_hand)
+        except Exception:
+            player_rank = None
+
+        try:
+            dealer_hand = getattr(game, "luigi_hand", None)
+            if dealer_hand:
+                _, dealer_rank = game.evaluate_hand(dealer_hand)
+        except Exception:
+            dealer_rank = None
+
+        return {
+            "player_rank": player_rank,
+            "dealer_rank": dealer_rank,
+            "round": getattr(game, "round", None),
+        }
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -135,6 +161,7 @@ class PicturePokerCog(BaseGameCog):
                 game=target_game,
                 message=message,
                 view=view,
+                timeout_metadata=self._picturepoker_timeout_metadata,
             )
 
         layout_mode = (

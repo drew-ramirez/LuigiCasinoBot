@@ -4,6 +4,8 @@
 # Description: Pair-a-Gone command and entry point
 ###########################################################
 
+from typing import Any
+
 import discord
 from discord.ext import commands
 from cogs.base_game_cog import BaseGameCog
@@ -19,6 +21,23 @@ class PairAGoneCog(BaseGameCog):
 
     def __init__(self, bot):
         super().__init__(bot, "Pair-a-Gone", log_label="PairAGone")
+
+    @staticmethod
+    def _pairagone_timeout_metadata(game: PairAGone) -> dict[str, Any]:
+        remaining = None
+        if hasattr(game, "remaining_in_deck"):
+            try:
+                remaining = game.remaining_in_deck()
+            except Exception:
+                remaining = None
+        return {
+            "remaining_deck": remaining,
+            "session_stars": getattr(
+                game,
+                "session_stars",
+                getattr(game, "stars", None),
+            ),
+        }
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -118,6 +137,7 @@ class PairAGoneCog(BaseGameCog):
                 game=game,
                 message=message,
                 view=view,
+                timeout_metadata=self._pairagone_timeout_metadata,
             )
 
         layout_mode = (

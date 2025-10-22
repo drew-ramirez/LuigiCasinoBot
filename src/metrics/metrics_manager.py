@@ -280,9 +280,19 @@ class MetricsManager:
 
             started_at = session_doc.get("timestamp")
             if isinstance(started_at, datetime):
+                normalized_started = started_at
+                if normalized_started.tzinfo is None:
+                    normalized_started = normalized_started.replace(
+                        tzinfo=timezone.utc
+                    )
+                normalized_stamped = stamped
+                if normalized_stamped.tzinfo is None:
+                    normalized_stamped = normalized_stamped.replace(
+                        tzinfo=timezone.utc
+                    )
                 update["duration_seconds"] = max(
                     0.0,
-                    (stamped - started_at).total_seconds(),
+                    (normalized_stamped - normalized_started).total_seconds(),
                 )
 
             if metadata:

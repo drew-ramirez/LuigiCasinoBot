@@ -19,6 +19,7 @@ from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 
 BetSelectedCallback = Callable[[discord.Interaction, int], Any]
+TimeoutMetadataCallback = Callable[[Any], dict[str, Any]]
 
 
 class BaseGameCog(commands.Cog):
@@ -148,6 +149,7 @@ class BaseGameCog(commands.Cog):
         game: Any,
         message: Optional[discord.Message] = None,
         view: Optional[discord.ui.View] = None,
+        timeout_metadata: Optional[TimeoutMetadataCallback] = None,
     ) -> None:
         """Track the running game session for cleanup"""
         existing_entry = self.active_games.pop(user_id, None)
@@ -166,7 +168,10 @@ class BaseGameCog(commands.Cog):
                 if existing_game is not None and not getattr(
                     existing_game, "metrics_logged", False
                 ):
-                    metadata = self._collect_timeout_metadata(existing_game)
+                    metadata = self._collect_timeout_metadata(
+                        existing_game,
+                        existing_entry.get("metadata"),
+                    )
                     metadata["timeout_type"] = "replaced"
                     MetricsManager.record_game_timeout(
                         getattr(existing_game, "metrics_session_id", None),
@@ -187,6 +192,7 @@ class BaseGameCog(commands.Cog):
             "game": game,
             "message": message,
             "view": view,
+            "metadata": timeout_metadata,
         }
         self._schedule_timeout(user_id)
 
@@ -211,8 +217,11 @@ class BaseGameCog(commands.Cog):
         if task and not task.done():
             task.cancel()
 
-    @staticmethod
-    def _collect_timeout_metadata(game: Any) -> dict[str, Any]:
+    def _collect_timeout_metadata(
+        self,
+        game: Any,
+        metadata_provider: Optional[TimeoutMetadataCallback] = None,
+    ) -> dict[str, Any]:
         metadata: dict[str, Any] = {}
         for attr in (
             "remaining_attempts",
@@ -226,6 +235,15 @@ class BaseGameCog(commands.Cog):
             value = getattr(game, attr, None)
             if isinstance(value, (int, float, str)):
                 metadata[attr] = value
+        if metadata_provider is not None:
+            try:
+                extra = metadata_provider(game)
+                if isinstance(extra, dict):
+                    metadata.update(extra)
+            except Exception as exc:  # pragma: no cover - defensive log
+                print(
+                    f"[{self.log_label}] Failed to gather timeout metadata: {exc}"
+                )
         return metadata
 
     def _finalize_timeout_cleanup(
@@ -252,7 +270,10 @@ class BaseGameCog(commands.Cog):
                 return
 
             session_id = getattr(game, "metrics_session_id", None)
-            metadata = self._collect_timeout_metadata(game)
+            metadata = self._collect_timeout_metadata(
+                game,
+                entry.get("metadata"),
+            )
             metadata["timeout_after_seconds"] = timeout
             metadata["timeout_type"] = "auto"
 
@@ -290,7 +311,10 @@ class BaseGameCog(commands.Cog):
     ) -> None:
         game = entry.get("game")
         if game is not None and not getattr(game, "metrics_logged", False):
-            metadata = self._collect_timeout_metadata(game)
+            metadata = self._collect_timeout_metadata(
+                game,
+                entry.get("metadata"),
+            )
             metadata["timeout_type"] = "replaced"
             MetricsManager.record_game_timeout(
                 getattr(game, "metrics_session_id", None),
