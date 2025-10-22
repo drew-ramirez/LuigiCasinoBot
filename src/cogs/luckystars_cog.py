@@ -4,6 +4,8 @@
 # Description: Cog for Luigi's Casino - Lucky Stars Game
 ###########################################################
 
+from typing import Any, Callable, Optional
+
 import discord
 from discord.ext import commands
 
@@ -18,6 +20,47 @@ from economy.EconomyManager import EconomyManager
 class LuckyStarsCog(BaseGameCog):
     def __init__(self, bot):
         super().__init__(bot, "Lucky Stars", log_label="LuckyStars")
+
+    @staticmethod
+    def _luckystars_timeout_metadata(game: LuckyStars) -> dict[str, Any]:
+        left_card = getattr(game, "left_card", None)
+        right_card = getattr(game, "right_card", None)
+        picked = getattr(game, "picked", None)
+        if picked == 0:
+            player_card = left_card
+            dealer_card = right_card
+        elif picked == 1:
+            player_card = right_card
+            dealer_card = left_card
+        else:
+            player_card = None
+            dealer_card = None
+
+        return {
+            "player_card": player_card,
+            "dealer_card": dealer_card,
+            "round": getattr(game, "round", None),
+        }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
+            if getattr(view, "animations_enabled", False):
+                return {
+                    "content": view._header_text(status),
+                    "embed": None,
+                    "attachments": [view._board_file(reveal=True)],
+                }
+            embed, files = view._embed_payload(status, reveal=True)
+            if colour is not None:
+                embed.colour = colour
+            return {
+                "content": None,
+                "embed": embed,
+                "attachments": files,
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -39,12 +82,25 @@ class LuckyStarsCog(BaseGameCog):
             bet_amount: int,
             new_game: LuckyStars | None = None,
         ):
-            game = new_game or LuckyStars(bet_amount)
-            game.deal_round()
+            if new_game is None:
+                EconomyManager.reset_star_bonus(
+                    user_id,
+                    LuckyStars.GAME_KEY,
+                    inter.user.name,
+                )
+                game = LuckyStars(
+                    bet_amount,
+                    initial_stars=0,
+                )
+            else:
+                game = new_game
+            if game.left_card is None or game.right_card is None:
+                game.deal_round()
             self.log_game_start(
                 inter,
                 "casino_luckystars",
                 bet_amount=bet_amount,
+                game=game,
             )
 
             animations_on = EconomyManager.animations_enabled(
@@ -55,10 +111,13 @@ class LuckyStarsCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="lucky.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                game.stars, LuckyStars.GAME_KEY
+            )
             stats = {
                 "active_bet": game.bet,
-                "stars_current": 0,
-                "dealer_action": "Pick a card!",
+                "stars_current": game.stars,
+                "dealer_action": f"Pick a card! | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_lucky_controls(
@@ -89,10 +148,23 @@ class LuckyStarsCog(BaseGameCog):
                     view=view,
                 )
 
-            message = await inter.original_response()
-            view.msg = message
+            message = inter.message
+            if message is None:
+                try:
+                    message = await inter.original_response()
+                except Exception:
+                    message = None
+            if message is not None:
+                view.msg = message
 
-            self.register_active_game(user_id, game=game, message=message)
+            await self.register_active_game(
+                user_id,
+                game=game,
+                message=message,
+                view=view,
+                timeout_metadata=self._luckystars_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
+            )
 
         layout_mode = (
             "gif"

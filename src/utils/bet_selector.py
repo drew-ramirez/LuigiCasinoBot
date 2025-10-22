@@ -22,7 +22,7 @@ class BetSelectView(discord.ui.View):
         max_bet: int = 5,
         wager_options: list[int] | None = None,
     ):
-        super().__init__(timeout=30)
+        super().__init__(timeout=120)
         self.user_id = user_id
         self.username = username
         self.on_bet_selected = on_bet_selected

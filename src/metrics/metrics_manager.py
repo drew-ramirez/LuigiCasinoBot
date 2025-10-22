@@ -32,6 +32,17 @@ class MetricsManager:
         return getattr(target, "id", None) if target is not None else None
 
     @staticmethod
+    def _normalize_id(value: Any) -> Any:
+        if isinstance(value, str):
+            try:
+                from bson import ObjectId  # type: ignore
+
+                return ObjectId(value)
+            except Exception:
+                return value
+        return value
+
+    @staticmethod
     async def _run_async(callable_: Callable[[], None]) -> None:
         await asyncio.to_thread(callable_)
 
@@ -163,7 +174,7 @@ class MetricsManager:
         source_command: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         immediate: bool = False,
-    ) -> None:
+    ) -> Optional[Any]:
         """Log that a user has started a new game session."""
         doc = cls._game_doc(
             interaction,
@@ -172,9 +183,130 @@ class MetricsManager:
             source_command=source_command,
             metadata=metadata,
         )
+        inserted_id: Dict[str, Any] = {}
+
+        def op() -> None:
+            result = cls.GAME_COLLECTION.insert_one(doc)
+            inserted_id["value"] = result.inserted_id
+
         cls._dispatch_write(
-            lambda: cls.GAME_COLLECTION.insert_one(doc),
+            op,
             "MetricsManager game insert",
+            immediate=immediate,
+        )
+        return inserted_id.get("value")
+
+    @classmethod
+    def record_game_result(
+        cls,
+        session_id: Any,
+        *,
+        result: str,
+        payout: int = 0,
+        net: int = 0,
+        turns: Optional[int] = None,
+        duration_seconds: Optional[float] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        immediate: bool = False,
+    ) -> None:
+        """Attach the outcome of a game session to an existing metrics record."""
+
+        if session_id is None:
+            return
+
+        target_id = cls._normalize_id(session_id)
+
+        def op() -> None:
+            update: Dict[str, Any] = {
+                "result": result,
+                "payout": int(payout),
+                "net": int(net),
+                "completed_at": cls._utcnow(),
+            }
+            if turns is not None:
+                update["turns"] = int(turns)
+            if duration_seconds is not None:
+                update["duration_seconds"] = float(duration_seconds)
+            if metadata:
+                update.update(metadata)
+
+            cls.GAME_COLLECTION.update_one(
+                {"_id": target_id},
+                {"$set": update},
+                upsert=False,
+            )
+
+        cls._dispatch_write(
+            op,
+            "MetricsManager game result update",
+            immediate=immediate,
+        )
+
+    @classmethod
+    def record_game_timeout(
+        cls,
+        session_id: Any,
+        *,
+        reason: str = "timeout",
+        metadata: Optional[Dict[str, Any]] = None,
+        immediate: bool = False,
+    ) -> None:
+        """Mark an incomplete session as a loss caused by abandonment or timeout."""
+        if session_id is None:
+            return
+
+        target_id = cls._normalize_id(session_id)
+
+        def op() -> None:
+            session_doc = cls.GAME_COLLECTION.find_one({"_id": target_id})
+            if not session_doc or session_doc.get("result") is not None:
+                return
+
+            stamped = cls._utcnow()
+            bet_amount = session_doc.get("bet_amount") or 0
+            try:
+                wager = abs(int(bet_amount))
+            except (TypeError, ValueError):
+                wager = 0
+
+            update: Dict[str, Any] = {
+                "result": "loss",
+                "payout": 0,
+                "net": -wager,
+                "completed_at": stamped,
+                "completion_reason": reason,
+                "timeout_logged_at": stamped,
+            }
+
+            started_at = session_doc.get("timestamp")
+            if isinstance(started_at, datetime):
+                normalized_started = started_at
+                if normalized_started.tzinfo is None:
+                    normalized_started = normalized_started.replace(
+                        tzinfo=timezone.utc
+                    )
+                normalized_stamped = stamped
+                if normalized_stamped.tzinfo is None:
+                    normalized_stamped = normalized_stamped.replace(
+                        tzinfo=timezone.utc
+                    )
+                update["duration_seconds"] = max(
+                    0.0,
+                    (normalized_stamped - normalized_started).total_seconds(),
+                )
+
+            if metadata:
+                update.update(metadata)
+
+            cls.GAME_COLLECTION.update_one(
+                {"_id": target_id},
+                {"$set": update},
+                upsert=False,
+            )
+
+        cls._dispatch_write(
+            op,
+            "MetricsManager game timeout update",
             immediate=immediate,
         )
 

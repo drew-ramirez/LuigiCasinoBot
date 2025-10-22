@@ -4,6 +4,8 @@
 # Description: Cog for Luigi's Casino - Picture Poker Game
 ###########################################################
 
+from typing import Any, Callable, Optional
+
 import discord
 from discord.ext import commands
 
@@ -18,6 +20,60 @@ from economy.EconomyManager import EconomyManager
 class PicturePokerCog(BaseGameCog):
     def __init__(self, bot):
         super().__init__(bot, "Picture Poker", log_label="PicturePoker")
+
+    @staticmethod
+    def _picturepoker_timeout_metadata(game: PicturePoker) -> dict[str, Any]:
+        player_rank = None
+        dealer_rank = None
+        try:
+            player_hand = getattr(game, "player_hand", None)
+            if player_hand:
+                _, player_rank = game.evaluate_hand(player_hand)
+        except Exception:
+            player_rank = None
+
+        try:
+            dealer_hand = getattr(game, "luigi_hand", None)
+            if dealer_hand:
+                _, dealer_rank = game.evaluate_hand(dealer_hand)
+        except Exception:
+            dealer_rank = None
+
+        return {
+            "player_rank": player_rank,
+            "dealer_rank": dealer_rank,
+            "round": getattr(game, "round", None),
+        }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
+            stats = {
+                "active_bet": view.game.bet,
+                "stars_current": getattr(view.game, "stars", 0),
+                "dealer_action": status,
+            }
+            board_bytes = render_board(view.game, reveal=True)
+            if hasattr(board_bytes, "seek"):
+                try:
+                    board_bytes.seek(0)
+                except Exception:
+                    pass
+            board_file = discord.File(board_bytes, "poker.png")
+            content, embed = view._header_payload(
+                view.player,
+                stats,
+                attachment_filename=board_file.filename,
+            )
+            if colour is not None and embed is not None:
+                embed.colour = colour
+            return {
+                "content": content,
+                "embed": embed,
+                "attachments": [board_file],
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -45,14 +101,21 @@ class PicturePokerCog(BaseGameCog):
             bet_amount: int,
             new_game: PicturePoker | None = None,
         ):
-            entry = self.active_games.get(user_id) or {}
-            existing_game = entry.get("game") if isinstance(entry, dict) else None
-            target_game = new_game or existing_game or PicturePoker()
+            if new_game is None:
+                EconomyManager.reset_star_bonus(
+                    user_id,
+                    PicturePoker.GAME_KEY,
+                    inter.user.name,
+                )
+                target_game = PicturePoker()
+            else:
+                target_game = new_game
             target_game.start_round(forced_bet=bet_amount)
             self.log_game_start(
                 inter,
                 "casino_picturepoker",
                 bet_amount=bet_amount,
+                game=target_game,
             )
             animations_on = EconomyManager.animations_enabled(
                 inter.user.id, inter.user.name
@@ -66,17 +129,23 @@ class PicturePokerCog(BaseGameCog):
                     pass
             board_file = discord.File(board_bytes, filename="poker.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                target_game.stars, PicturePoker.GAME_KEY
+            )
             stats = {
                 "active_bet": target_game.bet,
                 "stars_current": target_game.stars,
                 "round": target_game.round,
-                "multiplier": 1.0,
-                "dealer_action": "New game started! \nSelect cards to discard then submit.",
+                "multiplier": multiplier,
+                "dealer_action": (
+                    "New game started! \n Select cards to discard then submit.\n"
+                    f" (⭐ bonus x{multiplier:.2f})"
+                ),
             }
 
             view = make_poker_view(
                 target_game,
-                user_id,
+                inter.user,
                 self.cleanup_game,
                 animations_enabled=animations_on,
                 start_game_callback=start_game,
@@ -117,7 +186,14 @@ class PicturePokerCog(BaseGameCog):
             if message is not None:
                 view.msg = message
 
-            self.register_active_game(user_id, game=target_game, message=message)
+            await self.register_active_game(
+                inter.user.id,
+                game=target_game,
+                message=message,
+                view=view,
+                timeout_metadata=self._picturepoker_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
+            )
 
         layout_mode = (
             "gif"

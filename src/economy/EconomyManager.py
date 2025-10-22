@@ -110,11 +110,19 @@ class EconomyManager:
             return 0
 
     @staticmethod
-    def star_bonus_multiplier(stars: int) -> float:
-        base_bonus = 0.05  # +5% per star
-        max_bonus = 0.50  # cap at +50%
-        bonus = min(max(stars, 0) * base_bonus, max_bonus)
-        return round(1.0 + bonus, 4)
+    def star_bonus_multiplier(stars: int, game_key: str | None = None) -> float:
+        rules: dict[str | None, tuple[float, float]] = {
+            "pairagone": (0.25, 2.5),
+            "memorymatch": (0.25, 2.5),
+            "picturepoker": (0.15, 2.5),
+            "luckystars": (0.15, 2.5),
+            None: (0.05, 1.5),
+        }
+        increment, max_multiplier = rules.get(game_key, rules[None])
+        stars = max(0, int(stars))
+        multiplier = 1.0 + (stars * increment)
+        multiplier = min(multiplier, max_multiplier)
+        return round(multiplier, 4)
 
     @staticmethod
     def adjust_star_bonus(
@@ -158,7 +166,7 @@ class EconomyManager:
         career_total = record.get("career_stars_total", 0) + max(
             0, int(career_increment)
         )
-        multiplier = EconomyManager.star_bonus_multiplier(new_value)
+        multiplier = EconomyManager.star_bonus_multiplier(new_value, game_key)
 
         return {
             "stars": new_value,

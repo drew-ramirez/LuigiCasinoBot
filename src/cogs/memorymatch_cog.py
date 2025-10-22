@@ -4,6 +4,8 @@
 # Description: Luigi's Casino Memory Match command logic
 ###########################################################
 
+from typing import Any, Callable, Optional
+
 import discord
 from discord.ext import commands
 from cogs.base_game_cog import BaseGameCog
@@ -19,6 +21,39 @@ class MemoryMatchCog(BaseGameCog):
 
     def __init__(self, bot):
         super().__init__(bot, "Memory Match", log_label="MemoryMatch")
+
+    @staticmethod
+    def _memorymatch_timeout_metadata(game: MemoryMatch) -> dict[str, Any]:
+        return {
+            "remaining_attempts": getattr(game, "remaining_attempts", None),
+            "session_stars": getattr(
+                game,
+                "session_stars",
+                getattr(game, "stars", None),
+            ),
+        }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
+            if getattr(view, "animations_enabled", False):
+                content = view._status_text(status)
+                files = [view._board_file()]
+                return {
+                    "content": content,
+                    "embed": None,
+                    "attachments": files,
+                }
+            embed, files = view._status_payload(status)
+            if colour is not None:
+                embed.colour = colour
+            return {
+                "content": None,
+                "embed": embed,
+                "attachments": files,
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -42,11 +77,24 @@ class MemoryMatchCog(BaseGameCog):
             bet_amount: int,
             new_game: MemoryMatch | None = None,
         ):
-            game = new_game or MemoryMatch(user_id, bet_amount)
+            if new_game is None:
+                EconomyManager.reset_star_bonus(
+                    user_id,
+                    MemoryMatch.GAME_KEY,
+                    inter.user.name,
+                )
+                game = MemoryMatch(
+                    user_id,
+                    bet_amount,
+                    initial_stars=0,
+                )
+            else:
+                game = new_game
             self.log_game_start(
                 inter,
                 "casino_memorymatch",
                 bet_amount=bet_amount,
+                game=game,
             )
 
             animations_on = EconomyManager.animations_enabled(
@@ -57,10 +105,13 @@ class MemoryMatchCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="memory_board.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                game.stars, MemoryMatch.GAME_KEY
+            )
             stats = {
                 "active_bet": game.bet,
                 "stars_current": game.stars,
-                "dealer_action": f"Attempts left: {game.remaining_attempts}",
+                "dealer_action": f"Attempts left: {game.remaining_attempts} | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_memory_view(
@@ -94,7 +145,14 @@ class MemoryMatchCog(BaseGameCog):
             message = await inter.original_response()
             view.msg = message
 
-            self.register_active_game(user_id, game=game, message=message)
+            await self.register_active_game(
+                user_id,
+                game=game,
+                message=message,
+                view=view,
+                timeout_metadata=self._memorymatch_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
+            )
 
         layout_mode = (
             "gif"

@@ -5,6 +5,7 @@
 ###########################################################
 
 import discord
+from typing import Optional
 from discord import app_commands
 from discord.ext import commands
 from economy.bank import Bank
@@ -23,6 +24,7 @@ from utils.emoji_config import (
 )
 
 bank = Bank()
+GAMES_EMOJI = "\N{GAME DIE}"
 
 
 ###########################################################
@@ -138,7 +140,7 @@ class UserCog(commands.Cog):
         )
         embed.add_field(
             name="Games Played",
-            value=f"🎲 {games_played:,}",
+            value=f"{GAMES_EMOJI} {games_played:,}",
             inline=True,
         )
         embed.add_field(
@@ -375,7 +377,7 @@ class UserCog(commands.Cog):
                     lambda v: f"{v:,}",
                 ),
                 "select_label": "Games Played",
-                "emoji": "🎲",
+                "emoji": GAMES_EMOJI,
             },
             "cashout": {
                 "label": "Top 10 players with the largest cashout.",
@@ -389,8 +391,120 @@ class UserCog(commands.Cog):
             },
         }
 
+        bot_avatar = (
+            self.bot.user.display_avatar.url  # type: ignore[attr-defined]
+            if getattr(self.bot, "user", None) is not None
+            else None
+        )
+
         view = LeaderboardView(
-            datasets, initial_key="balance", requester=interaction.user
+            datasets,
+            initial_key="balance",
+            requester=interaction.user,
+            title="🏆 Luigi's Casino Leaderboard",
+            thumbnail_url=bot_avatar,
+        )
+        embed = view.build_embed()
+        await interaction.followup.send(
+            embed=embed, view=view, ephemeral=visibility.ephemeral
+        )
+
+    @discord.app_commands.command(
+        name="casino_server_leaderboard",
+        description="Show top casino players in this server for Luigi's Casino",
+    )
+    async def server_leaderboard(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        if guild is None:
+            await safe_send(
+                interaction,
+                content="This command is only available inside a server.",
+                ephemeral=True,
+            )
+            return
+
+        visibility = resolve_command_visibility(interaction, "server_leaderboard")
+        await interaction.response.defer(ephemeral=visibility.ephemeral)
+        MetricsManager.record_command_event(interaction, "casino_server_leaderboard")
+
+        collection = EconomyManager.COLLECTION
+
+        member_cache: dict[int, discord.Member] = {}
+
+        async def resolve_member(uid: int) -> discord.Member | None:
+            cached = member_cache.get(uid)
+            if cached is not None:
+                return cached
+            member = guild.get_member(uid)
+            if member is not None:
+                member_cache[uid] = member
+                return member
+            try:
+                member = await guild.fetch_member(uid)
+            except (discord.NotFound, discord.HTTPException, discord.Forbidden):
+                return None
+            member_cache[uid] = member
+            return member
+
+        async def build_entries(metric: str, formatter) -> list[dict]:
+            entries: list[dict] = []
+            cursor = collection.find().sort(metric, -1).limit(200)
+            for record in cursor:
+                if len(entries) >= 10:
+                    break
+                uid = record.get("user_id")
+                if not isinstance(uid, int):
+                    continue
+                member = await resolve_member(uid)
+                if member is None:
+                    continue
+                value = record.get(metric, 0) or 0
+                entries.append(
+                    {
+                        "name": member.display_name,
+                        "value": formatter(value),
+                        "avatar": member.display_avatar.url,
+                    }
+                )
+            return entries
+
+        balance_entries = await build_entries(
+            "balance", lambda v: f"{v:,} coins"
+        )
+        games_entries = await build_entries(
+            "games_played", lambda v: f"{v:,}"
+        )
+        cashout_entries = await build_entries(
+            "biggest_cashout", lambda v: f"{v:,}"
+        )
+
+        datasets = {
+            "balance": {
+                "label": "Top 10 players in this server with the highest\n coin balance.",
+                "entries": balance_entries,
+                "select_label": "Coin Balance",
+                "emoji": get_coin_component_emoji(),
+            },
+            "games": {
+                "label": "Top 10 players in this server with the most\n games played.",
+                "entries": games_entries,
+                "select_label": "Games Played",
+                "emoji": GAMES_EMOJI,
+            },
+            "cashout": {
+                "label": "Top 10 players in this server with the\n largest cashout.",
+                "entries": cashout_entries,
+                "select_label": "Largest Cashout",
+                "emoji": get_cashout_component_emoji(),
+            },
+        }
+
+        view = LeaderboardView(
+            datasets,
+            initial_key="balance",
+            requester=interaction.user,
+            title=f"🏆 {guild.name} Leaderboard",
+            thumbnail_url=guild.icon.url if guild.icon else None,
         )
         embed = view.build_embed()
         await interaction.followup.send(
@@ -525,12 +639,20 @@ class LeaderboardCategorySelect(discord.ui.Select):
 
 class LeaderboardView(discord.ui.View):
     def __init__(
-        self, datasets: dict[str, dict], initial_key: str, requester: discord.User
+        self,
+        datasets: dict[str, dict],
+        initial_key: str,
+        requester: discord.User,
+        *,
+        title: Optional[str] = None,
+        thumbnail_url: Optional[str] = None,
     ):
-        super().__init__(timeout=120)
+        super().__init__(timeout=480)
         self.datasets = datasets
         self.current_key = initial_key
         self.requester_id = requester.id
+        self.custom_title = title
+        self.thumbnail_url = thumbnail_url
         self.select_component = LeaderboardCategorySelect(self)
         self.add_item(self.select_component)
 
@@ -538,10 +660,12 @@ class LeaderboardView(discord.ui.View):
         data = self.datasets[self.current_key]
         # base embed
         embed = discord.Embed(
-            title="🏆 Luigi's Casino Leaderboard",
+            title=self.custom_title or "🏆 Luigi's Casino Leaderboard",
             description=data["label"],
             color=discord.Color.gold(),
         )
+        if self.thumbnail_url:
+            embed.set_thumbnail(url=self.thumbnail_url)
         entries = data.get("entries", [])
         if entries:
             lines = []

@@ -20,12 +20,15 @@ from casinogames.pairagone.PairAGonePrint import (
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 faces = load_memory_faces()
 backs = load_memory_backs()
 
 
 class PairControls(discord.ui.View):
+    GAME_KEY = PairAGone.GAME_KEY
+
     def __init__(
         self,
         game: PairAGone,
@@ -60,9 +63,19 @@ class PairControls(discord.ui.View):
         action = (
             dealer_action or f"Cards remaining in deck: {self.game.remaining_in_deck()}"
         )
+        streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            getattr(self.player, "name", "Unknown"),
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(streak, self.GAME_KEY)
+        if action:
+            action = f"{action} \n(⭐ bonus x{multiplier:.2f})"
+        else:
+            action = f"\n(⭐ bonus x{multiplier:.2f})"
         return {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": getattr(self.game, "session_stars", self.game.stars),
             "dealer_action": action,
         }
 
@@ -180,9 +193,13 @@ class PairControls(discord.ui.View):
 
         if not is_match:
             self._refresh_buttons()
+            attachments = None
+            if not self.animations_enabled:
+                attachments = [self._board_file()]
             await self._apply_status(
                 msg,
                 "No match!",
+                attachments=attachments,
                 view=self,
             )
             return
@@ -211,7 +228,7 @@ class PairControls(discord.ui.View):
             new_cards = self.game.remove_and_fall([a, b])
             if new_cards:
                 action = (
-                    f"Match! Dealer replaces cards. Cards remaining: "
+                    f"Match! Cards in Deck: "
                     f"{self.game.remaining_in_deck()}"
                 )
             else:
@@ -286,19 +303,66 @@ class PairControls(discord.ui.View):
         )
 
     async def _handle_board_cleared(self, msg: discord.Message):
+        player_name = getattr(self.player, "name", "Unknown")
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            player_name,
+        )
+        multiplier = EconomyManager.star_bonus_multiplier(current_streak, self.GAME_KEY)
+        base_payout = self.game.bet * 2
+        payout = int(round(base_payout * multiplier))
+
         self.game.handle_game_end(won=True)
-        payout = self.game.bet * 2
-        EconomyManager.payout(self.player.id, payout, self.player.name)
+        EconomyManager.payout(self.player.id, payout, player_name)
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="win",
+            payout=payout,
+            net=int(payout - self.game.bet),
+            metadata={
+                "remaining_deck": self.game.remaining_in_deck(),
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
+
+        streak_info = EconomyManager.adjust_star_bonus(
+            self.player.id,
+            self.GAME_KEY,
+            delta=1,
+            username=player_name,
+            career_increment=1,
+        )
+
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
+        summary = (
+            f"Board cleared! You won {payout} coins."
+        )
 
         await self._apply_status(
             msg,
-            f"Board cleared! You won {payout} coins. Stars: {self.game.stars}",
+            summary,
             attachments=[self._board_file()],
             view=None,
         )
         await self._show_replay(msg)
 
     async def _handle_no_moves(self, msg: discord.Message):
+        player_name = getattr(self.player, "name", "Unknown")
+        current_streak = EconomyManager.star_bonus_count(
+            self.player.id,
+            self.GAME_KEY,
+            player_name,
+        )
+        if current_streak > 0:
+            EconomyManager.adjust_star_bonus(
+                self.player.id,
+                self.GAME_KEY,
+                delta=-1,
+                username=player_name,
+            )
         self.game.handle_game_end(won=False)
         await self._apply_status(
             msg,
@@ -306,6 +370,18 @@ class PairControls(discord.ui.View):
             attachments=[self._board_file()],
             view=None,
         )
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="loss",
+            payout=0,
+            net=int(-self.game.bet),
+            metadata={
+                "remaining_deck": self.game.remaining_in_deck(),
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
         await self._show_replay(msg)
 
     async def _show_replay(self, msg: discord.Message):
@@ -334,7 +410,16 @@ class PairControls(discord.ui.View):
                 async def on_bet_selected(
                     inner_inter: discord.Interaction, bet_amount: int
                 ):
-                    new_game = PairAGone(self.player.id, bet_amount)
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.player.id,
+                        self.GAME_KEY,
+                        player_name,
+                    )
+                    new_game = PairAGone(
+                        self.player.id,
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    )
                     await self.start_game_callback(
                         inner_inter,
                         bet_amount,
@@ -376,6 +461,19 @@ class PairControls(discord.ui.View):
                     attachments=[self._board_file()],
                     view=None,
                 )
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="quit",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "remaining_deck": self.game.remaining_in_deck(),
+                        "session_stars": getattr(self.game, "session_stars", self.game.stars),
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
             if self.on_finish is not None:
                 await self.on_finish(self.player.id)
 

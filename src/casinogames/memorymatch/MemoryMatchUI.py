@@ -16,6 +16,7 @@ from casinogames.memorymatch.MemoryMatchPrint import (
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 # this'll probably be better for future iterations
 FLIP_FRAME_DURATION_MS = 90
@@ -27,7 +28,7 @@ UNFLIP_ANIMATION_DELAY = 0.45
 
 class MemoryMatchControls(discord.ui.View):
     #persistent view for Memory Match with per-card callbacks
-    GAME_KEY = "memorymatch"
+    GAME_KEY = MemoryMatch.GAME_KEY
 
     def __init__(
         self,
@@ -47,8 +48,8 @@ class MemoryMatchControls(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.msg: discord.Message | None = None
         self.animations_enabled = animations_enabled
-        self._pending_star_gain: bool = False
         self._pending_next_streak: int | None = None
+        self._last_streak_info: dict | None = None
 
         self._build_buttons()
 
@@ -84,15 +85,18 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            streak, MemoryMatch.GAME_KEY
+        )
         streak_summary = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             action = f"{action} | {streak_summary}"
         else:
             action = streak_summary
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": session_stars,
             "dealer_action": action,
         }
         embed = make_game_header(self.player, "Memory Match", stats)
@@ -119,15 +123,18 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            streak, MemoryMatch.GAME_KEY
+        )
         streak_summary = f"(⭐ bonus x{multiplier:.2f})"
         if action:
             action = f"{action} | {streak_summary}"
         else:
             action = streak_summary
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": self.game.stars,
+            "stars_current": session_stars,
             "dealer_action": action,
         }
         return make_gif_game_header(self.player, "Memory Match", stats)
@@ -196,7 +203,7 @@ class MemoryMatchControls(discord.ui.View):
             await msg.edit(view=self)
 
             embed, files = self._status_payload(
-                f"Revealed card {pos + 1}.",
+                f"Attempts left: {self.game.remaining_attempts}",
             )
             await msg.edit(
                 content=None,
@@ -300,14 +307,40 @@ class MemoryMatchControls(discord.ui.View):
             self.GAME_KEY,
             self.player.name,
         )
-        multiplier = EconomyManager.star_bonus_multiplier(current_streak)
+        multiplier = EconomyManager.star_bonus_multiplier(
+            current_streak, MemoryMatch.GAME_KEY
+        )
         payout_base = self.game.bet * 2
         payout = int(round(payout_base * multiplier))
         EconomyManager.payout(self.player.id, payout, self.player.name)
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="win",
+            payout=payout,
+            net=int(payout - self.game.bet),
+            metadata={
+                "remaining_attempts": self.game.remaining_attempts,
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
 
+        streak_info = EconomyManager.adjust_star_bonus(
+            self.player.id,
+            self.GAME_KEY,
+            delta=1,
+            username=self.player.name,
+            career_increment=1,
+        )
+        self._last_streak_info = streak_info
+        self._pending_next_streak = streak_info["stars"] + 1
+        self.game.award_star()
+
+        session_stars = getattr(self.game, "session_stars", self.game.stars)
         summary = (
-            f"Board cleared! You won {payout} coins \n"
-            "Continue or Exit Now?"
+            f"Board cleared! You won {payout} coins.\n"
+            " Continue or Exit Now?"
         )
         if self.animations_enabled:
             await msg.edit(
@@ -319,8 +352,6 @@ class MemoryMatchControls(discord.ui.View):
             embed, files = self._status_payload(summary, attachment=final_board)
             await msg.edit(content=None, embed=embed, attachments=files, view=None)
 
-        self._pending_star_gain = True
-        self._pending_next_streak = current_streak + 1
         await self._prompt_continue(
             msg,
             next_streak=self._pending_next_streak,
@@ -340,7 +371,7 @@ class MemoryMatchControls(discord.ui.View):
                 username=self.player.name,
             )
 
-        self._pending_star_gain = False
+        self._last_streak_info = None
 
         if self.animations_enabled:
             await msg.edit(
@@ -356,10 +387,24 @@ class MemoryMatchControls(discord.ui.View):
                 attachments=files,
                 view=None,
             )
+        session_id = getattr(self.game, "metrics_session_id", None)
+        MetricsManager.record_game_result(
+            session_id,
+            result="loss",
+            payout=0,
+            net=int(-self.game.bet),
+            metadata={
+                "remaining_attempts": self.game.remaining_attempts,
+                "session_stars": getattr(self.game, "session_stars", self.game.stars),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
         await self._show_replay(msg)
 
     async def _prompt_continue(self, msg: discord.Message, next_streak: int):
-        multiplier_next = EconomyManager.star_bonus_multiplier(next_streak)
+        multiplier_next = EconomyManager.star_bonus_multiplier(
+            next_streak, MemoryMatch.GAME_KEY
+        )
         continue_btn = discord.ui.Button(
             label=f"Continue (next bonus x{multiplier_next:.2f})",
             style=discord.ButtonStyle.green,
@@ -374,31 +419,24 @@ class MemoryMatchControls(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            streak_info = None
-            if self._pending_star_gain:
-                streak_info = EconomyManager.adjust_star_bonus(
-                    self.player.id,
-                    self.GAME_KEY,
-                    delta=1,
-                    username=self.player.name,
-                    career_increment=1,
-                )
-                self._pending_star_gain = False
-                self._pending_next_streak = streak_info["stars"] + 1
-                self.game.next_level()
-            else:
+            if self._last_streak_info is None:
                 current = EconomyManager.star_bonus_count(
                     self.player.id,
                     self.GAME_KEY,
                     self.player.name,
                 )
-                streak_info = {
+                self._last_streak_info = {
                     "stars": current,
                     "career_total": EconomyManager.ensure_user(
                         self.player.id, self.player.name
                     ).get("career_stars_total", 0),
-                    "multiplier": EconomyManager.star_bonus_multiplier(current),
+                    "multiplier": EconomyManager.star_bonus_multiplier(
+                        current, MemoryMatch.GAME_KEY
+                    ),
                 }
+            streak_info = self._last_streak_info
+            self._last_streak_info = None
+            self.game.generate_board()
             await self._start_next_round(msg, streak_info=streak_info)
 
         async def cash_out_cb(btn_inter: discord.Interaction):
@@ -406,21 +444,34 @@ class MemoryMatchControls(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
-            self._pending_star_gain = False
-            summary = f"Cashed out at round {self.game.stars+1}"
+            self._last_streak_info = None
+            session_stars = getattr(self.game, "session_stars", self.game.stars)
+            summary = f"Cashed out at round {session_stars}"
+            final_board = self._board_file()
             if self.animations_enabled:
                 await msg.edit(
                     content=self._status_text(summary),
-                    attachments=[],
+                    attachments=[final_board],
                     view=None,
                 )
             else:
-                embed, files = self._status_payload(
-                    summary, include_board=False
-                )
+                embed, files = self._status_payload(summary)
                 await msg.edit(
                     content=None, embed=embed, attachments=files, view=None
                 )
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="cashout",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "remaining_attempts": self.game.remaining_attempts,
+                        "session_stars": session_stars,
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
             await self._show_replay(msg)
 
         continue_btn.callback = continue_cb
@@ -441,7 +492,7 @@ class MemoryMatchControls(discord.ui.View):
         next_target = self._pending_next_streak
         if next_target:
             note = (
-                f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
+                #f" Next bonus will x{EconomyManager.star_bonus_multiplier(next_target):.2f}."
             )
         message = f"New board ready!\n{note}" if note else "New board ready!"
         if self.animations_enabled:
@@ -476,7 +527,16 @@ class MemoryMatchControls(discord.ui.View):
                         )
                         return
 
-                    new_game = MemoryMatch(self.player.id, bet_amount)
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.player.id,
+                        self.GAME_KEY,
+                        self.player.name,
+                    )
+                    new_game = MemoryMatch(
+                        self.player.id,
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    )
                     await self.start_game_callback(
                         inner_inter,
                         bet_amount,
@@ -499,6 +559,19 @@ class MemoryMatchControls(discord.ui.View):
                 await btn_inter.response.send_message("Not your game!", ephemeral=True)
                 return
             await btn_inter.response.defer()
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="quit",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "remaining_attempts": self.game.remaining_attempts,
+                        "session_stars": getattr(self.game, "session_stars", self.game.stars),
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
             await msg.edit(view=None)
 
         replay_btn.callback = replay_cb

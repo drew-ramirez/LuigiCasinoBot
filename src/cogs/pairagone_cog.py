@@ -4,6 +4,8 @@
 # Description: Pair-a-Gone command and entry point
 ###########################################################
 
+from typing import Any, Callable, Optional
+
 import discord
 from discord.ext import commands
 from cogs.base_game_cog import BaseGameCog
@@ -19,6 +21,40 @@ class PairAGoneCog(BaseGameCog):
 
     def __init__(self, bot):
         super().__init__(bot, "Pair-a-Gone", log_label="PairAGone")
+
+    @staticmethod
+    def _pairagone_timeout_metadata(game: PairAGone) -> dict[str, Any]:
+        remaining = None
+        if hasattr(game, "remaining_in_deck"):
+            try:
+                remaining = game.remaining_in_deck()
+            except Exception:
+                remaining = None
+        return {
+            "remaining_deck": remaining,
+            "session_stars": getattr(
+                game,
+                "session_stars",
+                getattr(game, "stars", None),
+            ),
+        }
+
+    @staticmethod
+    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
+        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
+            board = view._board_file()
+            content, embed = view._header_payload(status)
+            if embed is not None:
+                embed.set_image(url=f"attachment://{board.filename}")
+                if colour is not None:
+                    embed.colour = colour
+            return {
+                "content": content,
+                "embed": embed,
+                "attachments": [board],
+            }
+
+        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -40,11 +76,24 @@ class PairAGoneCog(BaseGameCog):
             bet_amount: int,
             new_game: PairAGone | None = None,
         ):
-            game = new_game or PairAGone(user_id, bet_amount)
+            if new_game is None:
+                initial_stars = EconomyManager.star_bonus_count(
+                    user_id,
+                    PairAGone.GAME_KEY,
+                    inter.user.name,
+                )
+                game = PairAGone(
+                    user_id,
+                    bet_amount,
+                    initial_stars=initial_stars,
+                )
+            else:
+                game = new_game
             self.log_game_start(
                 inter,
                 "casino_pairagone",
                 bet_amount=bet_amount,
+                game=game,
             )
             animations_on = EconomyManager.animations_enabled(
                 inter.user.id, inter.user.name
@@ -54,10 +103,14 @@ class PairAGoneCog(BaseGameCog):
             board_bytes.seek(0)
             board_file = discord.File(board_bytes, filename="pair_board.png")
 
+            multiplier = EconomyManager.star_bonus_multiplier(
+                getattr(game, "session_stars", game.stars),
+                PairAGone.GAME_KEY,
+            )
             stats = {
                 "active_bet": game.bet,
-                "stars_current": game.stars,
-                "dealer_action": "Select two adjacent matching cards!",
+                "stars_current": getattr(game, "session_stars", game.stars),
+                "dealer_action": f"Select two adjacent matching cards! | (⭐ bonus x{multiplier:.2f})",
             }
 
             view = make_pair_view(
@@ -96,7 +149,14 @@ class PairAGoneCog(BaseGameCog):
             if message is not None:
                 view.msg = message
 
-            self.register_active_game(user_id, game=game, message=message)
+            await self.register_active_game(
+                user_id,
+                game=game,
+                message=message,
+                view=view,
+                timeout_metadata=self._pairagone_timeout_metadata,
+                cleanup_renderer=self._make_cleanup_renderer(view),
+            )
 
         layout_mode = (
             "gif"

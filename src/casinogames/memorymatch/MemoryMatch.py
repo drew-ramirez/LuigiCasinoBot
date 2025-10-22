@@ -3,6 +3,7 @@ from typing import List, Tuple
 from casinogames.core.BaseGame import BaseGame
 
 class MemoryMatch(BaseGame):
+    GAME_KEY = "memorymatch"
     # Board layout constants
     COLS = 4
     ROWS = 2
@@ -38,12 +39,20 @@ class MemoryMatch(BaseGame):
         ),
     ]
 
-    def __init__(self, player_id: int, bet: int, base_attempts: int = 3):
+    def __init__(
+        self,
+        player_id: int,
+        bet: int,
+        base_attempts: int = 3,
+        *,
+        initial_stars: int = 0,
+    ):
         self.player_id = player_id
         self.bet = max(1, bet)
         self.base_attempts = max(1, base_attempts)
         self.remaining_attempts = self.base_attempts
-        self.stars = 0
+        self.stars = max(0, int(initial_stars))
+        self.session_stars = 0
         self.board = []           # [(symbol, is_flipped, is_matched)]
         self.symbols = []
         self.revealed = []        # positions currently flipped
@@ -141,6 +150,7 @@ class MemoryMatch(BaseGame):
 
     def award_star(self):
         self.stars += 1
+        self.session_stars += 1
         self.remaining_attempts = self.base_attempts * 2
         self.match_streak = 0
         self.last_bonus_awarded = False

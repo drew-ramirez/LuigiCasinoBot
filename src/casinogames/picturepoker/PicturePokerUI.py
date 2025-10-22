@@ -23,6 +23,7 @@ from utils.bet_selector import DEFAULT_WAGER_OPTIONS, BetSelectView
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 from utils.emoji_config import get_coin_emoji, picture_poker_emojis
+from metrics.metrics_manager import MetricsManager
 
 
 ###########################################################
@@ -108,7 +109,7 @@ class PicturePokerView(discord.ui.View):
     def __init__(
         self,
         game: PicturePoker,
-        user_id: int,
+        player: discord.abc.User,
         on_finish,
         *,
         animations_enabled: bool,
@@ -118,7 +119,8 @@ class PicturePokerView(discord.ui.View):
     ):
         super().__init__(timeout=None)
         self.game = game
-        self.user_id = user_id
+        self.player = player
+        self.user_id = player.id
         self.selected_discards = set()
         self.on_finish = on_finish  # callback to Cog cleanup/restart
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
@@ -456,18 +458,61 @@ class PicturePokerView(discord.ui.View):
         bet_amount = result.get("bet", self.game.bet)
         delta_symbol = ""
         coins_display = coins
+        session_id = getattr(self.game, "metrics_session_id", None)
+        payout_logged = 0
+        net_logged = 0
+        outcome_tag = outcome or "push"
 
         if outcome == "win":
             payout_total = bet_amount + coins
             EconomyManager.payout(user.id, payout_total, user.name)
             delta_symbol = "+"
+            payout_logged = int(payout_total)
+            net_logged = int(coins)
         elif outcome == "lose":
             delta_symbol = "-"
             coins_display = bet_amount
+            payout_logged = 0
+            net_logged = int(-bet_amount)
         else:
             EconomyManager.payout(user.id, bet_amount, user.name)
             coins_display = bet_amount
             delta_symbol = "+"
+            payout_logged = int(bet_amount)
+            net_logged = 0
+
+        player_name = getattr(user, "name", "Unknown")
+        streak_info: dict[str, float | int]
+        current_streak = EconomyManager.star_bonus_count(
+            user.id,
+            PicturePoker.GAME_KEY,
+            player_name,
+        )
+
+        if outcome == "win":
+            streak_info = EconomyManager.adjust_star_bonus(
+                user.id,
+                PicturePoker.GAME_KEY,
+                delta=1,
+                username=player_name,
+                career_increment=1,
+            )
+        elif outcome == "lose" and current_streak > 0:
+            streak_info = EconomyManager.adjust_star_bonus(
+                user.id,
+                PicturePoker.GAME_KEY,
+                delta=-1,
+                username=player_name,
+            )
+        else:
+            record = EconomyManager.ensure_user(user.id, player_name)
+            streak_info = {
+                "stars": current_streak,
+                "career_total": record.get("career_stars_total", 0),
+                "multiplier": EconomyManager.star_bonus_multiplier(
+                    current_streak, PicturePoker.GAME_KEY
+                ),
+            }
 
         summary_result = dict(result)
         summary_result["coins"] = coins_display
@@ -501,6 +546,19 @@ class PicturePokerView(discord.ui.View):
             interaction=interaction,
         )
 
+        MetricsManager.record_game_result(
+            session_id,
+            result=outcome_tag,
+            payout=payout_logged,
+            net=net_logged,
+            metadata={
+                "player_rank": result.get("player_rank"),
+                "dealer_rank": result.get("luigi_rank"),
+                "round": result.get("round", self.game.round),
+            },
+        )
+        setattr(self.game, "metrics_logged", True)
+
         # D) Replay / Quit buttons
         replay_btn = discord.ui.Button(
             label="Play Again", style=discord.ButtonStyle.green
@@ -514,8 +572,6 @@ class PicturePokerView(discord.ui.View):
             await btn_inter.response.defer()
 
             def make_wager_callback():
-                new_game = PicturePoker()
-
                 async def on_bet_selected(
                     inner_inter: discord.Interaction, bet_amount: int
                 ):
@@ -524,6 +580,13 @@ class PicturePokerView(discord.ui.View):
                             "Unable to start new game right now.", ephemeral=True
                         )
                         return
+
+                    initial_stars = EconomyManager.star_bonus_count(
+                        self.user_id,
+                        PicturePoker.GAME_KEY,
+                        inner_inter.user.name,
+                    )
+                    new_game = PicturePoker(starting_stars=initial_stars)
 
                     await self.start_game_callback(
                         inner_inter, bet_amount, new_game=new_game
@@ -597,7 +660,7 @@ class PicturePokerView(discord.ui.View):
 ###########################################################
 def make_poker_view(
     game: PicturePoker,
-    user_id: int,
+    player: discord.abc.User,
     on_finish,
     *,
     animations_enabled: bool,
@@ -607,7 +670,7 @@ def make_poker_view(
 ) -> PicturePokerView:
     return PicturePokerView(
         game,
-        user_id,
+        player,
         on_finish,
         animations_enabled=animations_enabled,
         wager_options=wager_options,

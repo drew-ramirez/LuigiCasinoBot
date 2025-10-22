@@ -18,6 +18,7 @@ from casinogames.luckystars.LuckyStarsPrint import (
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
+from metrics.metrics_manager import MetricsManager
 
 faces = load_memory_faces()
 backs = load_memory_backs()
@@ -47,6 +48,12 @@ class LuckyStarsView(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.msg = message
         self.animations_enabled = animations_enabled
+        self._player_name = getattr(player, "name", "Unknown")
+        self._star_streak = EconomyManager.star_bonus_count(
+            player.id,
+            LuckyStars.GAME_KEY,
+            self._player_name,
+        )
 
         self.left_button = LuckyStarsButton("Left", 0)
         self.right_button = LuckyStarsButton("Right", 1)
@@ -68,13 +75,22 @@ class LuckyStarsView(discord.ui.View):
         board.seek(0)
         return discord.File(board, filename)
 
+    def _annotate_action(self, action: str | None = None) -> str:
+        multiplier = EconomyManager.star_bonus_multiplier(
+            self._star_streak, LuckyStars.GAME_KEY
+        )
+        bonus_text = f"(⭐ bonus x{multiplier:.2f})"
+        if action:
+            return f"{action} | {bonus_text}"
+        return bonus_text
+
     def _embed_payload(
         self, action: str | None = None, *, reveal: bool = False
     ) -> tuple[discord.Embed, list[discord.File]]:
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": 0,
-            "dealer_action": action or "Pick a card!",
+            "stars_current": self.game.stars,
+            "dealer_action": self._annotate_action(action or "Pick a card!"),
         }
         embed = make_game_header(self.player, "Lucky Stars", stats)
         board_file = self._board_file(reveal=reveal)
@@ -84,8 +100,8 @@ class LuckyStarsView(discord.ui.View):
     def _header_text(self, action: str | None = None) -> str:
         stats = {
             "active_bet": self.game.bet,
-            "stars_current": 0,
-            "dealer_action": action or "Pick a card!",
+            "stars_current": self.game.stars,
+            "dealer_action": self._annotate_action(action or "Pick a card!"),
         }
         return make_gif_game_header(self.player, "Lucky Stars", stats)
 
@@ -148,13 +164,72 @@ class LuckyStarsView(discord.ui.View):
         outcome = result["outcome"]
 
         summary = f"You got the {player_val}-star card. Dealer had {dealer_val}-star.\n"
+        current_multiplier = EconomyManager.star_bonus_multiplier(
+            self._star_streak, LuckyStars.GAME_KEY
+        )
+        streak_info: dict[str, float | int]
 
         if outcome == "win":
-            payout = self.game.bet * 2
-            EconomyManager.payout(self.player.id, payout, self.player.name)
+            base_payout = self.game.bet * 2
+            payout = int(round(base_payout * current_multiplier))
+            EconomyManager.payout(self.player.id, payout, self._player_name)
             summary += f"  You win {payout} coins!"
+            session_id = getattr(self.game, "metrics_session_id", None)
+            MetricsManager.record_game_result(
+                session_id,
+                result="win",
+                payout=payout,
+                net=int(payout - self.game.bet),
+                metadata={
+                    "player_card": player_val,
+                    "dealer_card": dealer_val,
+                    "round": self.game.round,
+                },
+            )
+            setattr(self.game, "metrics_logged", True)
+            streak_info = EconomyManager.adjust_star_bonus(
+                self.player.id,
+                LuckyStars.GAME_KEY,
+                delta=1,
+                username=self._player_name,
+                career_increment=1,
+            )
+            self._star_streak = int(streak_info["stars"])
+            self.game.stars = self._star_streak
         else:
             summary += "  You lose this round."
+            session_id = getattr(self.game, "metrics_session_id", None)
+            MetricsManager.record_game_result(
+                session_id,
+                result="loss",
+                payout=0,
+                net=int(-self.game.bet),
+                metadata={
+                    "player_card": player_val,
+                    "dealer_card": dealer_val,
+                    "round": self.game.round,
+                },
+            )
+            setattr(self.game, "metrics_logged", True)
+            if self._star_streak > 0:
+                streak_info = EconomyManager.adjust_star_bonus(
+                    self.player.id,
+                    LuckyStars.GAME_KEY,
+                    delta=-1,
+                    username=self._player_name,
+                )
+                self._star_streak = int(streak_info["stars"])
+            else:
+                record = EconomyManager.ensure_user(self.player.id, self._player_name)
+                streak_info = {
+                    "stars": 0,
+                    "career_total": record.get("career_stars_total", 0),
+                    "multiplier": EconomyManager.star_bonus_multiplier(
+                        0, LuckyStars.GAME_KEY
+                    ),
+                }
+                self._star_streak = 0
+            self.game.stars = self._star_streak
 
         if self.animations_enabled:
             await msg.edit(
@@ -203,10 +278,18 @@ class LuckyStarsView(discord.ui.View):
             async def on_bet_selected(
                 inner_inter: discord.Interaction, bet_amount: int
             ):
+                initial_stars = EconomyManager.star_bonus_count(
+                    self.player.id,
+                    LuckyStars.GAME_KEY,
+                    player_name,
+                )
                 await self.start_game_callback(
                     inner_inter,
                     bet_amount,
-                    new_game=LuckyStars(bet_amount),
+                    new_game=LuckyStars(
+                        bet_amount,
+                        initial_stars=initial_stars,
+                    ),
                 )
 
             player_name = getattr(self.player, "display_name", self.player.name)
@@ -239,6 +322,20 @@ class LuckyStarsView(discord.ui.View):
                     attachments=files,
                     view=None,
                 )
+            if not getattr(self.game, "metrics_logged", False):
+                session_id = getattr(self.game, "metrics_session_id", None)
+                MetricsManager.record_game_result(
+                    session_id,
+                    result="quit",
+                    payout=0,
+                    net=0,
+                    metadata={
+                        "round": self.game.round,
+                        "player_card": None,
+                        "dealer_card": None,
+                    },
+                )
+                setattr(self.game, "metrics_logged", True)
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb

@@ -9,6 +9,7 @@ from casinogames.core.BaseGame import BaseGame
 
 
 class PairAGone(BaseGame):
+    GAME_KEY = "pairagone"
     COLS = 5
     ROWS = 4
 
@@ -16,14 +17,22 @@ class PairAGone(BaseGame):
     EXTRA_SYMBOLS = ["goomba", "bowser", "boo", "yoshi"]
     STAR_THRESHOLDS = [1, 3, 5, 7]  # star milestones to unlock extra symbols
 
-    def __init__(self, player_id: int, bet: int):
+    def __init__(
+        self,
+        player_id: int,
+        bet: int,
+        *,
+        initial_stars: int = 0,
+    ):
         super().__init__(player_id)
         self.bet = max(1, bet)
 
         # progression state
-        self.stars = 0
+        self.stars = max(0, int(initial_stars))
+        self.session_stars = 0
         self.level = 1
         self.unlocked = set(self.BASE_SYMBOLS)
+        self._sync_unlocks()
 
         # round state
         self.deck = []
@@ -155,14 +164,20 @@ class PairAGone(BaseGame):
     def handle_game_end(self, won: bool):
         if won:
             self.stars += 1
-            self._check_unlock_progression()
+            self.session_stars += 1
         else:
             self.stars = max(0, self.stars - 1)
+            self.session_stars = max(0, self.session_stars - 1)
+        self._sync_unlocks()
 
-    def _check_unlock_progression(self):
-        for i, threshold in enumerate(self.STAR_THRESHOLDS):
-            sym = self.EXTRA_SYMBOLS[i]
-            if self.stars >= threshold and sym not in self.unlocked:
-                self.unlocked.add(sym)
-                print(f"[PairAGone] unlocked new symbol: {sym}")
+    def _sync_unlocks(self):
+        previous_unlocked = getattr(self, "unlocked", set()).copy()
+        self.unlocked = set(self.BASE_SYMBOLS)
+        self.level = 1
+        for idx, threshold in enumerate(self.STAR_THRESHOLDS):
+            symbol = self.EXTRA_SYMBOLS[idx]
+            if self.session_stars >= threshold:
+                self.unlocked.add(symbol)
+                if symbol not in previous_unlocked:
+                    print(f"[PairAGone] unlocked new symbol this session: {symbol}")
                 self.level += 1
