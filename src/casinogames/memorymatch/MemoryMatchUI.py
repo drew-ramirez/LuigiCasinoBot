@@ -340,8 +340,7 @@ class MemoryMatchControls(discord.ui.View):
         session_stars = getattr(self.game, "session_stars", self.game.stars)
         summary = (
             f"Board cleared! You won {payout} coins.\n"
-            f"Round wins this session: {session_stars}\n"
-            "Continue or Exit Now?"
+            " Continue or Exit Now?"
         )
         if self.animations_enabled:
             await msg.edit(
@@ -448,16 +447,15 @@ class MemoryMatchControls(discord.ui.View):
             self._last_streak_info = None
             session_stars = getattr(self.game, "session_stars", self.game.stars)
             summary = f"Cashed out at round {session_stars}"
+            final_board = self._board_file()
             if self.animations_enabled:
                 await msg.edit(
                     content=self._status_text(summary),
-                    attachments=[],
+                    attachments=[final_board],
                     view=None,
                 )
             else:
-                embed, files = self._status_payload(
-                    summary, include_board=False
-                )
+                embed, files = self._status_payload(summary)
                 await msg.edit(
                     content=None, embed=embed, attachments=files, view=None
                 )
