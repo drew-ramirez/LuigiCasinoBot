@@ -91,6 +91,10 @@ class PokerView(discord.ui.View):
             return
         await interaction.response.defer()
 
+        if getattr(self.game, "player_discarded", False):
+            await self._apply("You already used your discard. Press Stand to resolve.")
+            return
+
         if not self.selected_discards:
             await self._apply("No cards selected to discard.")
             return
