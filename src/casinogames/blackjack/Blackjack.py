@@ -3,7 +3,7 @@
 #
 # Description: Core blackjack model
 # Handles dealing, hit/stand/double, dealer play, and
-# payout, currently 3:2 payouts
+# payout, currently 3:2 for player blackjack.
 ###########################################################
 
 from __future__ import annotations
