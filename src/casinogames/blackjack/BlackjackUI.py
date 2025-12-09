@@ -1,8 +1,10 @@
 from __future__ import annotations
 import discord
+
 from casinogames.blackjack.Blackjack import Blackjack
 from casinogames.blackjack.BlackjackPrint import render_text_board
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
+from utils.ui_embeds import make_game_header
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 
@@ -19,6 +21,7 @@ class BlackjackView(discord.ui.View):
         start_game_callback=None,
         wager_options=None,
         message: discord.Message | None = None,
+        use_embed: bool = False,
     ):
         super().__init__(timeout=None)
         self.game = game
@@ -27,17 +30,27 @@ class BlackjackView(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
         self.msg = message
+        self.use_embed = bool(use_embed)
         self._add_controls()
 
-    def _board_content(self, status: str = "") -> str:
-        board = render_text_board(self.game, hide_dealer_hole=not self.game.finished)
+    def _status_payload(self, status: str = "", *, hide_dealer: bool = True, view: discord.ui.View | None = None) -> dict:
+        board = render_text_board(self.game, hide_dealer_hole=hide_dealer and not self.game.finished)
+        if self.use_embed:
+            stats = {
+                "active_bet": self.game.base_bet,
+                "stars_current": getattr(self.game, "stars", 0),
+                "dealer_action": status or "Your move...",
+            }
+            embed = make_game_header(self.player, "Blackjack", stats)
+            embed.description = f"```\n{board}\n```"
+            return {"content": None, "embed": embed, "view": view or self}
         header = f"**{status}**\n" if status else ""
-        return f"{header}```\n{board}\n```"
+        return {"content": f"{header}```\n{board}\n```", "embed": None, "view": view or self}
 
     async def _apply(self, status: str = "", *, view: discord.ui.View | None = None):
         if self.msg is None:
             return
-        await self.msg.edit(content=self._board_content(status), view=view or self)
+        await self.msg.edit(**self._status_payload(status, hide_dealer=not self.game.finished, view=view or self))
 
     def _add_controls(self):
         for label, style, cb in (
@@ -68,12 +81,8 @@ class BlackjackView(discord.ui.View):
             await interaction.response.send_message("Not your game!", ephemeral=True)
             return
         await interaction.response.defer()
-        if not EconomyManager.wager(
-            self.player.id, self.game.base_bet, self.player.name
-        ):
-            await interaction.followup.send(
-                "Insufficient balance to double down.", ephemeral=True
-            )
+        if not EconomyManager.wager(self.player.id, self.game.base_bet, self.player.name):
+            await interaction.followup.send("Insufficient balance to double down.", ephemeral=True)
             return
         await self._finish_or_update(self.game.double_down())
 
@@ -111,7 +120,8 @@ class BlackjackView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
-        await self._apply(summary, view=self)
+        if self.msg is not None:
+            await self.msg.edit(**self._status_payload(summary, hide_dealer=False, view=self))
         if self.on_finish is not None:
             await self.on_finish(self.player.id)
         await self._show_replay()
@@ -119,9 +129,7 @@ class BlackjackView(discord.ui.View):
     async def _show_replay(self):
         if self.start_game_callback is None or self.msg is None:
             return
-        replay_btn = discord.ui.Button(
-            label="Play Again", style=discord.ButtonStyle.green
-        )
+        replay_btn = discord.ui.Button(label="Play Again", style=discord.ButtonStyle.green)
         quit_btn = discord.ui.Button(label="Quit", style=discord.ButtonStyle.red)
 
         async def replay_cb(btn_inter: discord.Interaction):
@@ -131,14 +139,9 @@ class BlackjackView(discord.ui.View):
             await btn_inter.response.defer()
 
             def make_wager_callback():
-                async def on_bet_selected(
-                    inner_inter: discord.Interaction, bet_amount: int
-                ):
+                async def on_bet_selected(inner_inter: discord.Interaction, bet_amount: int):
                     new_game = Blackjack(bet_amount)
-                    await self.start_game_callback(
-                        inner_inter, bet_amount, new_game=new_game
-                    )
-
+                    await self.start_game_callback(inner_inter, bet_amount, new_game=new_game)
                 return on_bet_selected
 
             wager_view = BetSelectView(
@@ -166,11 +169,9 @@ class BlackjackView(discord.ui.View):
 
 def make_cleanup_renderer(view: BlackjackView):
     def renderer(status: str, colour=None):
-        return {
-            "content": view._board_content(status),
-            "embed": None,
-            "attachments": [],
-        }
+        payload = view._status_payload(status, hide_dealer=False, view=view)
+        payload["attachments"] = []
+        return payload
 
     return renderer
 
@@ -183,6 +184,7 @@ def make_blackjack_view(
     start_game_callback=None,
     wager_options=None,
     message: discord.Message | None = None,
+    use_embed: bool = False,
 ) -> BlackjackView:
     return BlackjackView(
         game,
@@ -191,4 +193,5 @@ def make_blackjack_view(
         start_game_callback=start_game_callback,
         wager_options=wager_options,
         message=message,
+        use_embed=use_embed,
     )

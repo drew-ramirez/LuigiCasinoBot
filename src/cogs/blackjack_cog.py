@@ -69,6 +69,7 @@ class BlackjackCog(BaseGameCog):
             animations_on = EconomyManager.animations_enabled(
                 inter.user.id, inter.user.name
             )
+            use_embed = not animations_on
 
             multiplier = EconomyManager.star_bonus_multiplier(
                 getattr(game, "stars", 0),
@@ -85,6 +86,7 @@ class BlackjackCog(BaseGameCog):
                 inter.user,
                 self.cleanup_game,
                 start_game_callback=start_game,
+                use_embed=use_embed,
             )
 
             if animations_on:
@@ -99,16 +101,8 @@ class BlackjackCog(BaseGameCog):
                     view=view,
                 )
             else:
-                header_embed = make_game_header(
-                    inter.user,
-                    "Blackjack",
-                    stats,
-                )
-                await inter.response.edit_message(
-                    content=None,
-                    embed=header_embed,
-                    view=view,
-                )
+                payload = view._status_payload(stats["dealer_action"], hide_dealer=True, view=view)
+                await inter.response.edit_message(**payload)
 
             message = inter.message
             if message is None:

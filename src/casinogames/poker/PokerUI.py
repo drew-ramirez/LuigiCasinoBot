@@ -1,12 +1,11 @@
 from __future__ import annotations
-
 import discord
 from contextlib import suppress
-from collections import Counter
 
 from casinogames.poker.Poker import Poker
 from casinogames.poker.PokerPrint import render_text_board
 from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
+from utils.ui_embeds import make_game_header
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 
@@ -23,6 +22,7 @@ class PokerView(discord.ui.View):
         start_game_callback=None,
         wager_options=None,
         message: discord.Message | None = None,
+        use_embed: bool = False,
     ):
         super().__init__(timeout=None)
         self.game = game
@@ -31,25 +31,29 @@ class PokerView(discord.ui.View):
         self.start_game_callback = start_game_callback
         self.wager_options = wager_options or list(DEFAULT_WAGER_OPTIONS)
         self.msg = message
+        self.use_embed = bool(use_embed)
         self.selected_discards: set[int] = set()
         self._add_controls()
 
-    # -------------------------------------------------
-    # UI helpers
-    # -------------------------------------------------
-    def _content(self, status: str = "", hide_dealer: bool = True) -> str:
+    def _status_payload(self, status: str = "", *, hide_dealer: bool = True, view: discord.ui.View | None = None) -> dict:
         board = render_text_board(self.game, hide_dealer=hide_dealer)
+        if self.use_embed:
+            stats = {
+                "active_bet": self.game.bet,
+                "stars_current": getattr(self.game, "stars", 0),
+                "dealer_action": status or "Your move...",
+            }
+            embed = make_game_header(self.player, "Poker", stats)
+            embed.description = f"```\n{board}\n```"
+            return {"content": None, "embed": embed, "view": view or self}
         header = f"**{status}**\n" if status else ""
-        return f"{header}```\n{board}\n```"
+        return {"content": f"{header}```\n{board}\n```", "embed": None, "view": view or self}
 
     async def _apply(self, status: str = "", *, hide_dealer: bool = True, view: discord.ui.View | None = None):
         if self.msg is None:
             return
-        await self.msg.edit(content=self._content(status, hide_dealer=hide_dealer), view=view or self)
+        await self.msg.edit(**self._status_payload(status, hide_dealer=hide_dealer, view=view or self))
 
-    # -------------------------------------------------
-    # Controls
-    # -------------------------------------------------
     def _add_controls(self):
         for i in range(5):
             btn = discord.ui.Button(label=f"Card {i+1}", style=discord.ButtonStyle.secondary, row=0, custom_id=f"poker_card_{i}")
@@ -81,9 +85,6 @@ class PokerView(discord.ui.View):
                     await interaction.edit_original_response(view=self)
         return callback
 
-    # -------------------------------------------------
-    # Actions
-    # -------------------------------------------------
     async def _submit(self, interaction: discord.Interaction):
         if interaction.user.id != self.player.id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
@@ -96,12 +97,13 @@ class PokerView(discord.ui.View):
 
         self.game.player_discard(sorted(self.selected_discards))
         self.selected_discards.clear()
-        await self._apply("Your redraw is complete. Press Stand to resolve.")
 
-        # disable further discards
         for child in self.children:
-            if isinstance(child, discord.ui.Button) and "Card" in child.label:
-                child.disabled = True
+            if isinstance(child, discord.ui.Button):
+                if "Card" in child.label or "Submit" in child.label:
+                    child.disabled = True
+
+        await self._apply("Your redraw is complete. Press Stand to resolve.")
 
     async def _stand(self, interaction: discord.Interaction):
         if interaction.user.id != self.player.id:
@@ -109,11 +111,9 @@ class PokerView(discord.ui.View):
             return
         await interaction.response.defer()
 
-        # Dealer auto-discards before resolve
         self.game.dealer_discard()
         result = self.game.resolve_round()
 
-        # Payout
         payout = int(result.get("payout", 0))
         EconomyManager.payout(self.player.id, payout, self.player.name)
 
@@ -143,16 +143,14 @@ class PokerView(discord.ui.View):
             if isinstance(child, discord.ui.Button):
                 child.disabled = True
 
-        await self._apply(summary, hide_dealer=False, view=None)
+        if self.msg is not None:
+            await self.msg.edit(**self._status_payload(summary, hide_dealer=False, view=None))
 
         if self.on_finish is not None:
             await self.on_finish(self.player.id)
 
         await self._show_replay()
 
-    # -------------------------------------------------
-    # Replay
-    # -------------------------------------------------
     async def _show_replay(self):
         if self.start_game_callback is None or self.msg is None:
             return
@@ -197,5 +195,8 @@ class PokerView(discord.ui.View):
 
 def make_cleanup_renderer(view: PokerView):
     def renderer(status: str, colour=None):
-        return {"content": view._content(status, hide_dealer=False), "embed": None, "attachments": []}
+        payload = view._status_payload(status, hide_dealer=False, view=view)
+        payload["attachments"] = []
+        return payload
+
     return renderer
