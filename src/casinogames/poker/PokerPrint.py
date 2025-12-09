@@ -1,7 +1,7 @@
 ###########################################################
 # File: PokerPrint.py
 #
-# Description: Text/emoji rendering helpers for draw poker.
+# Description: Text rendering helpers for draw poker.
 ###########################################################
 
 from __future__ import annotations
