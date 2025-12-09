@@ -24,6 +24,7 @@ DEFAULT_GAME_COMMAND_KEYS: set[str] = {
     "luckystars",
     "picturepoker",
     "blackjack",
+    "poker",
 }
 
 

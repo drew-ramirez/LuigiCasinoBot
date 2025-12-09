@@ -548,6 +548,7 @@ class UserCog(commands.Cog):
                     "**/casino_luckystars** - 50/50 Card Game",
                     "**/casino_picturepoker** - Luigi's Picture Poker",
                     "**/casino_blackjack** - Traditional Blackjack",
+                    "**/casino_poker** - Standard 5-card draw Poker",
                     "**/casino_pokerkey** - Picture Poker ranks & payouts guide",
                 ]
             ),
