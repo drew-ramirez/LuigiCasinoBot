@@ -43,6 +43,12 @@ class Blackjack:
         total, _ = best_blackjack_total(hand)
         return len(hand) == 2 and total == 21
 
+    def player_total(self):
+        return best_blackjack_total(self.player_hand)
+
+    def dealer_total(self):
+        return best_blackjack_total(self.dealer_hand)
+
     # -----------------------------------------------------
     # Player actions
     # -----------------------------------------------------

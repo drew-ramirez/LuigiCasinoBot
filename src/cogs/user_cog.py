@@ -547,6 +547,7 @@ class UserCog(commands.Cog):
                     "**/casino_pairagone** - Match Pairs Till Deck's Gone",
                     "**/casino_luckystars** - 50/50 Card Game",
                     "**/casino_picturepoker** - Luigi's Picture Poker",
+                    "**/casino_blackjack** - Traditional Blackjack",
                     "**/casino_pokerkey** - Picture Poker ranks & payouts guide",
                 ]
             ),
