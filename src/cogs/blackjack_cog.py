@@ -22,8 +22,8 @@ class BlackjackCog(BaseGameCog):
 
     @staticmethod
     def _bj_timeout_metadata(game: Blackjack) -> dict[str, Any]:
-        p_total, _ = game.player_total() if hasattr(game, "player_total") else (None, None)
-        d_total, _ = game.dealer_total() if hasattr(game, "dealer_total") else (None, None)
+        p_total = getattr(game, "player_total_cached", None)
+        d_total = getattr(game, "dealer_total_cached", None)
         return {
             "player_total": p_total,
             "dealer_total": d_total,

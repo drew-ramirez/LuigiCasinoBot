@@ -143,6 +143,9 @@ class Blackjack:
         snapshot = self._snapshot(outcome=outcome)
         snapshot["payout"] = int(payout)
         snapshot["net"] = int(payout - self.stake)
+        # cache totals for timeout/cleanup metadata
+        self.player_total_cached = snapshot.get("player_total")
+        self.dealer_total_cached = snapshot.get("dealer_total")
         self.result = snapshot
         return snapshot
 

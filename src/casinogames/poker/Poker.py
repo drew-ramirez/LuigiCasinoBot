@@ -196,6 +196,9 @@ class Poker:
             payout = self.bet
             net = 0
 
+        self.player_rank = p_rank
+        self.dealer_rank = d_rank
+
         self.result = {
             "outcome": outcome,
             "payout": int(payout),
