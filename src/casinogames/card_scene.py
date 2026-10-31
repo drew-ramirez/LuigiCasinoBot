@@ -125,10 +125,19 @@ def png(image):
 
 def gif(frames, duration=90, *, tail=0, loop=False):
     # A single palette avoids color flicker. Event animations play exactly once.
-    atlas=Image.new('RGB',(256*3,192))
-    for i,art in enumerate((dealer_frame(24),background(NATIVE),frames[-1].resize(NATIVE))):
+    # Sample actual card boards at native scale as well as the room. Resizing
+    # the whole two-screen scene made vivid card colors underrepresented.
+    boards=[]
+    for index in sorted({0,len(frames)//2,len(frames)-1}):
+        frame=frames[index]
+        boards.append(frame.crop((0,frame.height//2,frame.width,frame.height)).resize(NATIVE,Image.Resampling.NEAREST))
+    # The dealer occupies half of the final image, so give both screens equal
+    # weight rather than letting repeated green felt consume its palette.
+    samples=[dealer_frame(24)]*len(boards)+boards
+    atlas=Image.new('RGB',(256*len(samples),192))
+    for i,art in enumerate(samples):
         atlas.paste(art.convert('RGB'),(i*256,0))
-    palette=atlas.quantize(colors=224)
+    palette=atlas.quantize(colors=256)
     encoded=[im.convert('RGB').quantize(palette=palette,dither=Image.Dither.NONE) for im in frames]
     durations=[duration]*len(frames)
     durations[-1]+=tail
