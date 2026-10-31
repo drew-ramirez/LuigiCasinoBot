@@ -138,7 +138,7 @@ class LuckyStarsView(discord.ui.View):
         await self._disable_buttons()
 
         if self.animations_enabled:
-            gif, _ = make_slide_animation(
+            gif, playback_seconds = make_slide_animation(
                 self.game, duration=70, tail_hold_ms=800
             )
             gif.seek(0)
@@ -147,7 +147,7 @@ class LuckyStarsView(discord.ui.View):
                 attachments=[discord.File(gif, f"luckystars_round{self.game.round}.gif")],
                 view=self,
             )
-            await asyncio.sleep(1.6)
+            await asyncio.sleep(playback_seconds)
         else:
             embed, files = self._embed_payload("Resolving your pick...", reveal=False)
             await msg.edit(

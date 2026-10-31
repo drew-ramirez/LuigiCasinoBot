@@ -1,4 +1,6 @@
-﻿###########################################################
+import asyncio
+from casinogames.card_scene import waiting_animation
+###########################################################
 # File: luckystars_cog.py
 #
 # Description: Cog for Luigi's Casino - Lucky Stars Game
@@ -109,7 +111,9 @@ class LuckyStarsCog(BaseGameCog):
 
             board_bytes = render_lucky_board(game, reveal=False)
             board_bytes.seek(0)
-            board_file = discord.File(board_bytes, filename="lucky.png")
+            if animations_on:
+                board_bytes = await asyncio.to_thread(waiting_animation, game, board_bytes)
+            board_file = discord.File(board_bytes, filename="lucky.gif" if animations_on else "lucky.png")
 
             multiplier = EconomyManager.star_bonus_multiplier(
                 game.stars, LuckyStars.GAME_KEY
