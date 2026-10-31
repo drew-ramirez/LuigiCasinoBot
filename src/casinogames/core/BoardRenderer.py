@@ -1,3 +1,4 @@
+from casinogames.casino_art import background, badge, paste
 ###########################################################
 # File: BoardRenderer.py
 #
@@ -24,7 +25,7 @@ def render_board(game, sprite_resolver) -> io.BytesIO:
 
     canvas_w = game.COLS * (game.CARD_W + game.GAP_X) - game.GAP_X + 2 * game.MARGIN_X
     canvas_h = game.ROWS * (game.CARD_H + game.GAP_Y) - game.GAP_Y + 2 * game.MARGIN_Y
-    canvas = Image.new("RGBA", (canvas_w, canvas_h), (0, 128, 0, 255))
+    canvas = background((canvas_w, canvas_h))
 
     for i, card in enumerate(cards):
         col = i % game.COLS
