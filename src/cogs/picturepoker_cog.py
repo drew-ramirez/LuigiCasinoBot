@@ -1,3 +1,5 @@
+import asyncio
+from casinogames.card_scene import waiting_animation
 ###########################################################
 # File: picturepoker_cog.py
 #
@@ -127,7 +129,9 @@ class PicturePokerCog(BaseGameCog):
                     board_bytes.seek(0)
                 except Exception:
                     pass
-            board_file = discord.File(board_bytes, filename="poker.png")
+            if animations_on:
+                board_bytes = await asyncio.to_thread(waiting_animation, target_game, board_bytes)
+            board_file = discord.File(board_bytes, filename="poker.gif" if animations_on else "poker.png")
 
             multiplier = EconomyManager.star_bonus_multiplier(
                 target_game.stars, PicturePoker.GAME_KEY

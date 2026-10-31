@@ -1,228 +1,83 @@
-###########################################################
-# File: PicturePokerPrint.py
-#
-# Description: Rendering & animations for Picture Poker
-###########################################################
-
-from PIL import Image
-import io
-from casinogames.assetloader import load_memory_backs, load_memory_faces
-
-backs = load_memory_backs()
-faces = load_memory_faces()
+"""Picture Poker's two-screen layout with lifted discards and hand ranks."""
+from PIL import ImageDraw
+from casinogames.casino_art import sprite
+from casinogames.card_scene import (
+    felt, poker_rect, put_card, card, scene, png, gif, bottom_from, flip_frames,
+    clear_card, text, SMALL,
+)
 
 
-###########################################################
-# Core board rendering
-###########################################################
-def render_hand(hand: list[str], reveal: bool = False) -> list[Image.Image]:
-    rendered = []
-    for symbol in hand:
-        sprite = faces.get_face(symbol) if reveal else backs.get("back_full")
-        rendered.append(sprite)
-    return rendered
+def render_hand(hand,reveal=False):
+    return [card(symbol if reveal else None) for symbol in hand]
 
 
-def render_board(game, reveal=False) -> io.BytesIO:
-    #Render full board. If reveal=True, Luigi's (dealer) row shows faces.
-    cols = 5
-    width = (game.CARD_W + game.GAP_X) * cols + game.MARGIN_X * 2
-    height = (game.CARD_H * 2) + (game.GAP_Y * 5) + game.MARGIN_Y * 2
-
-    board = Image.new("RGBA", (width, height), (0, 128, 0, 255))
-
-    for col in range(cols):
-        # Dealer (Luigi)
-        dx = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        dy = game.MARGIN_Y
-        if reveal:
-            sprite = faces.get_face(game.luigi_hand[col])
-        else:
-            sprite = backs.get("back_full")
-        board.paste(sprite, (dx, dy), mask=sprite)
-
-        # Player
-        px = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        py = game.MARGIN_Y + game.CARD_H + (game.GAP_Y * 2)
-        sprite = faces.get_face(game.player_hand[col])
-        board.paste(sprite, (px, py), mask=sprite)
-
-    out = io.BytesIO()
-    board.save(out, format="PNG")
-    out.seek(0)
-    return out
+def _board(game,reveal=False,hidden_player=(),hidden_dealer=(),controls=True):
+    board=felt(game)
+    selected=getattr(game,'selected_discards',set()) if controls and not reveal else set()
+    for i,symbol in enumerate(game.luigi_hand):
+        put_card(board,poker_rect(i,True),symbol if reveal and i not in hidden_dealer else None)
+    for i,symbol in enumerate(game.player_hand):
+        put_card(board,poker_rect(i,raised=8 if i in selected else 0),
+                 symbol if i not in hidden_player else None)
+    for i,sym in enumerate(('star','mario','luigi','flower','mushroom','cloud')):
+        board.alpha_composite(card(sym,(12,17)),(8,86+i*17))
+    result=getattr(game,'result',None)
+    if result and reveal:
+        for key,y in [('luigi_rank',71),('player_rank',116)]:
+            rank=result.get(key)
+            if rank and rank!='junk':
+                art=sprite(rank)
+                board.alpha_composite(art,((256-art.width)//2+10,y))
+    elif controls:
+        art=sprite('hit' if selected else 'hold')
+        board.alpha_composite(art,(60,82))
+    return board
 
 
-def render_board_with_hidden(
-    game, hidden_player=[], hidden_dealer=[], reveal_dealer=False
-) -> io.BytesIO:
-    cols = 5
-    
-    width = (game.CARD_W + game.GAP_X) * cols + game.MARGIN_X * 2
-    height = (game.CARD_H * 2) + (game.GAP_Y * 5) + game.MARGIN_Y * 2
-    board = Image.new("RGBA", (width, height), (0, 128, 0, 255))
-
-    for col in range(cols):
-        # Dealer
-        dx = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        dy = game.MARGIN_Y
-        if not reveal_dealer or col in hidden_dealer:
-            sprite = backs.get("back_full")
-        else:
-            sprite = faces.get_face(game.luigi_hand[col])
-        board.paste(sprite, (dx, dy), mask=sprite)
-
-        # Player
-        px = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        py = game.MARGIN_Y + game.CARD_H + (game.GAP_Y * 2)
-        if col in hidden_player:
-            sprite = backs.get("back_full")
-        else:
-            sprite = faces.get_face(game.player_hand[col])
-        board.paste(sprite, (px, py), mask=sprite)
-
-    out = io.BytesIO()
-    board.save(out, format="PNG")
-    out.seek(0)
-    return out
+def render_board(game,reveal=False):
+    outcome=(game.result or {}).get('outcome') if reveal else None
+    return png(scene(game,_board(game,reveal),outcome=outcome))
 
 
-###########################################################
-# Animations
-###########################################################
-def make_deal_flip_gif(
-    game,
-    pos: int,
-    symbol: str,
-    base_board: Image.Image,
-    duration: int = 150,
-    dealer: bool = False,
-) -> io.BytesIO:
-    sequence = [
-        backs.get("back_full"),
-        backs.get("back_half"),
-        backs.get("back_edge"),
-        faces.get_flip(symbol),
-        faces.get_face(symbol),
-    ]
-
-    slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos, dealer=dealer)
-
-    frames = []
-    for frame in sequence:
-        frame = frame.convert("RGBA")
-        norm = Image.new("RGBA", (slot_w, slot_h), (0, 0, 0, 0))
-        x_off = (slot_w - frame.width) // 2
-        y_off = (slot_h - frame.height) // 2
-        norm.paste(frame, (x_off, y_off), mask=frame)
-
-        step = base_board.copy()
-        blank = Image.new("RGBA", (slot_w, slot_h), (0, 128, 0, 255))
-        step.paste(blank, (slot_x, slot_y))
-        step.paste(norm, (slot_x, slot_y), mask=norm)
-        frames.append(step)
-
-    final_frame = frames[-1]
-    for _ in range(8):
-        frames.append(final_frame)
-
-    out = io.BytesIO()
-    frames[0].save(
-        out,
-        format="GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=duration,
-        loop=0,
-        disposal=2,
-        optimize=False,
-    )
-    out.seek(0)
-    return out
+def render_board_with_hidden(game,hidden_player=(),hidden_dealer=(),reveal_dealer=False):
+    return png(scene(game,_board(game,reveal_dealer,hidden_player,hidden_dealer,controls=False)))
 
 
-def make_discard_flicker_gif(
-    game, pos: int, base_board: Image.Image, duration: int = 120, dealer: bool = True
-) -> io.BytesIO:
-    slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos, dealer=dealer)
-
-    overlay_red = Image.new("RGBA", (slot_w, slot_h), (255, 0, 0, 128))
-    blank = Image.new("RGBA", (slot_w, slot_h), (0, 128, 0, 255))
-    back = backs.get("back_full").convert("RGBA")
-
-    sequence = [overlay_red, blank, back]
-    frames = []
-    for frame in sequence:
-        step = base_board.copy()
-        step.paste(frame, (slot_x, slot_y), mask=frame)
-        frames.append(step)
-
-    out = io.BytesIO()
-    frames[0].save(
-        out,
-        format="GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=duration,
-        loop=0,
-        disposal=2,
-        optimize=False,
-    )
-    out.seek(0)
-    return out
+def make_deal_flip_gif(game,pos,symbol,base_board,duration=100,dealer=False):
+    return flip_frames(game,bottom_from(base_board),[(poker_rect(pos,dealer),symbol)],
+                       dealing=True,duration=duration)
 
 
-###########################################################
-# Final Reveal Animation
-###########################################################
-def make_final_reveal_gif(game, duration=150) -> io.BytesIO:
-    cols = 5
-    width = (game.CARD_W + game.GAP_X) * cols + game.MARGIN_X * 2
-    height = (game.CARD_H * 2) + (game.GAP_Y * 5) + game.MARGIN_Y * 2
-    base_board = Image.new("RGBA", (width, height), (0, 128, 0, 255))
+def make_discard_flicker_gif(game,pos,base_board,duration=120,dealer=True):
+    frames=[]
+    base=bottom_from(base_board)
+    x,y,w,h=poker_rect(pos,dealer)
+    for i in range(5):
+        board=base.copy()
+        clear_card(board,(x,y,w,h))
+        if i<4:
+            put_card(board,(x,y-round(i*12),w,h))
+        frames.append(scene(game,board,i,dealing=True))
+    return gif(frames,duration)
 
-    # player row (always face-up)
-    for col in range(cols):
-        px = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-        py = game.MARGIN_Y + game.CARD_H + (game.GAP_Y * 2)
-        sprite = faces.get_face(game.player_hand[col])
-        base_board.paste(sprite, (px, py), mask=sprite)
 
-    # Corrected sequence: all Image objects
-    sequence = [
-        backs.get("back_full"),
-        backs.get("back_half"),
-        backs.get("back_edge"),
-        None,  # final face stage
-    ]
-
-    frames = []
-    for frame in sequence:
-        board = base_board.copy()
-        for col in range(cols):
-            dx = game.MARGIN_X + col * (game.CARD_W + game.GAP_X)
-            dy = game.MARGIN_Y
-            if frame is None:
-                sprite = faces.get_face(game.luigi_hand[col])
-            else:
-                sprite = frame
-            board.paste(sprite, (dx, dy), mask=sprite)
-        frames.append(board)
-
-    final_frame = frames[-1]
-    for _ in range(8):
-        frames.append(final_frame)
-
-    out = io.BytesIO()
-    frames[0].save(
-        out,
-        format="GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=duration,
-        loop=1,
-        disposal=2,
-        optimize=False,
-    )
-    out.seek(0)
-    return out
+def make_final_reveal_gif(game,duration=100):
+    frames=[]
+    for stage,width in enumerate((1,.5,.08,.5,1)):
+        board=_board(game,controls=False)
+        for i,symbol in enumerate(game.luigi_hand):
+            rect=poker_rect(i,True)
+            clear_card(board,rect)
+            put_card(board,rect,symbol if stage>=3 else None,width)
+        frames.append(scene(game,board,stage))
+    result=game.result or {}
+    for i in range(30):
+        board=_board(game,True)
+        if i>=20 and result.get('outcome')=='win':
+            # Decorations follow the win banner. Authoritative payout remains
+            # in Discord's summary, including the economy's progression bonus.
+            for j in range(6):
+                y=100-round((i-20)*4)-j*3
+                board.alpha_composite(sprite('coin'),(80+j*17,y))
+        frames.append(scene(game,board,i,outcome=result.get('outcome')))
+    return gif(frames,duration,tail=1200)

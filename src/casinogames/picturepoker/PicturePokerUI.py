@@ -242,8 +242,10 @@ class PicturePokerView(discord.ui.View):
             if self.msg is None:
                 self.msg = interaction.message
 
+            self.game.selected_discards = set(self.selected_discards)
+            board_file = discord.File(render_board(self.game), filename="poker.png")
             try:
-                await interaction.response.edit_message(view=self)
+                await interaction.response.edit_message(view=self, attachments=[board_file])
             except discord.InteractionResponded:
                 await interaction.edit_original_response(view=self)
             except Exception:
@@ -360,6 +362,7 @@ class PicturePokerView(discord.ui.View):
                 child.disabled = True
 
         if not self._skip_player_animation:
+            self.game.selected_discards = set()
             final_png = render_board(self.game, reveal=False)
             stats = base_stats(
                 {
@@ -376,6 +379,7 @@ class PicturePokerView(discord.ui.View):
                 interaction=interaction,
             )
         self.selected_discards.clear()
+        self.game.selected_discards = set()
         self._player_animating = False
 
     ###########################################################
