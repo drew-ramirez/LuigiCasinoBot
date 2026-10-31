@@ -1,3 +1,5 @@
+import asyncio
+from casinogames.card_scene import waiting_animation
 ###########################################################
 # File: memorymatch_cog.py
 #
@@ -103,7 +105,9 @@ class MemoryMatchCog(BaseGameCog):
 
             board_bytes = render_board_image(game)
             board_bytes.seek(0)
-            board_file = discord.File(board_bytes, filename="memory_board.png")
+            if animations_on:
+                board_bytes = await asyncio.to_thread(waiting_animation, game, board_bytes)
+            board_file = discord.File(board_bytes, filename="memory_board.gif" if animations_on else "memory_board.png")
 
             multiplier = EconomyManager.star_bonus_multiplier(
                 game.stars, MemoryMatch.GAME_KEY

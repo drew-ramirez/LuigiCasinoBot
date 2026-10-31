@@ -593,7 +593,7 @@ class MemoryMatchControls(discord.ui.View):
                 if idx in positions:
                     child.label = "⭐"
                     child.disabled = True
-        await message.edit(view=self)
+        await message.edit(view=self, attachments=[self._board_file()])
 
     ###########################################################
     # UI updates for unmatched cards
