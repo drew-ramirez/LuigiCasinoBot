@@ -23,6 +23,7 @@ class BetSelectView(discord.ui.View):
         wager_options: list[int] | None = None,
     ):
         super().__init__(timeout=120)
+        self._claimed = False
         self.user_id = user_id
         self.username = username
         self.on_bet_selected = on_bet_selected
@@ -59,6 +60,10 @@ class BetSelectView(discord.ui.View):
                 await interaction.response.send_message("Not your game!", ephemeral=True)
                 return
 
+            if self._claimed:
+                await interaction.response.send_message("This wager has already been placed.", ephemeral=True)
+                return
+
             balance = EconomyManager.balance(self.user_id, self.username)
             if balance < amount:
                 await interaction.response.send_message(
@@ -74,6 +79,10 @@ class BetSelectView(discord.ui.View):
                 )
                 return
 
+            self._claimed = True
+            for item in self.children:
+                item.disabled = True
+            self.stop()
             await self.on_bet_selected(interaction, amount)
 
         return callback
