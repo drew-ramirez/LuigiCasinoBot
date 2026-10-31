@@ -21,6 +21,8 @@ GAME_COMMAND_CHOICES = [
     app_commands.Choice(name="Pair-a-Gone", value="pairagone"),
     app_commands.Choice(name="Lucky Stars", value="luckystars"),
     app_commands.Choice(name="Picture Poker", value="picturepoker"),
+    app_commands.Choice(name="Mushroom Roulette", value="roulette"),
+    app_commands.Choice(name="Super Mario Slot", value="slots"),
 ]
 
 
