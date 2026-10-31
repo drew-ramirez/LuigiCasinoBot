@@ -1,3 +1,5 @@
+import asyncio
+from casinogames.card_scene import waiting_animation
 ###########################################################
 # File: pairagone_cog.py
 #
@@ -101,7 +103,9 @@ class PairAGoneCog(BaseGameCog):
 
             board_bytes = render_pair_board(game)
             board_bytes.seek(0)
-            board_file = discord.File(board_bytes, filename="pair_board.png")
+            if animations_on:
+                board_bytes = await asyncio.to_thread(waiting_animation, game, board_bytes)
+            board_file = discord.File(board_bytes, filename="pair_board.gif" if animations_on else "pair_board.png")
 
             multiplier = EconomyManager.star_bonus_multiplier(
                 getattr(game, "session_stars", game.stars),

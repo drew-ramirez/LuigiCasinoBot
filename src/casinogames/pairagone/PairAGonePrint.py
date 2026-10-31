@@ -1,141 +1,49 @@
-###########################################################
-# File: PairAGonePrint.py
-#
-# Description: Rendering & animations for Pair a Gone
-###########################################################
-from PIL import Image
-import io
-from casinogames.assetloader import load_memory_faces, load_memory_backs
-from casinogames.pairagone.PairAGone import PairAGone
-from casinogames.core.BoardRenderer import render_board
-
-faces = load_memory_faces()
-backs = load_memory_backs()
+"""Pair-A-Gone: tight card grid, deck counter, selection and one-shot deals."""
+from PIL import ImageDraw
+from casinogames.card_scene import (
+    felt, grid_rect, put_card, card, scene, png, gif, flip_frames, result_of,
+    bottom_from, number,
+)
 
 
-# ---------- Normal board render ----------
-def render_pair_board(game: PairAGone) -> io.BytesIO:
-    def sprite_resolver(game, idx):
-        symbol = game.board[idx]
-        if symbol:
-            return faces.get_face(symbol)
-        else:
-            return Image.new("RGBA", (game.CARD_W, game.CARD_H), (0, 0, 0, 0))
-
-    return render_board(game, sprite_resolver)
-
-
-# ---------- Render with blanks (for new cards) ----------
-def render_pair_board_with_blanks(game, blanks: list[int]) -> io.BytesIO:
-
-    # Render the board but force given slots to be solid green blanks.
-    # Used right after compaction so new cards don't spawn face-up instantly.
-
-    def sprite_resolver(game, idx):
-        if idx in blanks:
-            return Image.new("RGBA", (game.CARD_W, game.CARD_H), (0, 128, 0, 255))
-        symbol = game.board[idx]
-        if symbol:
-            return faces.get_face(symbol)
-        return Image.new("RGBA", (game.CARD_W, game.CARD_H), (0, 0, 0, 0))
-
-    return render_board(game, sprite_resolver)
+def _board(game, blanks=()):
+    board=felt(game)
+    for i,symbol in enumerate(game.board):
+        if symbol and i not in blanks:
+            put_card(board,grid_rect(game,i),symbol)
+    draw=ImageDraw.Draw(board)
+    for i in game.selected:
+        x,y,w,h=grid_rect(game,i)
+        draw.rectangle((x,y,x+w-1,y+h-1),outline='#fff595',width=2)
+    board.alpha_composite(card(None,(12,18)),(235,12))
+    number(draw,(232,33),len(game.deck))
+    return board
 
 
-# Flicker animation
-def make_pair_flicker_gif(
-    game, positions: list[int], symbols: list[str], duration=60
-) -> io.BytesIO:
-    frames = []
-
-    base_bytes = render_pair_board(game)
-    base_board = Image.open(base_bytes).convert("RGBA")
-
-    for _ in range(2):  # only 2 quick flicker cycles 
-        # visible frame
-        visible = base_board.copy()
-        for pos, sym in zip(positions, symbols):
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            face = faces.get_face(sym)
-            visible.paste(face, (slot_x, slot_y), mask=face)
-        frames.append(visible)
-
-        # blanked frame
-        flickered = base_board.copy()
-        for pos in positions:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-
-            blank = Image.new("RGBA", (slot_w, slot_h), (0, 120, 0, 255))
-            flickered.paste(blank, (slot_x, slot_y))
-        frames.append(flickered)
-
-    out = io.BytesIO()
-    frames[0].save(
-        out,
-        format="GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=duration,
-        loop=0,
-        disposal=2,
-        optimize=False,
-    )
-    out.seek(0)
-    return out
+def render_pair_board(game):
+    return png(scene(game,_board(game),outcome=result_of(game)))
 
 
-# ---------- Dealer flip animation ----------
-def make_deal_flip_gif(
-    game, pos: int, symbol: str, base_board: Image.Image, duration=120
-) -> io.BytesIO:
+def render_pair_board_with_blanks(game,blanks):
+    return png(scene(game,_board(game,blanks)))
 
-    backs = load_memory_backs()
-    faces = load_memory_faces()
 
-    sequence = [
-        backs.get("back_full"),
-        backs.get("back_half"),
-        backs.get("back_edge"),
-        faces.get_flip(symbol),
-        faces.get_face(symbol),
-    ]
-    slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
+def make_pair_flicker_gif(game,positions,symbols,duration=60):
+    frames=[]
+    for stage in range(6):
+        board=_board(game,positions)
+        for pos,sym in zip(positions,symbols):
+            if stage in (0,2):
+                put_card(board,grid_rect(game,pos),sym)
+        frames.append(scene(game,board,stage))
+    return gif(frames,duration)
 
-    frames = []
-    for frame in sequence:
-        frame = frame.convert("RGBA")
 
-        # transparent normalize canvas
-        # TODO: shouldn't have to normalize?? figure this out later
-        norm_frame = Image.new("RGBA", (game.CARD_W, game.CARD_H), (0, 0, 0, 0))
-        x_off = (game.CARD_W - frame.width) // 2
-        y_off = (game.CARD_H - frame.height) // 2
-        norm_frame.paste(frame, (x_off, y_off), mask=frame)
+def make_deal_flip_gif(game,pos,symbol,base_board,duration=120):
+    return flip_frames(game,bottom_from(base_board),[(grid_rect(game,pos),symbol)],
+                       dealing=True,duration=duration)
 
-        # Copy base board, clear slot area to green, then paste frame
-        board_img = base_board.copy()
-        blank = Image.new(
-            "RGBA", (slot_w, slot_h), (0, 128, 0, 255)
-        )  # green background for slot
-        board_img.paste(blank, (slot_x, slot_y))
-        board_img.paste(norm_frame, (slot_x, slot_y), mask=norm_frame)
-        frames.append(board_img)
 
-    # padding the last frame so Discord "freezes" instead of looping weirdly
-    final_frame = frames[-1]
-    for _ in range(8):
-        frames.append(final_frame)
-
-    out = io.BytesIO()
-    frames[0].save(
-        out,
-        format="GIF",
-        save_all=True,
-        append_images=frames[1:],
-        duration=duration,
-        loop=0,
-        disposal=2,
-        optimize=False,
-    )
-    out.seek(0)
-    return out
+def make_simultaneous_flip_gif(game,new_cards,duration=80):
+    return flip_frames(game,_board(game,[p for p,_ in new_cards]),
+                       [(grid_rect(game,p),s) for p,s in new_cards],dealing=True,duration=duration)

@@ -14,6 +14,7 @@ from casinogames.assetloader import load_memory_faces, load_memory_backs
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import (
     make_pair_flicker_gif,
+    make_simultaneous_flip_gif,
     render_pair_board,
     render_pair_board_with_blanks,
 )
@@ -180,6 +181,7 @@ class PairControls(discord.ui.View):
 
         self.game.selected.append(pos)
         if len(self.game.selected) < 2:
+            await self._apply_status(msg, attachments=[self._board_file()], view=self)
             return
 
         a, b = self.game.selected
@@ -193,9 +195,7 @@ class PairControls(discord.ui.View):
 
         if not is_match:
             self._refresh_buttons()
-            attachments = None
-            if not self.animations_enabled:
-                attachments = [self._board_file()]
+            attachments = [self._board_file()]
             await self._apply_status(
                 msg,
                 "No match!",
@@ -491,60 +491,7 @@ class PairControls(discord.ui.View):
     # Simultaneous flip gif generator
     ###########################################################################
     def make_simultaneous_flip_gif(self, game, new_cards, duration=80) -> io.BytesIO:
-        base_board = Image.open(
-            render_pair_board_with_blanks(game, [pos for pos, _ in new_cards])
-        ).convert("RGBA")
-
-        frames = []
-
-        frame1 = base_board.copy()
-        for pos, _ in new_cards:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            back = backs.get("back_full")
-            frame1.paste(back, (slot_x, slot_y), mask=back)
-        frames.append(frame1)
-
-        frame2 = base_board.copy()
-        for pos, _ in new_cards:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            half = backs.get("back_half")
-            frame2.paste(half, (slot_x, slot_y), mask=half)
-        frames.append(frame2)
-
-        frame3 = base_board.copy()
-        for pos, _ in new_cards:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            edge = backs.get("back_edge")
-            frame3.paste(edge, (slot_x, slot_y), mask=edge)
-        frames.append(frame3)
-
-        frame4 = base_board.copy()
-        for pos, sym in new_cards:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            face_edge = faces.get_flip(sym)
-            frame4.paste(face_edge, (slot_x, slot_y), mask=face_edge)
-        frames.append(frame4)
-
-        frame5 = base_board.copy()
-        for pos, sym in new_cards:
-            slot_x, slot_y, slot_w, slot_h = game.get_slot_rect(pos)
-            face = faces.get_face(sym)
-            frame5.paste(face, (slot_x, slot_y), mask=face)
-        frames.append(frame5)
-
-        out = io.BytesIO()
-        frames[0].save(
-            out,
-            format="GIF",
-            save_all=True,
-            append_images=frames[1:],
-            duration=duration,
-            loop=1,
-            disposal=2,
-            optimize=False,
-        )
-        out.seek(0)
-        return out
+        return make_simultaneous_flip_gif(game,new_cards,duration)
 
 
 def make_pair_view(
