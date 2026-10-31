@@ -2,3 +2,7 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Local Python environment and durable runtime state
+.venv/
+data/
