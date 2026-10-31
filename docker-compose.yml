@@ -15,8 +15,10 @@ services:
       - .env.dev
     environment:
       APP_ENV: development
+      CASINO_SESSION_DB: /app/data/casino_sessions.sqlite3
     volumes:
       - ./src:/app/src
+      - casino-dev-data:/app/data
     command: ["python", "-m", "src.bot"]
 
   bot-stage:
@@ -26,6 +28,9 @@ services:
       - .env.stage
     environment:
       APP_ENV: staging
+      CASINO_SESSION_DB: /app/data/casino_sessions.sqlite3
+    volumes:
+      - casino-stage-data:/app/data
     command: ["python", "-m", "src.bot"]
 
   bot-prod:
@@ -35,4 +40,12 @@ services:
       - .env.prod
     environment:
       APP_ENV: production
+      CASINO_SESSION_DB: /app/data/casino_sessions.sqlite3
+    volumes:
+      - casino-prod-data:/app/data
     command: ["python", "-m", "src.bot"]
+
+volumes:
+  casino-dev-data:
+  casino-stage-data:
+  casino-prod-data:

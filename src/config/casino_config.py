@@ -25,6 +25,18 @@ DEFAULT_GAME_COMMAND_KEYS: set[str] = {
     "picturepoker",
     "roulette",
     "slots",
+    "memory_master",
+    "pairagone_endless",
+    "blackjack",
+    "fortune_tower",
+    "thrilling_cards",
+    "triple_triad",
+    "red7",
+    "scopa",
+    "cuttle",
+    "platoon",
+    "pazaak",
+    "casino_war",
 }
 
 

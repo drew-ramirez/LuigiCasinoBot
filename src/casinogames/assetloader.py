@@ -44,7 +44,7 @@ def load_slots_sheet():
 # -------------------------------
 class MemoryIcons:
     def __init__(self):
-        path = os.path.join(ASSETS_DIR_CARDART, "MemoryMatch.png")
+        path = os.path.join(ASSETS_DIR_CARDART, "MemoryMatch.PNG")
         if not os.path.exists(path):
             raise FileNotFoundError(f"Memory sheet not found: {path}")
         sheet = Image.open(path).convert("RGBA")
@@ -127,7 +127,7 @@ class MemoryIcons:
 
 class MemoryBacks:
     def __init__(self):
-        path = os.path.join(ASSETS_DIR_CARDART, "FaceDown.png")
+        path = os.path.join(ASSETS_DIR_CARDART, "FaceDown.PNG")
         if not os.path.exists(path):
             raise FileNotFoundError(f"FaceDown sheet not found: {path}")
         self.sheet = Image.open(path).convert("RGBA")

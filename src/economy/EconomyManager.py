@@ -34,12 +34,17 @@ class EconomyManager:
     ###########################################################
     @staticmethod
     def ensure_user(user_id: int, username: str = "Unknown") -> dict:
+        from pymongo.errors import DuplicateKeyError
+
         # find an existing user or create a new one with default balance
         record = EconomyManager.COLLECTION.find_one({"user_id": user_id})
         if record:
             return record
 
         new_user = {
+            # Mongo already guarantees _id uniqueness. Keep legacy account IDs,
+            # but give new accounts one stable identity across competing calls.
+            "_id": f"discord:{user_id}",
             "user_id": user_id,
             "username": username,
             "balance": 500,
@@ -57,7 +62,17 @@ class EconomyManager:
             "animations_enabled": True,
         }
 
-        EconomyManager.COLLECTION.insert_one(new_user)
+        try:
+            EconomyManager.COLLECTION.insert_one(new_user)
+        except DuplicateKeyError:
+            # Another first command won the insert. Read its current balance;
+            # never return our unsaved 500-coin template after losing this race.
+            record = EconomyManager.COLLECTION.find_one({"_id": new_user["_id"]})
+            if record is None:
+                record = EconomyManager.COLLECTION.find_one({"user_id": user_id})
+            if record is None or record.get("user_id") != user_id:
+                raise
+            return record
         return new_user
 
     ###########################################################
@@ -272,12 +287,13 @@ class EconomyManager:
     ###########################################################
     @staticmethod
     def wager(user_id: int, amount: int, username: str = "Unknown") -> bool:
-        bal = EconomyManager.balance(user_id, username)
-        if bal < amount:
-            return False
-
-        EconomyManager.COLLECTION.update_one(
-            {"user_id": user_id},
+        if type(amount) is not int or amount <= 0:
+            raise ValueError("Wager must be a positive integer")
+        record = EconomyManager.ensure_user(user_id, username)
+        # Check funds in the same write as the debit. A separate balance read
+        # lets concurrent games spend the same coins, including Blackjack.
+        result = EconomyManager.COLLECTION.update_one(
+            {"_id": record["_id"], "balance": {"$gte": amount}},
             {
                 "$inc": {
                     "balance": -amount,
@@ -286,7 +302,7 @@ class EconomyManager:
                 }
             },
         )
-        return True
+        return bool(result.matched_count)
 
     ###########################################################
     # payout winnings

@@ -17,12 +17,15 @@ def test_start_round_deals_cards(game):
     assert len(game.luigi_hand) == 5
     assert game.bet >= 1
 
-def test_player_discard_changes_hand(game):
-    game.start_round()
+@pytest.mark.parametrize("replacements", [["cloud", "luigi"], ["star", "flower"]])
+def test_player_discard_consumes_selected_replacements(game, replacements):
+    # Drawing the same symbols is legal; verify draws and held cards, not luck.
+    game.player_hand = ["cloud", "luigi", "mario", "mushroom", "star"]
+    game.deck = replacements + ["flower", "cloud"]
     before = list(game.player_hand)
     game.player_discard([0, 1])
-    after = game.player_hand
-    assert before[0] != after[0] or before[1] != after[1]
+    assert game.player_hand == replacements + before[2:]
+    assert game.deck == ["flower", "cloud"]
 
 def test_hand_evaluation_pair(game):
     hand = ["mario", "mario", "cloud", "luigi", "star"]

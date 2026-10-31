@@ -140,6 +140,9 @@ COGS = [
     "cogs.luckystars_cog",
     "cogs.picturepoker_cog",
     "cogs.casino_machines_cog",
+    "cogs.casino_expansion_cog",
+    "cogs.thrilling_cards_cog",
+    "cogs.card_tables_cog",
 ]
 
 
