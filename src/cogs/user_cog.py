@@ -5,6 +5,8 @@
 ###########################################################
 
 import discord
+import asyncio
+import logging
 from typing import Optional
 from discord import app_commands
 from discord.ext import commands
@@ -23,6 +25,7 @@ from utils.emoji_config import (
     picture_poker_emojis,
 )
 
+log = logging.getLogger(__name__)
 bank = Bank()
 GAMES_EMOJI = "\N{GAME DIE}"
 
@@ -168,8 +171,29 @@ class UserCog(commands.Cog):
             inline=False,
         )
 
-        # send followup
-        await interaction.followup.send(embed=embed, ephemeral=visibility.ephemeral)
+        # Keep the existing profile details; attach an equipped cosmetic card.
+        from cosmetics.catalog import Appearance, appearance
+        look = appearance(record)
+        files = []
+        if look != Appearance():
+            try:
+                from cosmetics.profile import render_profile
+                public = {'name': interaction.user.display_name, 'balance': balance,
+                          'games_played': games_played, 'career_stars': career_stars}
+                data = await asyncio.to_thread(render_profile, public, look,
+                                               animate=(record.get('animations_enabled') is None or bool(record['animations_enabled'])))
+                filename = 'profile.gif' if data.getvalue().startswith(b'GIF') else 'profile.png'
+                files = [discord.File(data, filename=filename)]
+                embed.set_image(url='attachment://' + filename)
+            except Exception:
+                log.warning('Profile artwork unavailable; showing existing statistics', exc_info=True)
+        try:
+            await interaction.followup.send(embed=embed, files=files, ephemeral=visibility.ephemeral)
+        except discord.HTTPException as exc:
+            if not files or isinstance(exc, (discord.Forbidden, discord.NotFound)):
+                raise
+            embed.set_image(url=None)
+            await interaction.followup.send(embed=embed, ephemeral=visibility.ephemeral)
 
     @discord.app_commands.command(
         name="casino_balance", description="Check your casino balance for Luigi's Casino"
@@ -534,6 +558,8 @@ class UserCog(commands.Cog):
                     "**/casino_pity** - Luigi fuels your addiction",
                     "**/casino_music** - Stream the casino soundtrack, Youtube Link",
                     "**/casino_animations** - Toggle animated vs static layout",
+                    "**/casino_wardrobe** - Preview and equip casino cosmetics",
+                    "**/casino_shop** - Browse cosmetic packs and confirm claims",
                 ]
             ),
             inline=False,
