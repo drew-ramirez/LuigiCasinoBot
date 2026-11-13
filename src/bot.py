@@ -132,6 +132,7 @@ async def on_ready():
 ###########################################################
 COGS = [
     "cogs.user_cog",
+    "cogs.cosmetics_cog",
     #"cogs.admin_cog",
     #"cogs.test_cog",
     "cogs.casino_config_cog",
