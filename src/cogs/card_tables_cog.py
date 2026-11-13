@@ -191,8 +191,9 @@ class CardTableView(discord.ui.View):
 
 
 class CardTablesCog(commands.Cog):
-    def __init__(self,bot,*,store=None,registry=None):
+    def __init__(self,bot,*,store=None,registry=None,cosmetics=None):
         self.bot=bot
+        self.cosmetics=cosmetics
         self.service=DuelService(store or SessionStore(os.getenv('CASINO_SESSION_DB','data/casino_sessions.sqlite3')),registry or engines())
         self.locks={};self.messages={};self.private_messages={};self.tasks={};self.deadlines={}
         self.timeout_seconds=480
@@ -214,6 +215,19 @@ class CardTablesCog(commands.Cog):
             log.warning('Using static practice-table rendering; preference unavailable',exc_info=True)
             return False
 
+    async def render_appearance(self,player):
+        from cosmetics.catalog import Appearance
+        if self.cosmetics is None:
+            return Appearance()
+        try:
+            appearance=await asyncio.wait_for(asyncio.to_thread(self.cosmetics.appearance_for,int(player)),timeout=2.0)
+            if not isinstance(appearance,Appearance):
+                raise TypeError('Cosmetics lookup did not return an Appearance')
+            return appearance
+        except Exception:
+            log.warning('Using classic practice-table appearance; cosmetics unavailable',exc_info=True)
+            return Appearance()
+
     async def payload(self,saved,viewer=None,*,animate=False,view=None,transition=False):
         public=self.service.projection(saved,viewer)
         content=readable(public)
@@ -224,12 +238,14 @@ class CardTablesCog(commands.Cog):
         files=[]
         try:
             from casinogames.duel_render import render_duel, render_sequence
+            from cosmetics.rendering import run_with_appearance
+            appearance=await self.render_appearance(saved['owner'] if viewer is None else viewer)
             history=self.service.frames(saved,viewer) if transition else []
             previous=history[0] if len(history)>1 else None
             if animate and len(history)>1:
-                data=await asyncio.to_thread(render_sequence,saved['kind'],history)
+                data=await asyncio.to_thread(run_with_appearance,appearance,render_sequence,saved['kind'],history)
             else:
-                data=await asyncio.to_thread(render_duel,saved['kind'],public,previous=previous,animate=animate)
+                data=await asyncio.to_thread(run_with_appearance,appearance,render_duel,saved['kind'],public,previous=previous,animate=animate)
             files=[discord.File(data,filename='table.gif' if data.getvalue().startswith(b'GIF') else 'table.png')]
         except Exception:
             log.warning('Using saved public text after table image failure',exc_info=True)
@@ -434,4 +450,10 @@ class CardTablesCog(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(CardTablesCog(bot))
+    try:
+        from cosmetics.store import CosmeticsStore
+        cosmetics=CosmeticsStore()
+    except Exception:
+        log.warning('Using classic practice-table appearance; cosmetics setup unavailable',exc_info=True)
+        cosmetics=None
+    await bot.add_cog(CardTablesCog(bot,cosmetics=cosmetics))
