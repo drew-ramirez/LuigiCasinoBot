@@ -7,10 +7,6 @@ from casinogames.card_scene import (
 )
 
 
-def render_hand(hand,reveal=False):
-    return [card(symbol if reveal else None) for symbol in hand]
-
-
 def _board(game,reveal=False,hidden_player=(),hidden_dealer=(),controls=True):
     board=felt(game)
     selected=getattr(game,'selected_discards',set()) if controls and not reveal else set()
@@ -21,6 +17,12 @@ def _board(game,reveal=False,hidden_player=(),hidden_dealer=(),controls=True):
                  symbol if i not in hidden_player else None)
     for i,sym in enumerate(('star','mario','luigi','flower','mushroom','cloud')):
         board.alpha_composite(card(sym,(12,17)),(8,86+i*17))
+    _draw_board_status(board, game, reveal, controls, selected)
+    return board
+
+
+
+def _draw_board_status(board, game, reveal, controls, selected):
     result=getattr(game,'result',None)
     if result and reveal:
         for key,y in [('luigi_rank',71),('player_rank',116)]:
@@ -31,8 +33,6 @@ def _board(game,reveal=False,hidden_player=(),hidden_dealer=(),controls=True):
     elif controls:
         art=sprite('hit' if selected else 'hold')
         board.alpha_composite(art,(60,82))
-    return board
-
 
 def render_board(game,reveal=False):
     outcome=(game.result or {}).get('outcome') if reveal else None

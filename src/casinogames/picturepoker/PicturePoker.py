@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: PicturePoker.py
 #
 # Description: Game logic for Luigi's Casino Picture Poker
@@ -10,12 +10,6 @@ from collections import Counter
 
 class PicturePoker:
     GAME_KEY = "picturepoker"
-    CARD_W = 136
-    CARD_H = 207
-    GAP_X = 24
-    GAP_Y = 24
-    MARGIN_X = 32
-    MARGIN_Y = 32
 
     SYMBOLS = ["cloud", "mushroom", "flower", "luigi", "mario", "star"]
 
@@ -64,11 +58,9 @@ class PicturePoker:
                 ('three_kind', 3, 0), ('two_pair', 2, 2), ('one_pair', 2, 0)]
         return [(self.MULTIPLIER[rank], stars, mushrooms) for rank, stars, mushrooms in rows]
 
-    def __init__(self, starting_coins: int = 0, starting_stars: int = 0):
-        # starting_coins kept for backwards compatibility
+    def __init__(self, starting_stars: int = 0):
         # real balance lives in EconomyManager
         # If we want to use stars for auto betting in some we can later
-        self.starting_coins = starting_coins
         self.starting_stars = starting_stars
         self.reset()
 
@@ -224,11 +216,3 @@ class PicturePoker:
                 }
 
         return self.result
-
-    def get_slot_rect(self, pos: int, dealer: bool = False) -> tuple[int, int, int, int]:
-        x = self.MARGIN_X + pos * (self.CARD_W + self.GAP_X)
-        if dealer:
-            y = self.MARGIN_Y
-        else:
-            y = self.MARGIN_Y + self.CARD_H + (self.GAP_Y * 2)
-        return x, y, self.CARD_W, self.CARD_H

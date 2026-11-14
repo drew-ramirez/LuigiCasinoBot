@@ -13,7 +13,7 @@ def _result(game):
     return None
 
 
-def make_card_with_stars(star_count, game=None):
+def make_card_with_stars(star_count):
     art=assets['blank_full'].resize((32,48),Image.Resampling.NEAREST)
     star=assets['star'].resize((9,9),Image.Resampling.NEAREST)
     positions={1:[(12,20)],2:[(12,12),(12,28)],3:[(12,8),(5,28),(19,28)],
@@ -53,7 +53,3 @@ def make_slide_animation(game,duration=120,tail_hold_ms=2500):
         frames.append(scene(game,_board(game,True,1,width,stage>=3),stage+8))
     # Return the exact playback duration so Discord does not cut off the reveal.
     return gif(frames,duration,tail=tail_hold_ms), (len(frames)*duration+tail_hold_ms)/1000
-
-
-def draw_card_face(star_count):
-    return make_card_with_stars(star_count)

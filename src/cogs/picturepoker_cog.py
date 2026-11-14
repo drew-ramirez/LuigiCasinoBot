@@ -68,107 +68,6 @@ class PicturePokerCog(BaseGameCog):
         ###########################################################
         # Callback: when a bet is selected
         ###########################################################
-        async def start_game(
-            inter: discord.Interaction,
-            bet_amount: int,
-            new_game: PicturePoker | None = None,
-        ):
-            if new_game is None:
-                EconomyManager.reset_star_bonus(
-                    user_id,
-                    PicturePoker.GAME_KEY,
-                    inter.user.name,
-                )
-                target_game = PicturePoker()
-            else:
-                target_game = new_game
-            target_game.start_round(forced_bet=bet_amount)
-            self.log_game_start(
-                inter,
-                "casino_picturepoker",
-                bet_amount=bet_amount,
-                game=target_game,
-            )
-            animations_on = EconomyManager.animations_enabled(
-                inter.user.id, inter.user.name
-            )
-
-            board_bytes = render_board(target_game, reveal=False)
-            if hasattr(board_bytes, "seek"):
-                try:
-                    board_bytes.seek(0)
-                except Exception:
-                    pass
-            if animations_on:
-                board_bytes = await asyncio.to_thread(waiting_animation, target_game, board_bytes)
-            board_file = discord.File(board_bytes, filename="poker.gif" if animations_on else "poker.png")
-
-            multiplier = EconomyManager.star_bonus_multiplier(
-                target_game.stars, PicturePoker.GAME_KEY
-            )
-            stats = {
-                "active_bet": target_game.bet,
-                "stars_current": target_game.stars,
-                "round": target_game.round,
-                "multiplier": multiplier,
-                "dealer_action": (
-                    "New game started! \n Select cards to discard then submit.\n"
-                    f" (⭐ bonus x{multiplier:.2f})"
-                ),
-            }
-
-            view = make_poker_view(
-                target_game,
-                inter.user,
-                self.cleanup_game,
-                animations_enabled=animations_on,
-                start_game_callback=start_game,
-            )
-
-            if animations_on:
-                header_text = make_gif_game_header(
-                    inter.user,
-                    "Picture Poker",
-                    stats,
-                )
-                await inter.response.edit_message(
-                    content=header_text,
-                    embed=None,
-                    attachments=[board_file],
-                    view=view,
-                )
-            else:
-                header_embed = make_game_header(
-                    inter.user,
-                    "Picture Poker",
-                    stats,
-                )
-                header_embed.set_image(url=f"attachment://{board_file.filename}")
-                await inter.response.edit_message(
-                    content=None,
-                    embed=header_embed,
-                    attachments=[board_file],
-                    view=view,
-                )
-
-            message = inter.message
-            if message is None:
-                try:
-                    message = await inter.original_response()
-                except Exception:
-                    message = None
-            if message is not None:
-                view.msg = message
-
-            await self.register_active_game(
-                inter.user.id,
-                game=target_game,
-                message=message,
-                view=view,
-                timeout_metadata=self._picturepoker_timeout_metadata,
-                cleanup_renderer=view.cleanup_payload,
-            )
-
         layout_mode = (
             "gif"
             if EconomyManager.animations_enabled(user_id, player.name)
@@ -177,10 +76,112 @@ class PicturePokerCog(BaseGameCog):
 
         await self.present_wager_menu(
             interaction,
-            on_bet_selected=start_game,
+            on_bet_selected=self._start_game,
             visibility=visibility,
             layout=layout_mode,
         )
+
+    async def _start_game(
+        self, inter: discord.Interaction,
+        bet_amount: int,
+        new_game: PicturePoker | None = None,
+    ):
+        if new_game is None:
+            EconomyManager.reset_star_bonus(
+                inter.user.id,
+                PicturePoker.GAME_KEY,
+                inter.user.name,
+            )
+            target_game = PicturePoker()
+        else:
+            target_game = new_game
+        target_game.start_round(forced_bet=bet_amount)
+        self.log_game_start(
+            inter,
+            "casino_picturepoker",
+            bet_amount=bet_amount,
+            game=target_game,
+        )
+        animations_on = EconomyManager.animations_enabled(
+            inter.user.id, inter.user.name
+        )
+
+        board_bytes = render_board(target_game, reveal=False)
+        if hasattr(board_bytes, "seek"):
+            try:
+                board_bytes.seek(0)
+            except Exception:
+                pass
+        if animations_on:
+            board_bytes = await asyncio.to_thread(waiting_animation, target_game, board_bytes)
+        board_file = discord.File(board_bytes, filename="poker.gif" if animations_on else "poker.png")
+
+        multiplier = EconomyManager.star_bonus_multiplier(
+            target_game.stars, PicturePoker.GAME_KEY
+        )
+        stats = {
+            "active_bet": target_game.bet,
+            "stars_current": target_game.stars,
+            "round": target_game.round,
+            "multiplier": multiplier,
+            "dealer_action": (
+                "New game started! \n Select cards to discard then submit.\n"
+                f" (⭐ bonus x{multiplier:.2f})"
+            ),
+        }
+
+        view = make_poker_view(
+            target_game,
+            inter.user,
+            self.cleanup_game,
+            animations_enabled=animations_on,
+            start_game_callback=self._start_game,
+        )
+
+        if animations_on:
+            header_text = make_gif_game_header(
+                inter.user,
+                "Picture Poker",
+                stats,
+            )
+            await inter.response.edit_message(
+                content=header_text,
+                embed=None,
+                attachments=[board_file],
+                view=view,
+            )
+        else:
+            header_embed = make_game_header(
+                inter.user,
+                "Picture Poker",
+                stats,
+            )
+            header_embed.set_image(url=f"attachment://{board_file.filename}")
+            await inter.response.edit_message(
+                content=None,
+                embed=header_embed,
+                attachments=[board_file],
+                view=view,
+            )
+
+        message = inter.message
+        if message is None:
+            try:
+                message = await inter.original_response()
+            except Exception:
+                message = None
+        if message is not None:
+            view.msg = message
+
+        await self.register_active_game(
+            inter.user.id,
+            game=target_game,
+            message=message,
+            view=view,
+            timeout_metadata=self._picturepoker_timeout_metadata,
+            cleanup_renderer=view.cleanup_payload,
+        )
+
 
 
 ###########################################################

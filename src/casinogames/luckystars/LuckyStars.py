@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: LuckyStars.py
 #
 # Description: Game logic for Luigi's Casino Lucky Stars
@@ -63,6 +63,3 @@ class LuckyStars:
             "bet": self.bet,
             "outcome": outcome,
         }
-
-    def is_over(self) -> bool:
-        return self.finished

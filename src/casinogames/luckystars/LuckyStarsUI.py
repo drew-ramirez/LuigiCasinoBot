@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: LuckyStarsUI.py
 #
 # Description: Discord UI controls and animations for Lucky Stars
@@ -9,7 +9,6 @@ import io
 
 import discord
 
-from casinogames.assetloader import load_memory_faces, load_memory_backs
 from casinogames.luckystars.LuckyStars import LuckyStars
 from casinogames.luckystars.LuckyStarsPrint import (
     make_slide_animation,
@@ -20,13 +19,10 @@ from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
 
-faces = load_memory_faces()
-backs = load_memory_backs()
-
 
 class LuckyStarsView(discord.ui.View):
     def cleanup_payload(self, status, colour=None):
-        if getattr(view, "animations_enabled", False):
+        if getattr(self, "animations_enabled", False):
             return {
                 "content": self._header_text(status),
                 "embed": None,
@@ -125,13 +121,6 @@ class LuckyStarsView(discord.ui.View):
         for child in self.children:
             if isinstance(child, discord.ui.Button) and not child.disabled:
                 child.disabled = True
-        if self.msg:
-            await self.msg.edit(view=self)
-
-    async def _enable_buttons(self):
-        for child in self.children:
-            if isinstance(child, discord.ui.Button):
-                child.disabled = False
         if self.msg:
             await self.msg.edit(view=self)
 
@@ -262,12 +251,12 @@ class LuckyStarsView(discord.ui.View):
                 view=None,
             )
 
-        await self._show_replay(summary)
+        await self._show_replay()
 
     ###########################################################
     # replay / quit menu
     ###########################################################
-    async def _show_replay(self, summary: str):
+    async def _show_replay(self):
         if self.on_finish is not None:
             await self.on_finish(self.player.id)
 
