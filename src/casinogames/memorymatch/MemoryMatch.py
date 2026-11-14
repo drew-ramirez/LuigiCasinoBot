@@ -1,18 +1,11 @@
-﻿import random
+import random
 from typing import List, Tuple
-from casinogames.core.BaseGame import BaseGame
 
-class MemoryMatch(BaseGame):
+class MemoryMatch:
     GAME_KEY = "memorymatch"
     # Board layout constants
     COLS = 4
     ROWS = 2
-    CARD_W = 136
-    CARD_H = 207
-    GAP_X = 24
-    GAP_Y = 24
-    MARGIN_X = 32
-    MARGIN_Y = 32
 
     # Each clear upgrades the board until we hit the cap.
     DIFFICULTY_STEPS: List[Tuple[int, List[str]]] = [
@@ -45,13 +38,11 @@ class MemoryMatch(BaseGame):
 
     def __init__(
         self,
-        player_id: int,
         bet: int,
         base_attempts: int = 3,
         *,
         initial_stars: int = 0,
     ):
-        self.player_id = player_id
         self.bet = max(1, bet)
         self.base_attempts = max(1, base_attempts)
         self.remaining_attempts = self.base_attempts

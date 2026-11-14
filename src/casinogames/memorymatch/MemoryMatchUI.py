@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: MemoryMatchUI.py
 #
 # Description: Discord UI controls for Luigi's Casino Memory Match
@@ -31,7 +31,7 @@ class MemoryMatchControls(discord.ui.View):
     GAME_KEY = MemoryMatch.GAME_KEY
 
     def cleanup_payload(self, status, colour=None):
-        if getattr(view, "animations_enabled", False):
+        if getattr(self, "animations_enabled", False):
             content = self._status_text(status)
             files = [self._board_file()]
             return {
@@ -178,10 +178,36 @@ class MemoryMatchControls(discord.ui.View):
         game = self.game
         msg = self.msg or await interaction.original_response()
 
+        if not await self._show_flip(msg, pos):
+            return
+
+        ###########################################################
+        # match check
+        ###########################################################
+        if await self._resolve_flip_match(msg):
+            return
+
+        if game.remaining_attempts <= 0:
+            await self._handle_loss(msg)
+            return
+
+        ###########################################################
+        # re-enable buttons
+        ###########################################################
+        for i, child in enumerate(self.children):
+            if i < len(game.board):
+                _, _, matched = game.board[i]
+                child.disabled = matched
+            else:
+                child.disabled = True
+        await msg.edit(view=self)
+
+    async def _show_flip(self, msg, pos):
+        game = self.game
         if self.animations_enabled:
             if not game.flip_card(pos):
                 await msg.edit(content=self._status_text("Invalid flip."), view=self)
-                return
+                return False
 
             symbol, _, _ = game.board[pos]
 
@@ -214,7 +240,7 @@ class MemoryMatchControls(discord.ui.View):
                     attachments=files,
                     view=self,
                 )
-                return
+                return False
 
             for child in self.children:
                 child.disabled = True
@@ -230,9 +256,10 @@ class MemoryMatchControls(discord.ui.View):
                 view=self,
             )
 
-        ###########################################################
-        # match check
-        ###########################################################
+        return True
+
+    async def _resolve_flip_match(self, msg):
+        game = self.game
         result = None
         if len(game.revealed) % 2 == 0:
             result = game.check_match()
@@ -267,23 +294,10 @@ class MemoryMatchControls(discord.ui.View):
                 game.last_bonus_awarded = False
 
             if board_cleared:
-                await self._handle_win(interaction, msg)
-                return
+                await self._handle_win(msg)
+                return True
 
-        if game.remaining_attempts <= 0:
-            await self._handle_loss(msg)
-            return
-
-        ###########################################################
-        # re-enable buttons
-        ###########################################################
-        for i, child in enumerate(self.children):
-            if i < len(game.board):
-                _, _, matched = game.board[i]
-                child.disabled = matched
-            else:
-                child.disabled = True
-        await msg.edit(view=self)
+        return False
 
     async def _handle_mismatch(self, msg: discord.Message):
         await asyncio.sleep(MISMATCH_REVEAL_DELAY)
@@ -318,7 +332,7 @@ class MemoryMatchControls(discord.ui.View):
             )
         await self.update_controls_for_unmatch([a, b], msg)
 
-    async def _handle_win(self, interaction: discord.Interaction, msg: discord.Message):
+    async def _handle_win(self, msg: discord.Message):
         final_board = self._board_file()
         current_streak = EconomyManager.star_bonus_count(
             self.player.id,
@@ -551,7 +565,6 @@ class MemoryMatchControls(discord.ui.View):
                         self.player.name,
                     )
                     new_game = MemoryMatch(
-                        self.player.id,
                         bet_amount,
                         initial_stars=initial_stars,
                     )

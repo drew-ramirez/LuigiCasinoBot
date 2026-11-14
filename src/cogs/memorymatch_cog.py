@@ -64,7 +64,6 @@ class MemoryMatchCog(BaseGameCog):
                     inter.user.name,
                 )
                 game = MemoryMatch(
-                    user_id,
                     bet_amount,
                     initial_stars=0,
                 )

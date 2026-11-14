@@ -1,14 +1,13 @@
-﻿###########################################################
+###########################################################
 # File: PairAGone.py
 #
 # Description: Game logic for Luigi's Casino Pair-a-Gone
 ###########################################################
 
 import random
-from casinogames.core.BaseGame import BaseGame
 
 
-class PairAGone(BaseGame):
+class PairAGone:
     GAME_KEY = "pairagone"
     COLS = 5
     ROWS = 4
@@ -19,12 +18,10 @@ class PairAGone(BaseGame):
 
     def __init__(
         self,
-        player_id: int,
         bet: int,
         *,
         initial_stars: int = 0,
     ):
-        super().__init__(player_id)
         self.bet = max(1, bet)
 
         # progression state
@@ -39,7 +36,6 @@ class PairAGone(BaseGame):
         self.board = []
         self.selected = []
         self.total_slots = self.COLS * self.ROWS  # 20 visible
-        self.total_cards = 0
 
         self._build_deck()
         self._deal_board()
@@ -54,7 +50,6 @@ class PairAGone(BaseGame):
             self.deck.extend([sym] * cards_per_symbol)
 
         random.shuffle(self.deck)
-        self.total_cards = len(self.deck)
 
     def _deal_board(self):
         draw_count = min(self.total_slots, len(self.deck))
@@ -64,42 +59,22 @@ class PairAGone(BaseGame):
         while len(self.board) < self.total_slots:
             self.board.append(None)
 
-    def prepare_next_round(self):
-        self.selected.clear()
-        self._build_deck()
-        self._deal_board()
-
-    ###########################################################
-    # Core logic
-    ###########################################################
     def pos_to_rc(self, pos: int):
         return divmod(pos, self.COLS)
 
-    def get_symbol(self, pos: int):
-        return self.board[pos]
-
-    def select_card(self, pos: int):
-        if pos < 0 or pos >= len(self.board) or self.board[pos] is None:
-            return None
-        self.selected.append(pos)
-        if len(self.selected) == 2:
-            a, b = self.selected
-            self.selected = []
-            return self.check_match(a, b)
-        return None
-
-    def check_match(self, a: int, b: int):
-        if self.board[a] is None or self.board[b] is None:
+    def is_match(self, a: int, b: int) -> bool:
+        symbol = self.board[a]
+        if symbol is None or symbol != self.board[b]:
             return False
-        if self.board[a] != self.board[b]:
-            return False
-
         ra, ca = self.pos_to_rc(a)
         rb, cb = self.pos_to_rc(b)
-        if abs(ra - rb) <= 1 and abs(ca - cb) <= 1:
-            self.remove_and_fall([a, b])
-            return True
-        return False
+        return abs(ra - rb) <= 1 and abs(ca - cb) <= 1
+
+    def check_match(self, a: int, b: int):
+        if not self.is_match(a, b):
+            return False
+        self.remove_and_fall([a, b])
+        return True
 
     ###########################################################
     # Removal, gravity, and refill
@@ -134,28 +109,23 @@ class PairAGone(BaseGame):
     def remaining_in_deck(self) -> int:
         return len(self.deck)
 
-    def remaining_total(self) -> int:
-        on_board = sum(1 for c in self.board if c is not None)
-        return on_board + len(self.deck)
-
     def is_board_cleared(self):
         return all(v is None for v in self.board) and not self.deck
 
     def has_possible_moves(self) -> bool:
-        for i in range(len(self.board)):
-            symbol = self.board[i]
-            if not symbol:
-                continue
-            r, c = self.pos_to_rc(i)
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    nr, nc = r + dr, c + dc
-                    if 0 <= nr < self.ROWS and 0 <= nc < self.COLS:
-                        idx = nr * self.COLS + nc
-                        if self.board[idx] == symbol:
-                            return True
+        return any(
+            symbol and self._has_matching_neighbor(i, symbol)
+            for i, symbol in enumerate(self.board)
+        )
+
+    def _has_matching_neighbor(self, index, symbol):
+        row, col = self.pos_to_rc(index)
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                nr, nc = row + dr, col + dc
+                if (dr or dc) and 0 <= nr < self.ROWS and 0 <= nc < self.COLS:
+                    if self.board[nr * self.COLS + nc] == symbol:
+                        return True
         return False
 
     ###########################################################

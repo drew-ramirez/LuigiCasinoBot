@@ -2,7 +2,7 @@
 from PIL import ImageDraw
 from casinogames.card_scene import (
     felt, grid_rect, put_card, card, scene, png, gif, flip_frames,
-    bottom_from, number,
+    number,
 )
 
 
@@ -45,11 +45,6 @@ def make_pair_flicker_gif(game,positions,symbols,duration=60):
                 put_card(board,grid_rect(game,pos),sym)
         frames.append(scene(game,board,stage))
     return gif(frames,duration)
-
-
-def make_deal_flip_gif(game,pos,symbol,base_board,duration=120):
-    return flip_frames(game,bottom_from(base_board),[(grid_rect(game,pos),symbol)],
-                       dealing=True,duration=duration)
 
 
 def make_simultaneous_flip_gif(game,new_cards,duration=80):

@@ -28,7 +28,7 @@ def check_gif(data, *, loop=False):
 
 @pytest.mark.parametrize('stars',[0,1,2,3])
 def test_memory_all_difficulties_fit_and_events_preserve_state(stars):
-    game=MemoryMatch(1,25,initial_stars=stars)
+    game=MemoryMatch(25,initial_stars=stars)
     before=copy.deepcopy(vars(game))
     for i in range(len(game.board)):
         x,y,w,h=grid_rect(game,i)
@@ -40,7 +40,7 @@ def test_memory_all_difficulties_fit_and_events_preserve_state(stars):
 
 
 def test_hidden_memory_symbols_do_not_leak_and_matches_leave_board():
-    game=MemoryMatch(1,25)
+    game=MemoryMatch(25)
     original=render_board_image(game).getvalue()
     game.board[0]=('mario',False,False)
     assert render_board_image(game).getvalue()==original
@@ -49,7 +49,7 @@ def test_hidden_memory_symbols_do_not_leak_and_matches_leave_board():
 
 
 def test_pair_deck_selection_and_replacements_are_visual_only():
-    game=PairAGone(1,25)
+    game=PairAGone(25)
     game.selected=[2]
     before=copy.deepcopy(vars(game))
     plain=render_pair_board(game).getvalue()
@@ -95,7 +95,7 @@ def test_lucky_animation_duration_and_hidden_cards(pick):
 
 
 def test_only_waiting_scenes_loop_and_keep_board_unchanged():
-    game=MemoryMatch(1,25)
+    game=MemoryMatch(25)
     data=waiting_animation(game,render_board_image(game))
     check_gif(data,loop=True)
     with Image.open(data) as im:

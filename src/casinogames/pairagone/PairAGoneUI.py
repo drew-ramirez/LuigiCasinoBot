@@ -1,16 +1,14 @@
-﻿###########################################################
+###########################################################
 # File: PairAGoneUI.py
 #
 # Description: Discord UI controls for Pair-a-Gone
 ###########################################################
 
 import asyncio
-import io
 from contextlib import suppress
 import discord
 from PIL import Image
 
-from casinogames.assetloader import load_memory_faces, load_memory_backs
 from casinogames.pairagone.PairAGone import PairAGone
 from casinogames.pairagone.PairAGonePrint import (
     make_pair_flicker_gif,
@@ -22,9 +20,6 @@ from utils.bet_selector import BetSelectView, DEFAULT_WAGER_OPTIONS
 from utils.ui_embeds import make_game_header, make_gif_game_header
 from economy.EconomyManager import EconomyManager
 from metrics.metrics_manager import MetricsManager
-
-faces = load_memory_faces()
-backs = load_memory_backs()
 
 
 class PairControls(discord.ui.View):
@@ -201,12 +196,7 @@ class PairControls(discord.ui.View):
         self.game.selected = []
 
         sa, sb = self.game.board[a], self.game.board[b]
-        ra, ca = divmod(a, self.game.COLS)
-        rb, cb = divmod(b, self.game.COLS)
-        is_adjacent = abs(ra - rb) <= 1 and abs(ca - cb) <= 1
-        is_match = sa == sb and sa is not None and is_adjacent
-
-        if not is_match:
+        if not self.game.is_match(a, b):
             self._refresh_buttons()
             attachments = [self._board_file()]
             await self._apply_status(
@@ -293,7 +283,7 @@ class PairControls(discord.ui.View):
         await asyncio.sleep(0.4 if self.animations_enabled else 0.25)
 
         try:
-            flip_gif = self.make_simultaneous_flip_gif(
+            flip_gif = make_simultaneous_flip_gif(
                 self.game, new_cards, duration=80
             )
             flip_gif.seek(0)
@@ -429,7 +419,6 @@ class PairControls(discord.ui.View):
                         player_name,
                     )
                     new_game = PairAGone(
-                        self.player.id,
                         bet_amount,
                         initial_stars=initial_stars,
                     )
@@ -456,39 +445,7 @@ class PairControls(discord.ui.View):
                     await msg.edit(view=wager_view)
 
         async def quit_cb(btn_inter: discord.Interaction):
-            if btn_inter.user.id != self.player.id:
-                await btn_inter.response.send_message("Not your game!", ephemeral=True)
-                return
-            await btn_inter.response.defer()
-            action = "Thanks for playing Pair-a-Gone!"
-            if self.animations_enabled:
-                await self._apply_status(
-                    msg,
-                    action,
-                    view=None,
-                )
-            else:
-                await self._apply_status(
-                    msg,
-                    action,
-                    attachments=[self._board_file()],
-                    view=None,
-                )
-            if not getattr(self.game, "metrics_logged", False):
-                session_id = getattr(self.game, "metrics_session_id", None)
-                MetricsManager.record_game_result(
-                    session_id,
-                    result="quit",
-                    payout=0,
-                    net=0,
-                    metadata={
-                        "remaining_deck": self.game.remaining_in_deck(),
-                        "session_stars": getattr(self.game, "session_stars", self.game.stars),
-                    },
-                )
-                setattr(self.game, "metrics_logged", True)
-            if self.on_finish is not None:
-                await self.on_finish(self.player.id)
+            await self._quit_replay(btn_inter, msg)
 
         replay_btn.callback = replay_cb
         quit_btn.callback = quit_cb
@@ -500,11 +457,42 @@ class PairControls(discord.ui.View):
         with suppress(Exception):
             await msg.edit(view=replay_view)
 
-    ###########################################################################
-    # Simultaneous flip gif generator
-    ###########################################################################
-    def make_simultaneous_flip_gif(self, game, new_cards, duration=80) -> io.BytesIO:
-        return make_simultaneous_flip_gif(game,new_cards,duration)
+    async def _quit_replay(self, btn_inter, msg):
+        if btn_inter.user.id != self.player.id:
+            await btn_inter.response.send_message("Not your game!", ephemeral=True)
+            return
+        await btn_inter.response.defer()
+        action = "Thanks for playing Pair-a-Gone!"
+        if self.animations_enabled:
+            await self._apply_status(
+                msg,
+                action,
+                view=None,
+            )
+        else:
+            await self._apply_status(
+                msg,
+                action,
+                attachments=[self._board_file()],
+                view=None,
+            )
+        if not getattr(self.game, "metrics_logged", False):
+            session_id = getattr(self.game, "metrics_session_id", None)
+            MetricsManager.record_game_result(
+                session_id,
+                result="quit",
+                payout=0,
+                net=0,
+                metadata={
+                    "remaining_deck": self.game.remaining_in_deck(),
+                    "session_stars": getattr(self.game, "session_stars", self.game.stars),
+                },
+            )
+            setattr(self.game, "metrics_logged", True)
+        if self.on_finish is not None:
+            await self.on_finish(self.player.id)
+
+
 
 
 def make_pair_view(

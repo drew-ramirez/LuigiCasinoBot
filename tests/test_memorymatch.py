@@ -1,4 +1,4 @@
-﻿import sys
+import sys
 from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
@@ -9,7 +9,7 @@ from casinogames.memorymatch.MemoryMatch import MemoryMatch
 
 @pytest.fixture()
 def game():
-    gm = MemoryMatch(player_id=1, bet=10, base_attempts=3)
+    gm = MemoryMatch(bet=10, base_attempts=3)
     gm.board = [
         ("mario", False, False),
         ("mario", False, False),

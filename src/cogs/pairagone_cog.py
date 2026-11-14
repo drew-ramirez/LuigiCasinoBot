@@ -68,7 +68,6 @@ class PairAGoneCog(BaseGameCog):
                     inter.user.name,
                 )
                 game = PairAGone(
-                    user_id,
                     bet_amount,
                     initial_stars=initial_stars,
                 )
