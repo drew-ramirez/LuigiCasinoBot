@@ -1,4 +1,5 @@
 """Server-owned cosmetic IDs and fixed bundles; no user-supplied asset paths."""
+from copy import deepcopy
 from dataclasses import dataclass, fields, replace
 from hashlib import sha256
 import json
@@ -96,6 +97,20 @@ def public_profile(record, name=None):
             'career_stars': record.get('career_stars_total', 0)}
 
 
+def inventory_state(record,*,writing=False):
+    state=record.get('cosmetics')
+    if state is None and 'cosmetics' not in record:
+        return {'schema_version':1,'revision':0,'owned':[],'equipped':{},'receipts':{}}
+    valid=(isinstance(state,dict) and state.get('schema_version')==1
+           and type(state.get('revision')) is int and state['revision']>=0
+           and isinstance(state.get('owned'),list) and all(isinstance(i,str) for i in state['owned'])
+           and isinstance(state.get('equipped'),dict) and isinstance(state.get('receipts'),dict))
+    if not valid:
+        if writing:raise ValueError('This cosmetic inventory version cannot be updated safely')
+        return {'schema_version':1,'revision':0,'owned':[],'equipped':{},'receipts':{}}
+    return deepcopy(state)
+
+
 def owned_ids(state):
     owned = state.get('owned', [])
     return set(i for i in owned if isinstance(i, str)) | set(DEFAULTS.values()) if isinstance(owned, list) else set(DEFAULTS.values())
@@ -136,11 +151,9 @@ class CosmeticCatalog:
 
 
 def equipped_ids(record,items=CATALOG):
-    state=record.get('cosmetics') or {}
-    if not isinstance(state,dict) or state.get('schema_version',1)!=1:state={}
+    state=inventory_state(record)
     owned=owned_ids(state)
     equipped=state.get('equipped',{})
-    if not isinstance(equipped,dict):equipped={}
     result=dict(DEFAULTS)
     for slot in SLOTS:
         candidate=equipped.get(slot)

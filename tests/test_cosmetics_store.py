@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from cosmetics.catalog import Appearance, CATALOG, DEFAULTS, OFFERS, Item, Offer
+from cosmetics.catalog import Appearance, CATALOG, DEFAULTS, OFFERS, Item, Offer, appearance
 from cosmetics.store import CosmeticsStore
 
 USER = 4321
@@ -297,6 +297,25 @@ def test_future_schema_is_readable_as_defaults_but_never_rewritten():
     assert store.get(USER)['appearance'] == Appearance()
     assert store.appearance_for(USER) == Appearance()
     for mutation in [lambda: buy(store), lambda: store.equip(USER, 'felt_rose', 12)]:
+        with pytest.raises(ValueError, match='version'):
+            mutation()
+    assert users.document == before and users.write_calls == 0
+
+
+@pytest.mark.parametrize('invalid_field, value', [
+    ('revision', 'bad'), ('revision', -1), ('revision', True),
+    ('owned', None), ('owned', ['felt_rose', None]), ('equipped', None),
+    ('receipts', None), ('schema_version', 99),
+])
+def test_malformed_inventory_has_one_read_fallback_and_cannot_be_written(invalid_field, value):
+    users = Users()
+    users.document['cosmetics'] = {'schema_version': 1, 'revision': 1, 'owned': ['felt_rose'],
+                                   'equipped': {'felt': 'felt_rose'}, 'receipts': {}}
+    users.document['cosmetics'][invalid_field] = value
+    before = deepcopy(users.document)
+    store = CosmeticsStore(users)
+    assert store.get(USER)['appearance'] == store.appearance_for(USER) == appearance(before) == Appearance()
+    for mutation in (lambda: buy(store), lambda: store.equip(USER, 'felt_rose', 1)):
         with pytest.raises(ValueError, match='version'):
             mutation()
     assert users.document == before and users.write_calls == 0

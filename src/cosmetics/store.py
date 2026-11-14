@@ -4,11 +4,10 @@ A successful purchase updates balance, inventory and its receipt in the same
 Mongo write. Rendering and Discord delivery happen after that commit. Existing
 accounts need no migration: default cosmetics are virtual, permanent ownership.
 """
-from copy import deepcopy
 import re
 import time
 
-from cosmetics.catalog import CATALOG, OFFERS, Appearance, CosmeticCatalog, appearance, equipped_ids, owned_ids, public_profile, validate_catalog
+from cosmetics.catalog import CATALOG, OFFERS, Appearance, CosmeticCatalog, appearance, equipped_ids, owned_ids, public_profile, inventory_state, validate_catalog
 
 REQUEST=re.compile(r'^[A-Za-z0-9_-]{1,80}$')
 
@@ -31,27 +30,12 @@ class CosmeticsStore:
             raise ValueError('An existing casino account is required')
         return record
 
-    @staticmethod
-    def _state(record,*,writing=False):
-        state=record.get('cosmetics')
-        if state is None and 'cosmetics' not in record:
-            return {'schema_version':1,'revision':0,'owned':[],'equipped':{},'receipts':{}}
-        valid=(isinstance(state,dict) and state.get('schema_version')==1
-               and type(state.get('revision')) is int and state['revision']>=0
-               and isinstance(state.get('owned'),list) and all(isinstance(i,str) for i in state['owned'])
-               and isinstance(state.get('equipped'),dict) and isinstance(state.get('receipts'),dict))
-        if not valid:
-            if writing:raise ValueError('This cosmetic inventory version cannot be updated safely')
-            return {'schema_version':1,'revision':0,'owned':[],'equipped':{},'receipts':{}}
-        return deepcopy(state)
-
     def _snapshot(self,record):
-        state=self._state(record)
-        public_record={**record,'cosmetics':state}
+        state=inventory_state(record)
         owned=sorted(owned_ids(state))
         return {'user_id':record['user_id'],'balance':record.get('balance',0),'revision':state['revision'],
-                'owned':owned,'equipped':equipped_ids(public_record,self.items),
-                'appearance':appearance(public_record,self.items),
+                'owned':owned,'equipped':equipped_ids(record,self.items),
+                'appearance':appearance(record,self.items),
                 'animations_enabled':(record.get('animations_enabled') is None or bool(record['animations_enabled'])),
                 'profile':public_profile(record)}
 
@@ -105,7 +89,7 @@ class CosmeticsStore:
             raise ValueError('Invalid purchase request')
         for _ in range(8):
             record=self._record(user_id,username)
-            state=self._state(record,writing=True)
+            state=inventory_state(record,writing=True)
             status,offer=self._purchase_offer(record,state,offer_id,quote_id,request_id)
             if status:return {'status':status,'snapshot':self._snapshot(record)}
             updated=self._commit_purchase(record,state,offer,quote_id,request_id)
@@ -117,12 +101,12 @@ class CosmeticsStore:
         item=self.items.get(item_id)
         if item is None:raise ValueError('Unknown cosmetic')
         record=self._record(user_id,username)
-        state=self._state(record,writing=True)
+        state=inventory_state(record,writing=True)
         if revision!=state['revision']:return self._snapshot(record),False
         if item_id not in owned_ids(state):raise ValueError('You do not own this cosmetic')
         if equipped_ids(record,self.items)[item.slot]==item_id:return self._snapshot(record),True
         state['equipped'][item.slot]=item_id;state['revision']+=1
-        updated=self.collection.find_one_and_update(self._query(record,self._state(record)),
+        updated=self.collection.find_one_and_update(self._query(record,inventory_state(record)),
             {'$set':{'cosmetics':state}},return_document=True)
         if updated is None:return self.get(user_id,username),False
         return self._snapshot(updated),True
