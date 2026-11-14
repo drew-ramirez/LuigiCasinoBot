@@ -1,0 +1,6 @@
+[tool.complexipy]
+paths = ["src"]
+max-complexity-allowed = 15
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
