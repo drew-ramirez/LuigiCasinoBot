@@ -86,7 +86,7 @@ def test_memory_layout_obeys_discord_rows_and_preserves_authentic_coordinates(tm
         module, cog, store, _, _, _, _ = environment(tmp_path, monkeypatch)
         try:
             snap = saved(store, 'memory_master', MemoryMaster(stars=stars, seed=11))
-            view = module.SoloView(cog, snap, 'memory_master', 42, False)
+            view = module.SoloView(cog, snap, False)
             assert len(view.children) <= 25
             rows = {}
             for child in view.children:
@@ -112,7 +112,7 @@ def test_pause_resume_exact_board_then_finish_submits_one_record(tmp_path, monke
         kind = 'pairagone_endless'
         try:
             snap = saved(store, kind, EndlessPairs(seed=7))
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             await current_view(cog, kind).run(interaction(), 'pause')
             paused = store.get(snap['id'])
             assert paused['status'] == 'paused'
@@ -137,7 +137,7 @@ def test_paused_finish_button_can_finalize_without_resuming(tmp_path, monkeypatc
         kind = 'memory_master'
         try:
             snap = saved(store, kind, MemoryMaster(seed=8))
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             await current_view(cog, kind).run(interaction(), 'pause')
             view = current_view(cog, kind)
             finish = next(child for child in view.children if child.label == 'Finish & save')
@@ -155,7 +155,7 @@ def test_duplicate_choices_and_other_owner_cannot_advance_saved_board(tmp_path, 
         kind = 'memory_master'
         try:
             snap = saved(store, kind, MemoryMaster(seed=9))
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             view = current_view(cog, kind)
             other = interaction(99)
             assert not await view.interaction_check(other)
@@ -177,7 +177,7 @@ def test_render_failure_uses_saved_readable_state_and_retry_does_not_reroll(tmp_
         kind = 'memory_master'
         try:
             snap = saved(store, kind, MemoryMaster(seed=19))
-            await cog.publish(interaction(), snap, kind, 42, True)
+            await cog.publish(interaction(), snap, True)
             old = current_view(cog, kind)
             monkeypatch.setattr(module, 'render_table', MagicMock(side_effect=RuntimeError('encoder failure')))
             inter = interaction()
@@ -253,7 +253,7 @@ def test_unfunded_blackjack_optional_stakes_are_disabled_and_odd_wager_never_dea
             assert users.writes == 0
             assert 'even wager' in odd.edit_original_response.call_args.kwargs['content']
             snap = cog.blackjack.start(42, 100)
-            await cog.publish(interaction(), snap, 'blackjack', 42, False)
+            await cog.publish(interaction(), snap, False)
             buttons = {child.label: child for child in current_view(cog, 'blackjack').children}
             assert buttons['Double +100'].disabled
             assert buttons['Split +100'].disabled
@@ -275,7 +275,7 @@ def test_timeout_pauses_skills_and_banks_or_stands_wager_tables(tmp_path, monkey
                         'pairagone_endless': lambda: EndlessPairs(seed=1),
                         'fortune_tower': FortuneTower}[kind]()
                 snap = saved(store, kind, game)
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             view = current_view(cog, kind)
             await view.on_timeout()
             if kind == 'blackjack':
@@ -307,7 +307,7 @@ def test_stale_timeout_cannot_remove_replacement_controls(tmp_path, monkeypatch)
         kind = 'memory_master'
         try:
             snap = saved(store, kind, MemoryMaster(seed=13))
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             old = current_view(cog, kind)
             await old.run(interaction(), 'choose', 0)
             current = current_view(cog, kind)
@@ -326,7 +326,7 @@ def test_discord_upload_failure_retries_text_after_single_blackjack_settlement(t
         _, cog, _, users, interaction, message, _ = environment(tmp_path, monkeypatch)
         try:
             snap = cog.blackjack.start(42, 100)
-            await cog.publish(interaction(), snap, 'blackjack', 42, True)
+            await cog.publish(interaction(), snap, True)
             view = current_view(cog, 'blackjack')
             inter = interaction()
             response = SimpleNamespace(status=413, reason='Payload Too Large')
@@ -352,7 +352,7 @@ def test_blackjack_command_resumes_same_funded_hand_without_new_wager(tmp_path, 
             await cog.blackjack_start.callback(cog, inter, wager=200, animations=False)
             assert users.writes == 1
             assert cog.blackjack.get(42) == before
-            assert current_view(cog, 'blackjack').snapshot == before
+            assert current_view(cog, 'blackjack').snapshot == {**before, 'kind': 'blackjack', 'owner': '42'}
             assert 'Hand 1' in inter.edit_original_response.call_args.kwargs['content']
         finally:
             cog.cog_unload()
@@ -366,7 +366,7 @@ def test_known_cards_only_lists_previously_shown_positions_without_mutation(tmp_
         try:
             game = MemoryMaster(seed=25)
             snap = saved(store, kind, game)
-            await cog.publish(interaction(), snap, kind, 42, False)
+            await cog.publish(interaction(), snap, False)
             inter = interaction()
             await current_view(cog, kind).run(inter, 'notes')
             content = inter.response.send_message.call_args.args[0]

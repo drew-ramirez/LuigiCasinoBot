@@ -9,7 +9,8 @@ import discord
 
 from casinogames.session_store import SessionStore
 from casinogames.thrilling_cards import ThrillingMatch
-from cogs.thrilling_cards_cog import KIND, ThrillingCardsCog, ThrillingView, _clock_token, _projection
+from cogs.thrilling_cards_cog import ThrillingCardsCog, ThrillingView
+from casinogames.thrilling_session import KIND, clock_token, projection
 
 
 def environment(tmp_path, monkeypatch):
@@ -75,7 +76,7 @@ def test_lobby_join_ready_start_requires_owner_and_every_consent(tmp_path, monke
             snap = store.get(snap['id'])
             assert snap['state']['phase'] == 'playing'
             assert len(ThrillingMatch.from_dict(snap['state']['match']).hand.players) == count
-            assert _clock_token(snap) == ('turn', 0, 1)
+            assert clock_token(snap) == ('turn', 0, 1)
         finally:
             cog.cog_unload()
     asyncio.run(run())
@@ -193,7 +194,7 @@ def test_timeout_folds_once_and_settles_practice_pot(tmp_path, monkeypatch):
         cog, store, _, _, _, _ = environment(tmp_path, monkeypatch)
         try:
             snap = playing(cog, store, players=(1, 2))
-            token = _clock_token(snap)
+            token = clock_token(snap)
             await cog._timeout(snap['id'], token, 0)
             saved = store.get(snap['id'])
             match = ThrillingMatch.from_dict(saved['state']['match'])

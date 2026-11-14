@@ -6,16 +6,16 @@ import discord
 from discord.ext import commands
 
 from casinogames.blackjack import Blackjack, RULES as BLACKJACK_RULES, hand_total
-from casinogames.challenges import MemoryMaster, EndlessPairs, MEMORY_RULES, ENDLESS_RULES, coordinate
+from casinogames.challenges import MEMORY_RULES, ENDLESS_RULES, coordinate
 from casinogames.fortune_tower import FortuneTower
 from casinogames.session_store import SessionStore
+from casinogames.solo_session import ENGINES, engine_for, update_solo, finalize_solo
 from casinogames.expansion_render import render_table
 from economy.blackjack_table import BlackjackTable
 from economy.EconomyManager import EconomyManager
 from utils.visibility import resolve_command_visibility
 
 log = logging.getLogger(__name__)
-ENGINES = {'memory_master': MemoryMaster, 'pairagone_endless': EndlessPairs, 'fortune_tower': FortuneTower}
 TITLES = {'memory_master': 'Memory Master', 'pairagone_endless': 'Pair-a-Gone and On',
           'fortune_tower': "Fortune's Tower", 'blackjack': 'Blackjack'}
 RULES = {'memory_master': MEMORY_RULES, 'pairagone_endless': ENDLESS_RULES,
@@ -24,121 +24,113 @@ RULES = {'memory_master': MEMORY_RULES, 'pairagone_endless': ENDLESS_RULES,
                       'No insurance/surrender. Gross includes returned stake. Idle timeout stands all hands.'}
 
 
-def engine_for(snapshot):
-    return ENGINES[snapshot['kind']].from_dict(snapshot['state']['game'])
-
-
-def update_solo(snapshot, action, value=None):
-    """Pure mutation called inside SessionStore's transaction, before rendering."""
-    game = engine_for(snapshot)
-    if snapshot['status'] == 'paused' and action not in ('resume', 'finish'):
-        raise ValueError('Resume this saved run before playing.')
-    if action == 'pause':
-        snapshot['status'] = 'paused'
-    elif action == 'resume':
-        snapshot['status'] = 'active'
-    elif action == 'choose':
-        game.choose(value)
-    elif action == 'next':
-        game.next_board()
-    elif action == 'finish':
-        game.finish()
-    elif action == 'continue':
-        game.deal_next()
-    elif action in ('bank', 'timeout') and snapshot['kind'] == 'fortune_tower':
-        game.bank()
-    else:
-        raise ValueError('That action is not available.')
-    snapshot['state']['game'] = game.to_dict()
-    if game.finished:
-        snapshot['status'] = 'finished'
-        score = game.result['score'] if snapshot['kind'] == 'fortune_tower' else game.score
-        reason = game.result['outcome'] if snapshot['kind'] == 'fortune_tower' else getattr(game, 'reason', 'voluntary')
-        snapshot['record'] = {'score': score, 'reason': reason}
-
-
 def safe_text(kind, public):
-    """Complete readable fallback; input must already be a viewer-safe projection."""
+    """Complete readable fallback for an already viewer-safe projection."""
     lines = [f'**{TITLES[kind]}**']
     if kind in ('memory_master', 'pairagone_endless'):
-        lines.append(f"Score {public['score']} · free play · 0 coins")
-        if kind == 'memory_master':
-            lines.append(f"Stars {public['stars']} · mistakes {public['mistakes']}/5 · attempts {public['attempts']}")
-        lines.append(public['last'])
-        for start in range(0, len(public['cards']), public['cols']):
-            lines.append(' | '.join(f"{coordinate(i, public['cols'])}: {public['cards'][i] or ('cleared' if public['cards'][i] == '' else 'back')}"
-                                    for i in range(start, start + public['cols'])))
+        _memory_text(lines, kind, public)
     elif kind == 'blackjack':
-        lines.append('House v1 · community coins · S17 · 3:2 blackjack')
-        lines.append('Luigi: ' + ' '.join(c or '[back]' for c in public['dealer']))
-        for i, hand in enumerate(public['hands']):
-            total, soft = hand_total(hand['cards'])
-            marker = ' →' if i == public['active_hand'] else ''
-            lines.append(f"Hand {i+1}{marker}: {' '.join(hand['cards'])} · {total}{' soft' if soft else ''} · stake {hand['bet']}")
-        result = public['result']
-        lines.append(f"Committed {public['total_committed']}")
-        if result:
-            lines.append(f"Returned {result['payout']} · net {result['profit']:+d}")
-            lines.extend(f"Hand {i+1}: {h['outcome']}" for i,h in enumerate(result['hands']))
+        _blackjack_text(lines, public)
     else:
-        lines.append('Diamond practice v1 · virtual points only · no wallet changes')
-        lines.append(f"Row {public['row_number']}/8 · Bank {public['offer']} gross · net {public['net']:+d} · x{public['multiplier']}")
-        lines.append('Gate: ' + ('back' if public['gate'] is None else str(public['gate'] or 'Hero')))
-        lines.extend(f"Row {i+2}: " + ' '.join(str(c) if c else 'Hero' for c in row) for i,row in enumerate(public['rows']))
-        if public['result']:
-            lines.append('Result: ' + public['result']['outcome'])
-        else:
-            lines.append('Continue risks this offer; the next offer can be lower. Idle timeout banks it.')
+        _tower_text(lines, public)
     return '\n'.join(lines)
 
 
+def _memory_text(lines, kind, public):
+    lines.append(f"Score {public['score']} · free play · 0 coins")
+    if kind == 'memory_master':
+        lines.append(f"Stars {public['stars']} · mistakes {public['mistakes']}/5 · attempts {public['attempts']}")
+    lines.append(public['last'])
+    for start in range(0, len(public['cards']), public['cols']):
+        lines.append(' | '.join(f"{coordinate(i, public['cols'])}: {public['cards'][i] or ('cleared' if public['cards'][i] == '' else 'back')}"
+                                for i in range(start, start + public['cols'])))
+
+
+def _blackjack_text(lines, public):
+    lines.append('House v1 · community coins · S17 · 3:2 blackjack')
+    lines.append('Luigi: ' + ' '.join(c or '[back]' for c in public['dealer']))
+    for i, hand in enumerate(public['hands']):
+        total, soft = hand_total(hand['cards'])
+        marker = ' →' if i == public['active_hand'] else ''
+        lines.append(f"Hand {i+1}{marker}: {' '.join(hand['cards'])} · {total}{' soft' if soft else ''} · stake {hand['bet']}")
+    result = public['result']
+    lines.append(f"Committed {public['total_committed']}")
+    if result:
+        lines.append(f"Returned {result['payout']} · net {result['profit']:+d}")
+        lines.extend(f"Hand {i+1}: {h['outcome']}" for i,h in enumerate(result['hands']))
+
+
+def _tower_text(lines, public):
+    lines.append('Diamond practice v1 · virtual points only · no wallet changes')
+    lines.append(f"Row {public['row_number']}/8 · Bank {public['offer']} gross · net {public['net']:+d} · x{public['multiplier']}")
+    lines.append('Gate: ' + ('back' if public['gate'] is None else str(public['gate'] or 'Hero')))
+    lines.extend(f"Row {i+2}: " + ' '.join(str(c) if c else 'Hero' for c in row) for i,row in enumerate(public['rows']))
+    if public['result']:
+        lines.append('Result: ' + public['result']['outcome'])
+    else:
+        lines.append('Continue risks this offer; the next offer can be lower. Idle timeout banks it.')
+
 class SoloView(discord.ui.View):
-    def __init__(self, cog, snapshot, kind, owner, animations):
+    def __init__(self, cog, snapshot, animations):
         super().__init__(timeout=480)
-        self.cog, self.snapshot, self.kind = cog, snapshot, kind
-        self.owner, self.animations = owner, animations
+        self.cog, self.snapshot = cog, snapshot
+        self.kind, self.owner = kind, owner = snapshot['kind'], int(snapshot['owner'])
+        self.animations = animations
         self.message = None
         self.lock = cog.locks.setdefault((owner, kind), asyncio.Lock())
         if kind == 'blackjack':
-            game = Blackjack.from_dict(snapshot['game'])
-            if game.result:
-                self.add_action('Play again', 'deal', row=0)
-            else:
-                for action in game.allowed_actions():
-                    cost = game.extra_stake(action)
-                    self.add_action(action.title() + (f' +{cost}' if cost else ''), action, row=0,
-                                    disabled=cost > snapshot['balance'])
-            self.add_action('Rules', 'rules', row=1)
+            self._add_blackjack_controls()
         else:
-            game = engine_for(snapshot)
-            if snapshot['status'] == 'paused':
-                self.add_action('Resume saved run', 'resume', row=0)
-            elif not game.finished:
-                if kind == 'fortune_tower':
-                    self.add_action(f'Bank {game.offer}', 'bank', row=0)
-                    self.add_action('Continue', 'continue', row=0)
-                elif kind == 'memory_master' and game.status != 'playing':
-                    self.add_action('Next board', 'next', row=0)
-                elif game.cols == 6:
-                    choices = [discord.SelectOption(label=coordinate(i, game.cols), value=str(i))
-                               for i in range(len(game.board)) if i not in game.matched and i not in game.selected]
-                    select = discord.ui.Select(placeholder='Choose a card (6 columns × 3 rows)', options=choices, row=0)
-                    async def choose(inter):
-                        await self.run(inter, 'choose', int(select.values[0]))
-                    select.callback = choose
-                    self.add_item(select)
-                else:
-                    for i in range(len(game.board)):
-                        disabled = kind == 'memory_master' and (i in game.matched or i in game.selected)
-                        self.add_action(coordinate(i, game.cols), 'choose', i, row=i//game.cols, disabled=disabled)
-            if not game.finished and kind != 'fortune_tower':
-                if snapshot['status'] != 'paused':
-                    self.add_action('Pause', 'pause', row=4)
-                self.add_action('Finish & save', 'finish', row=4)
-            if kind == 'memory_master':
-                self.add_action('Known cards', 'notes', row=4)
-            self.add_action('Rules', 'rules', row=4)
-            self.add_action('My records', 'records', row=4)
+            self._add_solo_controls()
+
+    def _add_blackjack_controls(self):
+        snapshot = self.snapshot
+        game = Blackjack.from_dict(snapshot['game'])
+        if game.result:
+            self.add_action('Play again', 'deal', row=0)
+        else:
+            for action in game.allowed_actions():
+                cost = game.extra_stake(action)
+                self.add_action(action.title() + (f' +{cost}' if cost else ''), action, row=0,
+                                disabled=cost > snapshot['balance'])
+        self.add_action('Rules', 'rules', row=1)
+
+    def _add_solo_controls(self):
+        snapshot, kind = self.snapshot, self.kind
+        game = engine_for(snapshot)
+        if snapshot['status'] == 'paused':
+            self.add_action('Resume saved run', 'resume', row=0)
+        elif not game.finished:
+            if kind == 'fortune_tower':
+                self.add_action(f'Bank {game.offer}', 'bank', row=0)
+                self.add_action('Continue', 'continue', row=0)
+            elif kind == 'memory_master' and game.status != 'playing':
+                self.add_action('Next board', 'next', row=0)
+            else:
+                self._add_choices(game)
+        if not game.finished and kind != 'fortune_tower':
+            if snapshot['status'] != 'paused':
+                self.add_action('Pause', 'pause', row=4)
+            self.add_action('Finish & save', 'finish', row=4)
+        if kind == 'memory_master':
+            self.add_action('Known cards', 'notes', row=4)
+        self.add_action('Rules', 'rules', row=4)
+        self.add_action('My records', 'records', row=4)
+
+    def _add_choices(self, game):
+        kind = self.kind
+        if game.cols == 6:
+            choices = [discord.SelectOption(label=coordinate(i, game.cols), value=str(i))
+                       for i in range(len(game.board)) if i not in game.matched and i not in game.selected]
+            select = discord.ui.Select(placeholder='Choose a card (6 columns × 3 rows)', options=choices, row=0)
+            async def choose(inter):
+                await self.run(inter, 'choose', int(select.values[0]))
+            select.callback = choose
+            self.add_item(select)
+        else:
+            for i in range(len(game.board)):
+                disabled = kind == 'memory_master' and (i in game.matched or i in game.selected)
+                self.add_action(coordinate(i, game.cols), 'choose', i, row=i//game.cols, disabled=disabled)
 
     def add_action(self, label, action, value=None, *, row=0, disabled=False):
         button = discord.ui.Button(label=label, row=row, disabled=disabled,
@@ -187,7 +179,7 @@ class SoloView(discord.ui.View):
                 else:
                     saved, _ = await asyncio.to_thread(self.cog.store.apply, self.snapshot['id'], self.snapshot['revision'],
                                                       self.owner, lambda s: update_solo(s, action, value))
-                await self.cog.publish(interaction, saved, self.kind, self.owner, self.animations, previous=previous)
+                await self.cog.publish(interaction, saved, self.animations, previous=previous)
             except (ValueError, PermissionError) as exc:
                 await interaction.followup.send(str(exc), ephemeral=True)
             except Exception:
@@ -240,8 +232,11 @@ class CasinoExpansionCog(commands.Cog):
             log.exception('Casino media failed; using saved public text')
             return {'content': content + '\nImage unavailable; this is the saved table.', 'embed': None, 'attachments': []}
 
-    async def publish(self, interaction, snapshot, kind, owner, animations, previous=None):
-        view = SoloView(self, snapshot, kind, owner, animations)
+    async def publish(self, interaction, snapshot, animations, previous=None):
+        if 'kind' not in snapshot:
+            snapshot = {**snapshot, 'kind': 'blackjack', 'owner': str(interaction.user.id)}
+        view = SoloView(self, snapshot, animations)
+        kind, owner = view.kind, view.owner
         public = view.public()
         payload = await self.payload(kind, public, animations, previous)
         if kind != 'blackjack' and snapshot['status'] == 'paused':
@@ -269,16 +264,10 @@ class CasinoExpansionCog(commands.Cog):
                 game = ENGINES[kind]()
                 snapshot = await asyncio.to_thread(self.store.create, guild, owner, kind, {'game': game.to_dict()})
                 if engine_for(snapshot).finished:
-                    # Natural initial terminal states still finalize a record once.
-                    def finalize(s):
-                        g = engine_for(s)
-                        s['status'] = 'finished'
-                        s['record'] = {'score': g.result['score'] if kind == 'fortune_tower' else g.score,
-                                       'reason': g.result['outcome'] if kind == 'fortune_tower' else g.reason}
-                    snapshot, _ = await asyncio.to_thread(self.store.apply, snapshot['id'], snapshot['revision'], owner, finalize)
+                    snapshot, _ = await asyncio.to_thread(self.store.apply, snapshot['id'], snapshot['revision'], owner, finalize_solo)
             if animations is None:
                 animations = await asyncio.to_thread(EconomyManager.animations_enabled, owner, interaction.user.name)
-            await self.publish(interaction, snapshot, kind, owner, animations)
+            await self.publish(interaction, snapshot, animations)
 
     @discord.app_commands.command(name='casino_memorymaster', description='Advanced Memory Match: hints, Stars, saved boards and personal scores')
     async def memory_master(self, interaction: discord.Interaction, animations: bool | None = None):
@@ -306,7 +295,7 @@ class CasinoExpansionCog(commands.Cog):
                 animations = await asyncio.to_thread(EconomyManager.animations_enabled, owner, interaction.user.name)
             saved = await asyncio.to_thread(self.blackjack.get, owner)
             if saved and saved['game']['result'] is None:
-                await self.publish(interaction, saved, 'blackjack', owner, animations)
+                await self.publish(interaction, saved, animations)
                 return
             # A displayed result is not permission to spend again; Deal is explicit.
             menu = discord.ui.View(timeout=120)
@@ -332,7 +321,7 @@ class CasinoExpansionCog(commands.Cog):
                             await inter.followup.send(str(exc), ephemeral=True)
                             return
                         accepted = True
-                    await self.publish(inter, current, 'blackjack', owner, animations)
+                    await self.publish(inter, current, animations)
                     menu.stop()
             deal.callback = confirm
             await interaction.edit_original_response(content='**Blackjack — confirm wager**\n' + RULES['blackjack'] +
