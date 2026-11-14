@@ -2,9 +2,8 @@
 import io
 from functools import lru_cache
 from PIL import Image, ImageDraw
-from casinogames.casino_art import background, sprite
+from casinogames.casino_art import background, sprite, compose, dealer_frame, number, text, SMALL
 from casinogames.assetloader import load_memory_faces, load_memory_backs
-from casinogames.roulette_render import compose, dealer_frame, number, text, SMALL
 
 FACES = load_memory_faces()
 BACKS = load_memory_backs()
@@ -63,6 +62,17 @@ def dealer(game, tick=0, *, outcome=None, dealing=False):
     else:
         top = dealer_frame(tick if outcome == 'win' and tick<22 else 24 + tick % 26)
     d = ImageDraw.Draw(top)
+    _dealer_details(top, game)
+    if outcome in ('lose','loss'):
+        art=sprite('too_bad')
+        top.alpha_composite(art,((256-art.width)//2,153))
+    elif outcome == 'tie':
+        text(d,(110,160),'DRAW')
+    return top
+
+
+def _dealer_details(top, game):
+    d = ImageDraw.Draw(top)
     rows = getattr(game, 'scene_payout_rows', ())
     for row, (multiplier, stars, mushrooms) in enumerate(rows):
         y = 3 + row*14
@@ -81,16 +91,15 @@ def dealer(game, tick=0, *, outcome=None, dealing=False):
         star=sprite('slot_star').resize((12,12),Image.Resampling.NEAREST)
         top.alpha_composite(star,(232,139))
         text(d,(228,153),game.stars,SMALL)
-    if outcome in ('lose','loss'):
-        art=sprite('too_bad')
-        top.alpha_composite(art,((256-art.width)//2,153))
-    elif outcome == 'tie':
-        text(d,(110,160),'DRAW')
-    return top
 
 
 def scene(game, board, tick=0, *, outcome=None, dealing=False):
     return compose(dealer(game,tick,outcome=outcome,dealing=dealing),board)
+
+
+def table_scene(board, tick=0, dealing=False):
+    """Compose a projected card table with the shared Luigi dealer screen."""
+    return compose(dealer(None, tick, dealing=dealing), board)
 
 
 def png(image):

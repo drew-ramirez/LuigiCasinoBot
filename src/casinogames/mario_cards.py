@@ -92,57 +92,73 @@ def _frame():
     return _sheet().crop((143,64,176,112)).resize((32,48),Image.Resampling.NEAREST)
 
 
+def _draw_triad(art, value):
+    _portrait(art,value['id'],(5,12,22,24))
+    _center(art,value['north'],4,scale=1)
+    _center(art,value['south'],39,scale=1)
+    _text(art,value['west'],(3,23));_text(art,value['east'],(26,23))
+
+
+def _draw_red7(art, value):
+    draw = ImageDraw.Draw(art)
+    code=str(value);color=COLORS[code[0]]
+    draw.rectangle((3,3,28,44),fill=color)
+    ink='#202d30' if code[0]=='Y' else '#ffffff'
+    _text(art,code,(4,4),ink)
+    _center(art,code[1],12,ink,scale=3)
+    symbol=dict(zip('ROYGBIV',['mushroom','flower','star','yoshi','cloud','boo','bowser']))[code[0]]
+    _portrait(art,symbol,(9,29,14,13))
+    _text(art,code[0],(4,38),ink)
+
+
+def _draw_modifier(art, value):
+    draw = ImageDraw.Draw(art)
+    label=str(value)
+    if isinstance(value,int) and value>0:label='+'+label
+    negative=label.startswith('-');mixed=label.startswith('\u00b1')
+    tint='#e5c3c0' if negative else '#c6c5ed' if mixed else '#c8ecf0'
+    draw.rectangle((3,3,28,44),fill=tint)
+    ink='#9b2133' if negative else '#49358d' if mixed else '#164c82'
+    _text(art,label,(4,4),ink)
+    scale=2 if len(label)>1 else 3
+    _center(art,label,13,ink,scale)
+    _portrait(art,'boo' if negative else 'star' if mixed else 'mushroom',(8,29,16,14))
+
+
+def _draw_tower(art, value):
+    label='H' if value==0 else str(value)
+    _center(art,label,5,scale=2)
+    _portrait(art,'luigi' if value==0 else 'star',(5,20,22,22))
+
+
+def _draw_standard(art, value):
+    code=str(value)
+    if code.startswith('X'):
+        _text(art,'W',(3,4));_portrait(art,'boo',(4,13,24,25));_text(art,'W',(26,39))
+        return
+    rank,suit=code[:-1],code[-1]
+    ink='#a51d2d' if suit in ('H','D') else '#182d37'
+    _text(art,rank,(3,4),ink)
+    _stamp(art,SUITS[suit],(23,4),ink)
+    # Red and black royals intentionally contrast Mario and Bowser portraits.
+    portrait={'K':'mario' if suit in ('H','D') else 'bowser',
+              'Q':'flower','J':'luigi','A':'star'}.get(rank,
+              {'D':'star','H':'mushroom','C':'flower','S':'goomba'}[suit])
+    _portrait(art,portrait,(4,13,24,24))
+    _stamp(art,SUITS[suit],(4,39),ink)
+    _text(art,rank,(29-(len(rank)*4-1),39),ink)
+
+
+_CARD_STYLES = {'triad': _draw_triad, 'red7': _draw_red7,
+                'modifier': _draw_modifier, 'tower': _draw_tower}
+
+
 def _native(value,style):
     if value is None or style=='memory':
         from casinogames.card_scene import card
         return card(value or None,(32,48)).copy()
     art=_frame()
-    draw=ImageDraw.Draw(art)
-    if style=='triad':
-        _portrait(art,value['id'],(5,12,22,24))
-        _center(art,value['north'],4,scale=1)
-        _center(art,value['south'],39,scale=1)
-        _text(art,value['west'],(3,23));_text(art,value['east'],(26,23))
-    elif style=='red7':
-        code=str(value);color=COLORS[code[0]]
-        draw.rectangle((3,3,28,44),fill=color)
-        ink='#202d30' if code[0]=='Y' else '#ffffff'
-        _text(art,code,(4,4),ink)
-        _center(art,code[1],12,ink,scale=3)
-        symbol=dict(zip('ROYGBIV',['mushroom','flower','star','yoshi','cloud','boo','bowser']))[code[0]]
-        _portrait(art,symbol,(9,29,14,13))
-        _text(art,code[0],(4,38),ink)
-    elif style=='modifier':
-        label=str(value)
-        if isinstance(value,int) and value>0:label='+'+label
-        negative=label.startswith('-');mixed=label.startswith('\u00b1')
-        tint='#e5c3c0' if negative else '#c6c5ed' if mixed else '#c8ecf0'
-        draw.rectangle((3,3,28,44),fill=tint)
-        ink='#9b2133' if negative else '#49358d' if mixed else '#164c82'
-        _text(art,label,(4,4),ink)
-        scale=2 if len(label)>1 else 3
-        _center(art,label,13,ink,scale)
-        _portrait(art,'boo' if negative else 'star' if mixed else 'mushroom',(8,29,16,14))
-    elif style=='tower':
-        label='H' if value==0 else str(value)
-        _center(art,label,5,scale=2)
-        _portrait(art,'luigi' if value==0 else 'star',(5,20,22,22))
-    else:
-        code=str(value)
-        if code.startswith('X'):
-            _text(art,'W',(3,4));_portrait(art,'boo',(4,13,24,25));_text(art,'W',(26,39))
-            return art
-        rank,suit=code[:-1],code[-1]
-        ink='#a51d2d' if suit in ('H','D') else '#182d37'
-        _text(art,rank,(3,4),ink)
-        _stamp(art,SUITS[suit],(23,4),ink)
-        # Red and black royals intentionally contrast Mario and Bowser portraits.
-        portrait={'K':'mario' if suit in ('H','D') else 'bowser',
-                  'Q':'flower','J':'luigi','A':'star'}.get(rank,
-                  {'D':'star','H':'mushroom','C':'flower','S':'goomba'}[suit])
-        _portrait(art,portrait,(4,13,24,24))
-        _stamp(art,SUITS[suit],(4,39),ink)
-        _text(art,rank,(29-(len(rank)*4-1),39),ink)
+    _CARD_STYLES.get(style, _draw_standard)(art, value)
     return art
 
 

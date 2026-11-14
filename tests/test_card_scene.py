@@ -108,14 +108,14 @@ def test_only_waiting_scenes_loop_and_keep_board_unchanged():
 def test_rainbow_card_colors_remain_distinct_in_event_gifs():
     from casinogames.card_scene import gif
     from casinogames.casino_art import background
-    from casinogames.expansion_render import _scene
+    from casinogames.card_scene import table_scene
     from casinogames.mario_cards import face
     from PIL import ImageChops, ImageStat
     board=background((256,192)).copy()
     for index,color in enumerate('ROYGBIV'):
         board.alpha_composite(face(color+'7','red7',(32,48)),(5+index*35,70))
-    final=_scene(board)
-    with Image.open(gif([_scene(background((256,192))),final],90)) as event:
+    final=table_scene(board)
+    with Image.open(gif([table_scene(background((256,192))),final],90)) as event:
         event.seek(event.n_frames-1)
         actual=event.convert('RGB')
         for index in range(7):

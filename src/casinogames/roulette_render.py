@@ -6,39 +6,15 @@ recreated 3D model. Geometry controls the camera, ball and exact winning pocket.
 import io
 import math
 from functools import lru_cache
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
-from casinogames.casino_art import sprite
+from PIL import Image, ImageDraw, ImageFilter
+from casinogames.casino_art import sprite, compose, dealer_frame, number, text, SMALL, DIGITS
 from casinogames.casino_games import BET_GROUPS
 from casinogames.roulette_dividers_3d import render_dividers
 
-SIZE = (512, 768)
 SPIN_DURATION_SECONDS = 20.0
 # Clockwise texture order, starting at -105 degrees in the overhead reference.
 WHEEL_ORDER = (6, 4, 8, 1, 10, 3, 11, 0, 7, 2, 9, 5)
-FONT = ImageFont.load_default(size=14)
-SMALL = ImageFont.load_default(size=9)
-DIGITS = ('01110/11011/11011/11011/11011/11011/01110',
-          '00110/01110/00110/00110/00110/00110/01111',
-          '11110/00011/00011/00110/01100/11000/11111',
-          '11110/00011/00011/01110/00011/00011/11110',
-          '00110/01110/11010/11010/11111/00010/00010',
-          '11111/11000/11000/11110/00011/00011/11110',
-          '01110/11000/11000/11110/11011/11011/01110',
-          '11111/00011/00110/00110/01100/01100/01100',
-          '01110/11011/11011/01110/11011/11011/01110',
-          '01110/11011/11011/01111/00011/00011/01110')
 
-def number(draw, xy, value):
-    x,y=xy
-    scale=2 if len(str(value)) <= 7 else 1
-    for character in str(value):
-        for row,bits in enumerate(DIGITS[int(character)].split('/')):
-            for col,bit in enumerate(bits):
-                if bit=='1':
-                    px,py=x+col*scale,y+row*scale
-                    draw.rectangle((px+1,py+1,px+scale,py+scale),fill='#38401a')
-                    draw.rectangle((px,py,px+scale-1,py+scale-1),fill='#fff595')
-        x+=6*scale
 
 def chip_anchor(selection):
     if selection == 'red':
@@ -52,8 +28,6 @@ def chip_anchor(selection):
 def landing_angle(pocket, rotation):
     return math.radians(-105 + WHEEL_ORDER.index(pocket) * 30 - rotation)
 
-def text(draw, xy, value, font=FONT):
-    draw.text(xy, str(value), font=font, fill='#fff19b', stroke_width=1, stroke_fill='#454018')
 
 def table(game, *, reveal=False, flash=False, credit=1.0):
     board = sprite('roulette_board').resize((256,192), Image.Resampling.NEAREST).copy()
@@ -149,11 +123,6 @@ def wheel(rotation=0, *, tilt=0, ball_angle=None, ball_radius=112):
     return top
 
 
-def compose(top, bottom):
-    board=Image.new('RGBA',(256,384),'#004b10')
-    board.alpha_composite(top,(0,0))
-    board.alpha_composite(bottom,(0,192))
-    return board.resize(SIZE,Image.Resampling.NEAREST)
 
 def frame(game, tick=0, *, spinning=False):
     if game.result is not None and not spinning:
@@ -188,11 +157,6 @@ def motion_at(seconds, pocket):
     return rotation, angle, radius
 
 
-def dealer_frame(index):
-    atlas = sprite('dealer_motion')
-    index = min(49, max(0, index))
-    x, y = index % 10 * 256, index // 10 * 192
-    return atlas.crop((x, y, x + 256, y + 192))
 
 
 def countdown(top, seconds):
@@ -212,15 +176,7 @@ def countdown(top, seconds):
     top.alpha_composite(glyph, ((256-glyph.width)//2, (192-glyph.height)//2))
 
 
-def animation_frames(game):
-    if game.result is None:
-        # Both motions close seamlessly after six seconds. Chip edits retain
-        # this animation rather than replacing it with a frozen board.
-        frames = [compose(wheel(i * 6, ball_angle=i * math.tau / 20,
-                                ball_radius=108), table(game)) for i in range(60)]
-        return frames, [100] * len(frames), True
-    frames = []
-    durations = []
+def _spin_frames(game, frames, durations):
     # Three countdown beats, direct camera cut, outer orbit, drop and carry.
     for i in range(122):
         seconds = i / 10
@@ -230,9 +186,12 @@ def animation_frames(game):
             countdown(top, seconds)
         frames.append(compose(top, table(game)))
         durations.append(100)
+
+
+def _reveal_frames(game, frames, durations):
+    won = bool(game.result['payout'])
     # The reveal begins WITH YOU WIN. Its disappearance and Luigi lowering
     # his hands follow in source order; Toad and the room sign also move.
-    won = bool(game.result['payout'])
     for i in range(50):
         top = dealer_frame(i if won else 24 + i % 26)
         if not won and i < 22:
@@ -240,6 +199,10 @@ def animation_frames(game):
             top.alpha_composite(art, ((256-art.width)//2, 153))
         frames.append(compose(top, table(game, reveal=True, flash=i % 6 < 3, credit=0)))
         durations.append(100)
+
+
+def _payout_frames(game, frames, durations):
+    won = bool(game.result['payout'])
     # Decorative coins stream toward the wallet; the counter uses the actual
     # payout, never the twelve coins from the recorded reference round.
     for i in range(18):
@@ -255,6 +218,20 @@ def animation_frames(game):
                     bottom.alpha_composite(sprite('coin'), (x, y))
         frames.append(compose(top, bottom))
         durations.append(100)
+
+
+def animation_frames(game):
+    if game.result is None:
+        # Both motions close seamlessly after six seconds. Chip edits retain
+        # this animation rather than replacing it with a frozen board.
+        frames = [compose(wheel(i * 6, ball_angle=i * math.tau / 20,
+                                ball_radius=108), table(game)) for i in range(60)]
+        return frames, [100] * len(frames), True
+    frames = []
+    durations = []
+    _spin_frames(game, frames, durations)
+    _reveal_frames(game, frames, durations)
+    _payout_frames(game, frames, durations)
     frames.append(frame(game))
     durations.append(1000)
     return frames, durations, False

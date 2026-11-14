@@ -8,9 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from PIL import Image, ImageDraw
 
-from casinogames.card_scene import gif, png
-from casinogames.casino_art import background
-from casinogames.expansion_render import _fit, _scene, TINY, GOLD
+from casinogames.card_scene import gif, png, table_scene
+from casinogames.casino_art import background, fit_text, TINY, GOLD
 from casinogames.mario_cards import face as mario_face
 
 from casinogames.registry import DUEL_GAMES
@@ -41,34 +40,38 @@ def _visible_hand(state):
                 str(players[0]) if players else '')
 
 
-def _layout(kind, state):
-    """Return bounded native-screen slots and small labels, with no hidden lookup."""
-    if kind not in KINDS:
-        raise ValueError('Unknown duel table')
-    slots, labels = {}, []
-    players = state.get('players', [])
-    hands = state.get('hands', {})
-    scores = state.get('scores', {})
-    own = _visible_hand(state)
+class _DuelLayout:
+    """Accumulate positions and labels for one viewer-safe table."""
+    def __init__(self, state):
+        self.state = state
+        self.slots, self.labels = {}, []
+        self.players = state.get('players', [])
+        self.hands = state.get('hands', {})
+        self.scores = state.get('scores', {})
+        self.own = _visible_hand(state)
 
-    def label(x, y, value, width=244, color=GOLD):
-        labels.append((x, y, str(value), width, color))
+    def label(self, x, y, value, width=244, color=GOLD):
+        self.labels.append((x, y, str(value), width, color))
 
-    def add(key, face, rect, style='standard', owner=None, identity=None):
+    def add(self, key, face, rect, style='standard', owner=None, identity=None):
         if identity is None and face is not None and not isinstance(face, dict):
             identity = str(face) if style in ('standard', 'compact', 'red7') else None
-        slots[key] = DuelSlot(rect, face, style, owner, identity)
+        self.slots[key] = DuelSlot(rect, face, style, owner, identity)
 
-    def row(key, values, y, *, x=7, width=242, height=36, style='standard', owner=None):
+    def row(self, key, values, y, *, x=7, width=242, height=36, style='standard', owner=None):
         values = list(values)
-        # Keep every card in its native portrait shape. Busy rows overlap as
-        # physical fans instead of compressing the artwork into narrow strips.
-        w=round(height*2/3)
-        step=min(w+4,(width-w)/max(1,len(values)-1))
-        for i,value in enumerate(values):
-            add(f'{key}:{i}',value,(x+i*step,y,w,height),style,owner)
+        w = round(height * 2 / 3)
+        step = min(w + 4, (width - w) / max(1, len(values) - 1))
+        for i, value in enumerate(values):
+            self.add(f'{key}:{i}', value, (x+i*step, y, w, height), style, owner)
 
-    if kind == 'triple_triad':
+    def triple_triad(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        scores = self.scores
+        label = self.label
+        add = self.add
         for seat, player in enumerate(players):
             x = 4 if seat == 0 else 200
             label(x, 3, f'{_seat(players,player)} {scores.get(str(player),5)}', 40, SEATS[seat])
@@ -84,7 +87,14 @@ def _layout(kind, state):
                 f"triad:{owner}:{value['id']}" if entry else None)
             label(rect[0]+7, rect[1]+43, f'{chr(65+r)}{c+1}', 28)
         label(62,180,'OPEN  /  N E S W',145)
-    elif kind == 'red7':
+
+    def red7(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        own = self.own
+        label = self.label
+        row = self.row
         palettes = state.get('palettes', {})
         for seat, player in enumerate(players):
             y = 4+seat*49
@@ -93,7 +103,15 @@ def _layout(kind, state):
         label(7,105,f"{state.get('rule','red').upper()}: {state.get('rule_name','Highest card')}",242)
         label(7,128,'HAND  ' + ' / '.join(f'{_seat(players,p)} {len(hands.get(str(p),[]))}' for p in players))
         row('hand',hands.get(own,[]),143,height=42,style='red7')
-    elif kind == 'pazaak':
+
+    def pazaak(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        scores = self.scores
+        own = self.own
+        label = self.label
+        row = self.row
         if state.get('phase') == 'side_deck':
             label(8,7,'SIDE DECK  /  SELECT TEN MODIFIERS')
             values=hands.get(own,[])
@@ -109,7 +127,16 @@ def _layout(kind, state):
                 row(f'board:{player}',state.get('boards',{}).get(str(player),[]),y+13,height=36,style='modifier',owner=seat)
             label(7,115,f"SIDE HAND   /   SET {state.get('set_number',1)}")
             row('hand',hands.get(own,[]),134,height=48,style='modifier')
-    elif kind == 'platoon':
+
+    def platoon(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        scores = self.scores
+        own = self.own
+        label = self.label
+        add = self.add
+        row = self.row
         for seat,player in enumerate(players):
             y=4+seat*74
             label(7,y,f'{_seat(players,player)}  FLAGS {scores.get(str(player),0)}',180,SEATS[seat])
@@ -133,7 +160,13 @@ def _layout(kind, state):
             prediction=state.get('predictions',{})
             label(7,149,'PREDICTIONS  '+ ' / '.join(f'{_seat(players,int(p))}: {_seat(players,v[0])}-{chr(65+v[1])}' for p,v in prediction.items()),242)
             row('battle',state.get('table',[]),161,height=28)
-    elif kind == 'casino_war':
+
+    def casino_war(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        label = self.label
+        add = self.add
         for seat,player in enumerate(players):
             x=48+seat*111
             label(x-7,18,_seat(players,player),75,SEATS[seat])
@@ -146,7 +179,15 @@ def _layout(kind, state):
             label(19,162,result.get('outcome',result.get('reason','')).upper())
         else:
             label(19,145,'TIE: SURRENDER OR GO TO WAR' if state.get('phase')=='tie' else 'HIGH CARD WINS')
-    elif kind == 'scopa':
+
+    def scopa(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        scores = self.scores
+        own = self.own
+        label = self.label
+        row = self.row
         label(7,4,' / '.join(f"{_seat(players,p)}  {'TOTAL' if state.get('result') else 'SWEEPS'} {scores.get(str(p),0)}" for p in players))
         values=state.get('table',[])
         # A large table can occupy two rows without covering the private hand.
@@ -162,7 +203,15 @@ def _layout(kind, state):
         label(7,108,f"DECK {state.get('remaining_deck',0)}   DIAMONDS = COINS")
         label(7,128,'YOUR HAND')
         row('hand',hands.get(own,[]),141,height=45)
-    elif kind == 'cuttle':
+
+    def cuttle(self):
+        state = self.state
+        players = self.players
+        hands = self.hands
+        scores = self.scores
+        own = self.own
+        label = self.label
+        row = self.row
         for seat,player in enumerate(players):
             y=3+seat*49
             threshold=state.get('thresholds',{}).get(str(player),21)
@@ -187,7 +236,15 @@ def _layout(kind, state):
             row('hand1',values[split:],160,height=28)
         else:
             row('hand',values,141,height=45)
-    return slots,labels
+
+
+def _layout(kind, state):
+    """Return bounded native-screen slots and small labels, with no hidden lookup."""
+    if kind not in KINDS:
+        raise ValueError('Unknown duel table')
+    layout = _DuelLayout(state)
+    getattr(layout, kind)()
+    return layout.slots, layout.labels
 
 
 def _art(slot):
@@ -218,7 +275,7 @@ def _base(labels):
     board=background((256,192)).copy()
     draw=ImageDraw.Draw(board)
     for x,y,value,width,color in labels:
-        _fit(draw,(x,y),value,width=width,font=TINY,fill=color)
+        fit_text(draw,(x,y),value,width=width,font=TINY,fill=color)
     return board
 
 
@@ -226,12 +283,10 @@ def _still(kind,state):
     slots,labels=_layout(kind,state)
     board=_base(labels)
     for slot in slots.values(): _draw(board,slot)
-    return _scene(board)
+    return table_scene(board)
 
 
-def _transition(kind,previous,current,steps=8):
-    before,_=_layout(kind,previous) if previous is not None else ({},[])
-    after,labels=_layout(kind,current)
+def _match_slots(before, after):
     # Identity matching moves known cards between hand/table/capture areas.
     # Unseen cards are matched only by their public position, never a secret ID.
     used=set(); matches={}
@@ -244,27 +299,42 @@ def _transition(kind,previous,current,steps=8):
             oldkey=key
         if oldkey is not None:
             matches[key]=before[oldkey];used.add(oldkey)
+    return matches, used
+
+
+def _draw_transition(board, before, after, matches, used, t, eased):
+    for key,old in before.items():
+        if key not in used and t<.875:
+            x,y,w,h=old.rect
+            _draw(board,replace(old,rect=(x,y+(188-y)*eased,w,h)),squeeze=1-t)
+    _draw_arrivals(board, after, matches, t, eased)
+
+
+def _draw_arrivals(board, after, matches, t, eased):
+    for key,new in after.items():
+        old=matches.get(key)
+        if old is None:
+            x,y,w,h=new.rect
+            source=(113,-h,w,h)
+            rect=tuple(a+(b-a)*eased for a,b in zip(source,new.rect))
+            _draw(board,replace(new,rect=rect))
+        else:
+            rect=tuple(a+(b-a)*eased for a,b in zip(old.rect,new.rect))
+            changed=old.face!=new.face or old.owner!=new.owner
+            show=old if changed and t<.5 else new
+            _draw(board,replace(show,rect=rect),squeeze=max(.08,abs(2*t-1)) if changed else 1)
+
+
+def _transition(kind,previous,current,steps=8):
+    before,_=_layout(kind,previous) if previous is not None else ({},[])
+    after,labels=_layout(kind,current)
+    matches, used = _match_slots(before, after)
     frames=[]
     for step in range(steps):
         t=(step+1)/steps; eased=1-(1-t)**3
         board=_base(labels)
-        for key,old in before.items():
-            if key not in used and t<.875:
-                x,y,w,h=old.rect
-                _draw(board,replace(old,rect=(x,y+(188-y)*eased,w,h)),squeeze=1-t)
-        for key,new in after.items():
-            old=matches.get(key)
-            if old is None:
-                x,y,w,h=new.rect
-                source=(113,-h,w,h)
-                rect=tuple(a+(b-a)*eased for a,b in zip(source,new.rect))
-                _draw(board,replace(new,rect=rect))
-            else:
-                rect=tuple(a+(b-a)*eased for a,b in zip(old.rect,new.rect))
-                changed=old.face!=new.face or old.owner!=new.owner
-                show=old if changed and t<.5 else new
-                _draw(board,replace(show,rect=rect),squeeze=max(.08,abs(2*t-1)) if changed else 1)
-        frames.append(_scene(board,step,dealing=True))
+        _draw_transition(board, before, after, matches, used, t, eased)
+        frames.append(table_scene(board,step,dealing=True))
     frames.append(_still(kind,current))
     return frames
 
