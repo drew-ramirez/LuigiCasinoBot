@@ -1,11 +1,3 @@
-###########################################################
-# File: PicturePokerUI.py
-#
-# Description: Discord UI controls for Picture Poker
-# TODO: need to make a shorter msg.edit that has defaults,
-# so we can just override what we want each time.
-###########################################################
-
 import discord
 import asyncio
 from contextlib import suppress
@@ -26,9 +18,6 @@ from utils.emoji_config import get_coin_emoji, picture_poker_emojis
 from metrics.metrics_manager import MetricsManager
 
 
-###########################################################
-# Helper: Round Summary Formatter
-###########################################################
 def _feature_symbol(rank: str, hand: list[str]) -> str:
     if not hand:
         return ""
@@ -102,9 +91,6 @@ def format_round_summary(result, delta_symbol=""):
     )
 
 
-###########################################################
-# Picture Poker View
-###########################################################
 class PicturePokerView(discord.ui.View):
     def cleanup_payload(self, status, colour=None):
         stats = {
@@ -156,9 +142,6 @@ class PicturePokerView(discord.ui.View):
         self._skip_player_animation = False
         self._player_animating = False
 
-        ###########################################################
-        # Card toggle buttons
-        ###########################################################
         for i in range(5):
             btn = discord.ui.Button(
                 label=f"Card {i+1}",
@@ -169,9 +152,6 @@ class PicturePokerView(discord.ui.View):
             btn.callback = self._make_toggle(i, btn)
             self.add_item(btn)
 
-        ###########################################################
-        # Action buttons
-        ###########################################################
         submit_btn = discord.ui.Button(
             label="Submit Discards",
             style=discord.ButtonStyle.green,
@@ -190,9 +170,6 @@ class PicturePokerView(discord.ui.View):
         stand_btn.callback = self._stand
         self.add_item(stand_btn)
 
-    ###########################################################
-    # helpers
-    ###########################################################
     def _header_payload(
         self,
         user: discord.abc.User,
@@ -247,9 +224,6 @@ class PicturePokerView(discord.ui.View):
             with suppress(Exception):
                 await msg.edit(**edit_kwargs)
 
-    ###########################################################
-    # Toggle factory
-    ###########################################################
     def _make_toggle(self, idx: int, btn: discord.ui.Button):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.user_id:
@@ -281,9 +255,6 @@ class PicturePokerView(discord.ui.View):
 
         return callback
 
-    ###########################################################
-    # Submit discards
-    ###########################################################
     def _round_stats(self, extra=None):
         stats = {"active_bet": self.game.bet, "stars_current": self.game.stars}
         if extra:
@@ -329,7 +300,6 @@ class PicturePokerView(discord.ui.View):
 
         if self.animations_enabled:
             await self._animate_player_redraw(interaction, msg, discards)
-        # Disable discard-related buttons
         self._set_redraw_controls()
 
         if not self._skip_player_animation:
@@ -353,9 +323,6 @@ class PicturePokerView(discord.ui.View):
         self.game.selected_discards = set()
         self._player_animating = False
 
-    ###########################################################
-    # Stand logic (Luigi plays)
-    ###########################################################
     async def _stand(self, interaction: discord.Interaction):
         if interaction.user.id != self.user_id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
@@ -378,7 +345,6 @@ class PicturePokerView(discord.ui.View):
             child.disabled = "Stand" not in child.label
 
     async def _animate_player_redraw(self, interaction, msg, discards):
-        # A) show facedown cards
         img_hidden = render_board_with_hidden(self.game, hidden_player=discards)
         hidden_file = discord.File(img_hidden, "poker.png")
         stats = self._round_stats({"dealer_action": "Your new cards are dealt facedown..."})
@@ -393,7 +359,6 @@ class PicturePokerView(discord.ui.View):
             )
             await asyncio.sleep(0.6)
 
-        # B) flip cards one by one
         if not self._skip_player_animation:
             img_hidden.seek(0)
             base = Image.open(img_hidden).convert("RGBA")
@@ -426,7 +391,6 @@ class PicturePokerView(discord.ui.View):
 
 
     async def _play_dealer_turn(self, interaction, msg):
-        # Luigi discards
         counts = Counter(self.game.luigi_hand)
         keep = {s for s, c in counts.items() if c > 1}
         luigi_discards = [
@@ -435,7 +399,6 @@ class PicturePokerView(discord.ui.View):
         self.game.luigi_discard()
 
         if self.animations_enabled:
-            # A) Luigi's facedown cards
             img_hidden = render_board_with_hidden(self.game, hidden_dealer=luigi_discards)
             hidden_file = discord.File(img_hidden, "poker.png")
             stats = self._round_stats({"dealer_action": "Luigi discards some cards..."})
@@ -449,7 +412,6 @@ class PicturePokerView(discord.ui.View):
             )
             await asyncio.sleep(0.6)
 
-            # B) Flicker animation
             img_hidden.seek(0)
             base_board = Image.open(img_hidden).convert("RGBA")
             for idx, i in enumerate(luigi_discards):
@@ -471,7 +433,6 @@ class PicturePokerView(discord.ui.View):
             await asyncio.sleep(0.3)
 
     async def _settle_round(self, interaction, msg):
-        # C) Final reveal + payout logic
         try:
             result = self.game.resolve_round()
         except Exception as e:
@@ -588,7 +549,6 @@ class PicturePokerView(discord.ui.View):
         return True
 
     async def _offer_replay(self, interaction, msg):
-        # D) Replay / Quit buttons
         replay_btn = discord.ui.Button(
             label="Play Again", style=discord.ButtonStyle.green
         )
@@ -655,7 +615,6 @@ class PicturePokerView(discord.ui.View):
                     await msg.edit(view=replay_view)
 
 
-
     async def _quit_replay(self, btn_inter, msg):
         if btn_inter.user.id != self.user_id:
             await btn_inter.response.send_message("Not your game!", ephemeral=True)
@@ -689,11 +648,6 @@ class PicturePokerView(discord.ui.View):
         await self.on_finish(self.user_id)
 
 
-
-
-###########################################################
-# Factory
-###########################################################
 def make_poker_view(
     game: PicturePoker,
     player: discord.abc.User,

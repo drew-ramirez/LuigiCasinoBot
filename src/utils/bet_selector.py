@@ -1,10 +1,3 @@
-﻿###########################################################
-# File: bet_selector.py
-#
-# Description: Universal bet selection UI for all Luigi's Casino games.
-# Handles wager validation, deduction, and callback to start game logic.
-###########################################################
-
 import discord
 from economy.EconomyManager import EconomyManager
 

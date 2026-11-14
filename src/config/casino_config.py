@@ -1,10 +1,3 @@
-#########################################################################
-# File: casino_config.py
-#
-# Description: Guild-level configuration helpers for Luigi's Casino.
-#              Stores and resolves channel/category visibility settings.
-########################################################################
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

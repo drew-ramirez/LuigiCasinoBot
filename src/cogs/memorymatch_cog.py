@@ -1,10 +1,5 @@
 import asyncio
 from casinogames.card_scene import waiting_animation
-###########################################################
-# File: memorymatch_cog.py
-#
-# Description: Luigi's Casino Memory Match command logic
-###########################################################
 
 from typing import Any
 
@@ -39,9 +34,6 @@ class MemoryMatchCog(BaseGameCog):
     async def on_ready(self):
         print("MemoryMatchCog loaded.")
 
-    ###########################################################
-    # /casino_memorymatch
-    ###########################################################
     @discord.app_commands.command(
         name="casino_memorymatch", description="Start a Memory Match game for Luigi's Casino"
     )
@@ -149,8 +141,5 @@ class MemoryMatchCog(BaseGameCog):
         )
 
 
-###########################################################
-# Cog SETUP
-###########################################################
 async def setup(bot):
     await bot.add_cog(MemoryMatchCog(bot))

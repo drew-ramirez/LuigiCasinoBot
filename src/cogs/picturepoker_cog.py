@@ -1,10 +1,5 @@
 import asyncio
 from casinogames.card_scene import waiting_animation
-###########################################################
-# File: picturepoker_cog.py
-#
-# Description: Cog for Luigi's Casino - Picture Poker Game
-###########################################################
 
 from typing import Any
 
@@ -51,9 +46,6 @@ class PicturePokerCog(BaseGameCog):
     async def on_ready(self):
         print("PicturePokerCog loaded.")
 
-    ###########################################################
-    # /casino_picturepoker
-    ###########################################################
     @discord.app_commands.command(
         name="casino_picturepoker", description="Start a Picture Poker game for Luigi's Casino"
     )
@@ -65,9 +57,6 @@ class PicturePokerCog(BaseGameCog):
         self.log_command_invocation(interaction, "casino_picturepoker")
         visibility = self.resolve_visibility(interaction)
 
-        ###########################################################
-        # Callback: when a bet is selected
-        ###########################################################
         layout_mode = (
             "gif"
             if EconomyManager.animations_enabled(user_id, player.name)
@@ -183,9 +172,5 @@ class PicturePokerCog(BaseGameCog):
         )
 
 
-
-###########################################################
-# Cog setup
-###########################################################
 async def setup(bot):
     await bot.add_cog(PicturePokerCog(bot))

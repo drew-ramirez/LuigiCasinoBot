@@ -1,9 +1,3 @@
-###########################################################
-# File: PicturePoker.py
-#
-# Description: Game logic for Luigi's Casino Picture Poker
-###########################################################
-
 import random
 from collections import Counter
 

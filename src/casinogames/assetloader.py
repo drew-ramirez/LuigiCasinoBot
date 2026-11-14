@@ -1,7 +1,3 @@
-###########################################################
-# File: AssetLoader.py
-#
-###########################################################
 import os
 from PIL import Image
 
@@ -84,7 +80,7 @@ class MemoryIcons:
             "yoshi": (2, 2),
             "cloud": (4, 2),
         }
-        
+
         self.extras = load_pairagone_extras()
 
 
@@ -122,7 +118,6 @@ class MemoryIcons:
         if f"{name}_half" in self.extras:
             return self.extras[f"{name}_half"]
         raise KeyError(f"Unknown memory flip: {name}")
-
 
 
 class MemoryBacks:
@@ -193,9 +188,6 @@ def load_lucky_assets():
 
     return assets
 
-###########################################################
-# Pair-a-Gone extras 
-###########################################################
 def load_pairagone_extras():
     # Loads Pair-a-Gone extras, later other visual indicators if available online
 

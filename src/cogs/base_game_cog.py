@@ -1,11 +1,3 @@
-###########################################################
-# File: base_game_cog.py
-#
-# Description: Shared utilities for game Cogs
-# Gives wager prompt helpers and active game bookkeeping
-# gonna be docstringing everything here since reusable
-###########################################################
-
 import asyncio
 from typing import Any, Callable, Optional, Dict
 

@@ -1,10 +1,3 @@
-###########################################################
-# File: MemoryMatchUI.py
-#
-# Description: Discord UI controls for Luigi's Casino Memory Match
-# Converted to a persistent View subclass.
-###########################################################
-
 import discord
 import asyncio
 from casinogames.memorymatch.MemoryMatch import MemoryMatch
@@ -157,9 +150,6 @@ class MemoryMatchControls(discord.ui.View):
         }
         return make_gif_game_header(self.player, "Memory Match", stats)
 
-    ###########################################################
-    # callback factory
-    ###########################################################
     def _make_callback(self, pos: int):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.player.id:
@@ -171,9 +161,6 @@ class MemoryMatchControls(discord.ui.View):
 
         return callback
 
-    ###########################################################
-    # main flip handler
-    ###########################################################
     async def handle_memory_flip(self, interaction: discord.Interaction, pos: int):
         game = self.game
         msg = self.msg or await interaction.original_response()
@@ -181,9 +168,6 @@ class MemoryMatchControls(discord.ui.View):
         if not await self._show_flip(msg, pos):
             return
 
-        ###########################################################
-        # match check
-        ###########################################################
         if await self._resolve_flip_match(msg):
             return
 
@@ -191,9 +175,6 @@ class MemoryMatchControls(discord.ui.View):
             await self._handle_loss(msg)
             return
 
-        ###########################################################
-        # re-enable buttons
-        ###########################################################
         for i, child in enumerate(self.children):
             if i < len(game.board):
                 _, _, matched = game.board[i]
@@ -614,9 +595,6 @@ class MemoryMatchControls(discord.ui.View):
 
         await msg.edit(view=replay_view)
 
-    ###########################################################
-    # UI updates for matched cards
-    ###########################################################
     async def update_controls_for_match(self, positions: list[int], message: discord.Message):
         for child in self.children:
             if hasattr(child, "custom_id"):
@@ -626,9 +604,6 @@ class MemoryMatchControls(discord.ui.View):
                     child.disabled = True
         await message.edit(view=self, attachments=[self._board_file()])
 
-    ###########################################################
-    # UI updates for unmatched cards
-    ###########################################################
     async def update_controls_for_unmatch(self, positions: list[int], message: discord.Message):
         for child in self.children:
             if hasattr(child, "custom_id"):

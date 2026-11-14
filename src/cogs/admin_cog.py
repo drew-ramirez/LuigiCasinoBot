@@ -1,9 +1,3 @@
-###########################################################
-# File: admin_cog.py
-#
-# Description: Admin and utility commands for Luigi’s Casino
-###########################################################
-
 import discord
 from discord.ext import commands
 from economy.bank import Bank
@@ -25,17 +19,11 @@ class AdminCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    ###########################################################
-    # EVENTS
-    ###########################################################
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("AdminCog loaded.")
 
-    ###########################################################
-    # ADMIN COMMANDS (ROLE LOCKED)
-    ###########################################################
 
     @discord.app_commands.command(name="ping", description="Check if the bot is alive")
     @manager_only()
@@ -50,9 +38,6 @@ class AdminCog(commands.Cog):
             f"Granted {amount} coins. Your new balance is {new_bal}.", ephemeral=True
         )
 
-    ###########################################################
-    # ERROR HANDLER
-    ###########################################################
 
     @commands.Cog.listener()
     async def on_app_command_error(self, interaction: discord.Interaction, error):
@@ -61,10 +46,6 @@ class AdminCog(commands.Cog):
                 "🚫 You don't have permission to use admin commands.", ephemeral=True
             )
 
-
-###########################################################
-# COG SETUP
-###########################################################
 
 async def setup(bot):
     await bot.add_cog(AdminCog(bot))

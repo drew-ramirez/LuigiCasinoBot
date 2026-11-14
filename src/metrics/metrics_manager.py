@@ -1,10 +1,3 @@
-###########################################################
-# File: metrics_manager.py
-#
-# Description: Helpers for logging engagement metrics and for
-#              materializing daily rollups used by dashboards.
-###########################################################
-
 from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone

@@ -28,8 +28,6 @@ class Slot:
     selected: bool = False
 
 
-
-
 @lru_cache(maxsize=512)
 def _face(value, style, size):
     from casinogames.mario_cards import face
@@ -166,8 +164,6 @@ def _board(kind, state):
         'thrilling_cards': _thrilling_labels}[kind]
     labels(draw, state)
     return board
-
-
 
 
 def _draw_moving_slot(board, slot, old, t, eased):

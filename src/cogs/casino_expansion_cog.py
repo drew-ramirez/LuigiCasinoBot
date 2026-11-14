@@ -332,6 +332,5 @@ class CasinoExpansionCog(commands.Cog):
                                                   f'\nStake {wager}; splitting/doubling can commit up to {4*wager}. Extra stakes are checked at each decision.', view=menu)
 
 
-
 async def setup(bot):
     await bot.add_cog(CasinoExpansionCog(bot))

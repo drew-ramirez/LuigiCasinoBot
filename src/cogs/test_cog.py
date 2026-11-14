@@ -1,9 +1,3 @@
-﻿###########################################################
-# File: test_cog.py
-#
-# Description: Dev test and sprite visualization tools
-###########################################################
-
 import io
 import discord
 from discord.ext import commands
@@ -19,17 +13,11 @@ class TestCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    ###########################################################
-    # EVENTS
-    ###########################################################
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("TestCog loaded.")
 
-    ###########################################################
-    # TEST COMMANDS
-    ###########################################################
 
     @discord.app_commands.command(name="test_sprite", description="Send a test slot icon by index")
     async def test_sprite(self, interaction: discord.Interaction, index: int):
@@ -123,10 +111,6 @@ class TestCog(commands.Cog):
         file = discord.File(byte_arr, filename=f"{name}_flip.gif")
         await interaction.followup.send(file=file, ephemeral=True)
 
-
-###########################################################
-# COG SETUP
-###########################################################
 
 async def setup(bot):
     await bot.add_cog(TestCog(bot))

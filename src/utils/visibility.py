@@ -1,10 +1,3 @@
-###################################################################
-# File: visibility.py
-#
-# Description: Helpers for determining whether a command should
-#              respond publicly or ephemerally based on guild config.
-######################################################################
-
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,9 +1,3 @@
-###########################################################
-# File: settings.py
-#
-# Description: Shared configuration helpers for Luigi's Casino bot.
-###########################################################
-
 from __future__ import annotations
 
 import os

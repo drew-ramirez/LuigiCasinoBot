@@ -21,7 +21,6 @@ def _board(game,reveal=False,hidden_player=(),hidden_dealer=(),controls=True):
     return board
 
 
-
 def _draw_board_status(board, game, reveal, controls, selected):
     result=getattr(game,'result',None)
     if result and reveal:

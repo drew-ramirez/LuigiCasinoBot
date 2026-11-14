@@ -123,7 +123,6 @@ def wheel(rotation=0, *, tilt=0, ball_angle=None, ball_radius=112):
     return top
 
 
-
 def frame(game, tick=0, *, spinning=False):
     if game.result is not None and not spinning:
         top=dealer_frame(49)
@@ -155,8 +154,6 @@ def motion_at(seconds, pocket):
     else:
         angle, radius = target, 48
     return rotation, angle, radius
-
-
 
 
 def countdown(top, seconds):

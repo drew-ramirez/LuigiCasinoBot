@@ -1,9 +1,3 @@
-###########################################################
-# File: user_cog.py
-#
-# Description: Generic player-facing commands for Luigi's Casino
-###########################################################
-
 import discord
 import asyncio
 import logging
@@ -30,13 +24,9 @@ bank = Bank()
 GAMES_EMOJI = "\N{GAME DIE}"
 
 
-###########################################################
-# Safe Send Utility
-###########################################################
 async def safe_send(
     interaction: discord.Interaction, *, ephemeral: bool = False, **kwargs
 ):
-    # Safely send a message even if the interaction is already acknowledged
     try:
         if interaction.response.is_done():
             await interaction.followup.send(ephemeral=ephemeral, **kwargs)
@@ -127,31 +117,23 @@ class UserCog(commands.Cog):
 
         return symbol_lines, payout_lines
 
-    ###########################################################
-    # EVENTS
-    ###########################################################
 
     @commands.Cog.listener()
     async def on_ready(self):
         print("UserCog loaded.")
 
-    ###########################################################
-    # PLAYER COMMANDS
-    ###########################################################
 
     @discord.app_commands.command(
         name="casino_profile", description="View your casino profile for Luigi's Casino"
     )
     async def profile(self, interaction: discord.Interaction):
         visibility = resolve_command_visibility(interaction, "profile")
-        # defer to acknowledge the command
         await interaction.response.defer(ephemeral=visibility.ephemeral)
         MetricsManager.record_command_event(interaction, "casino_profile")
 
         uid = interaction.user.id
         username = interaction.user.name
 
-        # ensure user exists or create a new one
         record = EconomyManager.ensure_user(uid, username)
 
         balance = record.get("balance", 0)
@@ -162,7 +144,6 @@ class UserCog(commands.Cog):
         daily_streak = record.get("daily_claim_streak", 0)
         career_stars = record.get("career_stars_total", 0)
 
-        # build the profile embed
         embed = discord.Embed(
             title=f"{interaction.user.display_name}'s Casino Profile",
             color=discord.Color.gold(),
@@ -204,7 +185,6 @@ class UserCog(commands.Cog):
             inline=False,
         )
 
-        # Keep the existing profile details; attach an equipped cosmetic card.
         from cosmetics.catalog import Appearance, appearance, public_profile
         look = appearance(record)
         files = []
@@ -232,7 +212,6 @@ class UserCog(commands.Cog):
     )
     async def balance(self, interaction: discord.Interaction):
         visibility = resolve_command_visibility(interaction, "balance")
-        # always defer early acknowledges immediately
         await interaction.response.defer(ephemeral=visibility.ephemeral)
         MetricsManager.record_command_event(interaction, "casino_balance")
 
@@ -243,7 +222,6 @@ class UserCog(commands.Cog):
         record = EconomyManager.ensure_user(user_id, username)
         balance = record.get("balance", 0)
 
-        # follow up
         await interaction.followup.send(
             f"{user.name}, your current balance is **{balance} coins**.",
             ephemeral=visibility.ephemeral,
@@ -676,7 +654,6 @@ class LeaderboardView(discord.ui.View):
 
     def build_embed(self) -> discord.Embed:
         data = self.datasets[self.current_key]
-        # base embed
         embed = discord.Embed(
             title=self.custom_title or "🏆 Luigi's Casino Leaderboard",
             description=data["label"],
@@ -705,8 +682,5 @@ class LeaderboardView(discord.ui.View):
         self.clear_items()
 
 
-###########################################################
-# COG SETUP
-###########################################################
 async def setup(bot):
     await bot.add_cog(UserCog(bot))

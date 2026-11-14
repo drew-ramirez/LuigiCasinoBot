@@ -1,9 +1,3 @@
-###########################################################
-# File: PairAGone.py
-#
-# Description: Game logic for Luigi's Casino Pair-a-Gone
-###########################################################
-
 import random
 
 
@@ -24,14 +18,12 @@ class PairAGone:
     ):
         self.bet = max(1, bet)
 
-        # progression state
         self.stars = max(0, int(initial_stars))
         self.session_stars = 0
         self.level = 1
         self.unlocked = set(self.BASE_SYMBOLS)
         self._sync_unlocks()
 
-        # round state
         self.deck = []
         self.board = []
         self.selected = []
@@ -40,9 +32,6 @@ class PairAGone:
         self._build_deck()
         self._deal_board()
 
-    ###########################################################
-    # Deck & board generation (finite 36-card model)
-    ###########################################################
     def _build_deck(self):
         cards_per_symbol = 6
         self.deck = []
@@ -55,7 +44,6 @@ class PairAGone:
         draw_count = min(self.total_slots, len(self.deck))
         self.board = [self.deck.pop() for _ in range(draw_count)]
 
-        # pad with None if deck < 20
         while len(self.board) < self.total_slots:
             self.board.append(None)
 
@@ -76,36 +64,25 @@ class PairAGone:
         self.remove_and_fall([a, b])
         return True
 
-    ###########################################################
-    # Removal, gravity, and refill
-    ###########################################################
     def remove_and_fall(self, positions: list[int]):
-        # Remove matched cards
         for pos in positions:
             if 0 <= pos < len(self.board):
                 self.board[pos] = None
 
-        # Collapse remaining non-empty slots (top to bottom)
         compacted = [card for card in self.board if card is not None]
 
         new_cards = []
 
-        # Fill until board is full OR deck runs out
         while len(compacted) < self.total_slots and self.deck:
             sym = self.deck.pop()
             new_idx = len(compacted)
             compacted.append(sym)
             new_cards.append((new_idx, sym))
 
-        # Finalize board: pad with None if deck ran out
         self.board = compacted + [None] * (self.total_slots - len(compacted))
 
-        # Only return actual new cards that were dealt (may be empty)
         return new_cards
 
-    ###########################################################
-    # State helpers
-    ###########################################################
     def remaining_in_deck(self) -> int:
         return len(self.deck)
 
@@ -128,9 +105,6 @@ class PairAGone:
                         return True
         return False
 
-    ###########################################################
-    # Progression system
-    ###########################################################
     def handle_game_end(self, won: bool):
         if won:
             self.stars += 1

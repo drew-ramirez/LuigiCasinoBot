@@ -1,9 +1,3 @@
-###########################################################
-# File: LuckyStars.py
-#
-# Description: Game logic for Luigi's Casino Lucky Stars
-###########################################################
-
 import random
 from typing import Optional
 

@@ -1,9 +1,3 @@
-###########################################################
-# File: ui_embeds.py
-#
-# Description: Luigi's Casino UI header utilities.
-###########################################################
-
 from typing import List, Optional
 
 import discord

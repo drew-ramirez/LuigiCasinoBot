@@ -1,9 +1,3 @@
-###########################################################
-# File: PairAGoneUI.py
-#
-# Description: Discord UI controls for Pair-a-Gone
-###########################################################
-
 import asyncio
 from contextlib import suppress
 import discord
@@ -65,9 +59,6 @@ class PairControls(discord.ui.View):
         self._build_buttons()
         self._refresh_buttons()
 
-    ###########################################################
-    # Helpers
-    ###########################################################
     def _status_stats(self, dealer_action: str | None = None) -> dict:
         action = (
             dealer_action or f"Cards remaining in deck: {self.game.remaining_in_deck()}"
@@ -152,9 +143,6 @@ class PairControls(discord.ui.View):
                     child.disabled = False
                     child.label = str(i + 1)
 
-    ###########################################################
-    # Callbacks
-    ###########################################################
     def _make_callback(self, pos: int):
         async def callback(interaction: discord.Interaction):
             if interaction.user.id != self.player.id:
@@ -168,9 +156,6 @@ class PairControls(discord.ui.View):
 
         return callback
 
-    ###########################################################
-    # Core flow
-    ###########################################################
     async def handle_pair_flip(self, interaction: discord.Interaction, pos: int):
         msg = self.msg or await interaction.original_response()
         self.msg = msg
@@ -491,8 +476,6 @@ class PairControls(discord.ui.View):
             setattr(self.game, "metrics_logged", True)
         if self.on_finish is not None:
             await self.on_finish(self.player.id)
-
-
 
 
 def make_pair_view(

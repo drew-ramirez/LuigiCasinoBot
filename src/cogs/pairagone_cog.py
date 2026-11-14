@@ -1,10 +1,5 @@
 import asyncio
 from casinogames.card_scene import waiting_animation
-###########################################################
-# File: pairagone_cog.py
-#
-# Description: Pair-a-Gone command and entry point
-###########################################################
 
 from typing import Any
 
@@ -45,9 +40,6 @@ class PairAGoneCog(BaseGameCog):
     async def on_ready(self):
         print("PairAGoneCog loaded.")
 
-    ###########################################################
-    # /casino_pairagone
-    ###########################################################
     @discord.app_commands.command(name="casino_pairagone", description="Start a Pair-a-Gone game for Luigi's Casino")
     async def pair_start(self, interaction: discord.Interaction):
         player = interaction.user
@@ -158,8 +150,5 @@ class PairAGoneCog(BaseGameCog):
         )
 
 
-###########################################################
-# COG SETUP
-###########################################################
 async def setup(bot):
     await bot.add_cog(PairAGoneCog(bot))

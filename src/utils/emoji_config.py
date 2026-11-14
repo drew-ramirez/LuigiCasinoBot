@@ -1,9 +1,3 @@
-###########################################################
-# File: emoji_config.py
-#
-# Description: Centralized emoji helpers for Luigi's Casino.
-###########################################################
-
 from __future__ import annotations
 
 import json

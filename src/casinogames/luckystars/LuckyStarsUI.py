@@ -1,9 +1,3 @@
-###########################################################
-# File: LuckyStarsUI.py
-#
-# Description: Discord UI controls and animations for Lucky Stars
-###########################################################
-
 import asyncio
 import io
 
@@ -79,9 +73,6 @@ class LuckyStarsView(discord.ui.View):
         self.add_item(spacer)
         self.add_item(self.right_button)
 
-    ###########################################################
-    # helpers
-    ###########################################################
     def _board_file(self, *, reveal: bool = False, filename: str = "lucky.png") -> discord.File:
         board = render_lucky_board(self.game, reveal=reveal)
         board.seek(0)
@@ -124,9 +115,6 @@ class LuckyStarsView(discord.ui.View):
         if self.msg:
             await self.msg.edit(view=self)
 
-    ###########################################################
-    # main selection flow
-    ###########################################################
     async def handle_pick(self, interaction: discord.Interaction, pos: int):
         if interaction.user.id != self.player.id:
             await interaction.response.send_message("Not your game!", ephemeral=True)
@@ -253,9 +241,6 @@ class LuckyStarsView(discord.ui.View):
 
         await self._show_replay()
 
-    ###########################################################
-    # replay / quit menu
-    ###########################################################
     async def _show_replay(self):
         if self.on_finish is not None:
             await self.on_finish(self.player.id)

@@ -1,10 +1,3 @@
-###########################################################
-# File: EconomyManager.py
-#
-# Description: MongoDB economy manager for user balances,
-#              user creation, bets, and payouts.
-###########################################################
-
 from pymongo import MongoClient  # type: ignore
 from pymongo.server_api import ServerApi  # type: ignore
 from dotenv import load_dotenv
@@ -13,9 +6,6 @@ from zoneinfo import ZoneInfo
 import os
 import time
 
-###########################################################
-# database connection
-###########################################################
 load_dotenv()
 
 uri = os.getenv("MONGO_URI")
@@ -23,15 +13,9 @@ client = MongoClient(uri, server_api=ServerApi("1"))
 db = client[os.getenv("DATABASE_NAME", "luigicasino")]
 
 
-###########################################################
-# economy manager
-###########################################################
 class EconomyManager:
     COLLECTION = db["users"]
 
-    ###########################################################
-    # ensure user exists
-    ###########################################################
     @staticmethod
     def ensure_user(user_id: int, username: str = "Unknown") -> dict:
         from pymongo.errors import DuplicateKeyError
@@ -75,17 +59,11 @@ class EconomyManager:
             return record
         return new_user
 
-    ###########################################################
-    # get balance
-    ###########################################################
     @staticmethod
     def balance(user_id: int, username: str = "Unknown") -> int:
         record = EconomyManager.ensure_user(user_id, username)
         return record.get("balance", 0)
 
-    ###########################################################
-    # star bonus helpers
-    ###########################################################
     @staticmethod
     def _resolve_bonus_map(record: dict) -> dict:
         """Return the star bonus map, handling legacy 'streaks' key."""
@@ -94,9 +72,6 @@ class EconomyManager:
             bonuses = record.get("streaks", {})
         return bonuses or {}
 
-    ###########################################################
-    # animation preference
-    ###########################################################
     @staticmethod
     def animations_enabled(user_id: int, username: str = "Unknown") -> bool:
         record = EconomyManager.ensure_user(user_id, username)
@@ -200,9 +175,6 @@ class EconomyManager:
             username=username,
         )
 
-    ###########################################################
-    # daily reward helpers
-    ###########################################################
     @staticmethod
     def record_daily_claim(
         user_id: int,
@@ -270,9 +242,6 @@ class EconomyManager:
             "last_claim": today,
         }
 
-    ###########################################################
-    # grant coins
-    ###########################################################
     @staticmethod
     def grant(user_id: int, amount: int, username: str = "Unknown") -> int:
         EconomyManager.ensure_user(user_id, username)
@@ -282,9 +251,6 @@ class EconomyManager:
         new_balance = EconomyManager.balance(user_id, username)
         return new_balance
 
-    ###########################################################
-    # wager coins
-    ###########################################################
     @staticmethod
     def wager(user_id: int, amount: int, username: str = "Unknown") -> bool:
         if type(amount) is not int or amount <= 0:
@@ -304,9 +270,6 @@ class EconomyManager:
         )
         return bool(result.matched_count)
 
-    ###########################################################
-    # payout winnings
-    ###########################################################
     @staticmethod
     def payout(user_id: int, amount: int, username: str = "Unknown") -> int:
         EconomyManager.ensure_user(user_id, username)
@@ -320,4 +283,3 @@ class EconomyManager:
         EconomyManager.COLLECTION.update_one({"user_id": user_id}, update_query)
         new_balance = EconomyManager.balance(user_id, username)
         return new_balance
-

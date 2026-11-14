@@ -1,9 +1,3 @@
-###########################################################
-# File: bot.py
-#
-# Description: Discord bot entry setup and cog loader
-###########################################################
-
 import os
 import asyncio
 from datetime import datetime, timezone
@@ -16,22 +10,17 @@ from metrics.metrics_manager import MetricsRollups
 from config import CasinoConfigManager
 from config.settings import fallback_allowed_channels
 
-# load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 FALLBACK_ALLOWED_CHANNELS = fallback_allowed_channels()
 
-# intents
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 
-###########################################################
-# Channel Extraction Helper
-###########################################################
 def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
     ids: set[int | None] = set()
     channel = getattr(interaction, "channel", None)
@@ -48,9 +37,6 @@ def _extract_parent_ids(interaction: discord.Interaction) -> set[int]:
     return ids
 
 
-###########################################################
-# Global Interaction Check
-###########################################################
 async def casino_channel_only(interaction: discord.Interaction) -> bool:
     guild = interaction.guild
     if guild is None:
@@ -100,13 +86,9 @@ async def casino_channel_only(interaction: discord.Interaction) -> bool:
     return True
 
 
-# register the global check
 bot.tree.interaction_check = casino_channel_only
 
 
-###########################################################
-# Error Handling
-###########################################################
 @bot.tree.error
 async def on_app_command_error(interaction: discord.Interaction, error: Exception):
     # CheckFailure from global channel check is expected, ignore it silently
@@ -115,18 +97,12 @@ async def on_app_command_error(interaction: discord.Interaction, error: Exceptio
     print(f"[ERROR] Unhandled command error: {error}")
 
 
-###########################################################
-# EVENTS
-###########################################################
 @bot.event
 async def on_ready():
     synced = await bot.tree.sync()
     print(f"{bot.user} is online. Synced {len(synced)} command(s).")
 
 
-###########################################################
-# COG LOADER
-###########################################################
 COGS = [
     "cogs.user_cog",
     "cogs.cosmetics_cog",
@@ -172,9 +148,6 @@ async def setup_bot():
     await bot.start(TOKEN)
 
 
-###########################################################
-# ENTRYPOINT
-###########################################################
 if __name__ == "__main__":
     try:
         asyncio.run(setup_bot())

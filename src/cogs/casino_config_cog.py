@@ -1,9 +1,3 @@
-###########################################################
-# File: casino_config_cog.py
-#
-# Description: Admin-facing configuration commands for Luigi's Casino.
-###########################################################
-
 from __future__ import annotations
 
 from typing import Optional

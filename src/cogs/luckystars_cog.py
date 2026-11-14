@@ -1,10 +1,5 @@
 import asyncio
 from casinogames.card_scene import waiting_animation
-###########################################################
-# File: luckystars_cog.py
-#
-# Description: Cog for Luigi's Casino - Lucky Stars Game
-###########################################################
 
 from typing import Any
 
@@ -48,9 +43,6 @@ class LuckyStarsCog(BaseGameCog):
     async def on_ready(self):
         print("LuckyStarsCog loaded.")
 
-    ###########################################################
-    # /casino_luckystars
-    ###########################################################
     @discord.app_commands.command(name="casino_luckystars", description="Start a Lucky Stars game for Luigi's Casino")
     async def lucky_start(self, interaction: discord.Interaction):
         player = interaction.user
@@ -164,9 +156,5 @@ class LuckyStarsCog(BaseGameCog):
         )
 
 
-
-###########################################################
-# Cog setup
-###########################################################
 async def setup(bot):
     await bot.add_cog(LuckyStarsCog(bot))
