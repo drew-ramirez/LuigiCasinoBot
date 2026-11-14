@@ -78,32 +78,44 @@ class Cuttle:
     def _option(action, label, group='Turn'):
         return {'id': action, 'label': label[:100], 'group': group}
 
+    def _point_actions(self, actor, card):
+        r=rank(card)
+        if r>10:return []
+        actions=[self._option(f'points:{card}',f'{card}: play for {r} points',card)]
+        for target in self.points:
+            if target['owner']!=actor and (r,SUITS.index(card[-1]))>(rank(target['card']),SUITS.index(target['card'][-1])):
+                actions.append(self._option(f'scuttle:{card}:{target["card"]}',f'{card}: scuttle {target["card"]}',card))
+        return actions
+
+    def _permanent_actions(self, actor, card):
+        r=rank(card)
+        if r in (8,12,13):
+            label={8:'expose opponent hand',12:'protect with Queen',13:'lower winning threshold'}[r]
+            return [self._option(f'permanent:{card}',f'{card}: {label}',card)]
+        if r==11:
+            return [self._option(f'jack:{card}:{target["card"]}',f'{card}: transfer {target["card"]} to {self.other(target["owner"])}',card)
+                    for target in self.points if target['owner']==actor or not self.queen(target['owner'])]
+        return []
+
+    def _effect_actions(self, actor, card):
+        r=rank(card)
+        if r in (1,4,5,6,7):
+            label={1:'scrap all points',4:'opponent discards two',5:'draw two',6:'scrap all permanents',7:'draw and immediately play'}[r]
+            return [self._option(f'effect:{card}',f'{card}: {label}',card)]
+        if r==3 and self.scrap:
+            return [self._option(f'effect:{card}',f'{card}: retrieve a scrap after responses',card)]
+        if r in (2,9):
+            label='scrap' if r==2 else 'return'
+            return [self._option(f'effect:{card}:{target}',f'{card}: {label} {target}',card)
+                    for target,owner in self._permanent_targets(actor)]
+        return []
+
     def _card_actions(self, actor, cards):
         actions=[]
-        add=lambda action,label,card: actions.append(self._option(action,label,card))
         for card in cards:
-            r=rank(card)
-            if r<=10:
-                add(f'points:{card}',f'{card}: play for {r} points',card)
-                for target in self.points:
-                    if target['owner']!=actor and (r,SUITS.index(card[-1]))>(rank(target['card']),SUITS.index(target['card'][-1])):
-                        add(f'scuttle:{card}:{target["card"]}',f'{card}: scuttle {target["card"]}',card)
-            if r in (8,12,13):
-                label={8:'expose opponent hand',12:'protect with Queen',13:'lower winning threshold'}[r]
-                add(f'permanent:{card}',f'{card}: {label}',card)
-            elif r==11:
-                for target in self.points:
-                    if target['owner']==actor or not self.queen(target['owner']):
-                        add(f'jack:{card}:{target["card"]}',f'{card}: transfer {target["card"]} to {self.other(target["owner"])}',card)
-            if r in (1,4,5,6,7):
-                label={1:'scrap all points',4:'opponent discards two',5:'draw two',6:'scrap all permanents',7:'draw and immediately play'}[r]
-                add(f'effect:{card}',f'{card}: {label}',card)
-            elif r==3 and self.scrap:
-                add(f'effect:{card}',f'{card}: retrieve a scrap after responses',card)
-            elif r in (2,9):
-                for target,owner in self._permanent_targets(actor):
-                    label='scrap' if r==2 else 'return'
-                    add(f'effect:{card}:{target}',f'{card}: {label} {target}',card)
+            actions.extend(self._point_actions(actor,card))
+            actions.extend(self._permanent_actions(actor,card))
+            actions.extend(self._effect_actions(actor,card))
         return actions
 
     def legal_actions(self, player_id):
@@ -138,41 +150,49 @@ class Cuttle:
             raise
         return self.view(player_id)
 
+    def _counter_action(self, actor, parts):
+        mode=parts[0]
+        if mode=='counter':
+            card=parts[1]
+            self.hands[str(actor)].remove(card)
+            self.pending['counters'].append({'actor':actor,'card':card})
+            self.turn=self.other(actor)
+            self._note(f'{actor} counters with {card}.')
+        else:
+            pending=self.pending
+            countered=len(pending['counters'])%2
+            self.scrap.extend(c['card'] for c in pending['counters'])
+            pending['counters']=[]
+            if countered:
+                self._note(f'{pending["card"]} is countered.')
+                self._complete(pending['actor'],pending['card'])
+            else:
+                self._resolve()
+        return
+    def _rummage_action(self, actor, parts):
+        card=parts[1]
+        self.scrap.remove(card)
+        self.hands[str(actor)].append(card)
+        self._note(f'{actor} retrieves {card}.')
+        self._complete(actor,self.pending['card'])
+        return
+    def _discard_action(self, actor, parts):
+        discarded=parts[1].split(',') if parts[1] else []
+        for card in discarded:
+            self.hands[str(actor)].remove(card)
+            self.scrap.append(card)
+        self._note(f'{actor} discards {", ".join(discarded)}.')
+        self._complete(self.pending['actor'],self.pending['card'])
+        return
     def _act(self, actor, action):
         parts=action.split(':'); mode=parts[0]
-        if self.phase=='counter':
-            if mode=='counter':
-                card=parts[1]
-                self.hands[str(actor)].remove(card)
-                self.pending['counters'].append({'actor':actor,'card':card})
-                self.turn=self.other(actor)
-                self._note(f'{actor} counters with {card}.')
-            else:
-                pending=self.pending
-                countered=len(pending['counters'])%2
-                self.scrap.extend(c['card'] for c in pending['counters'])
-                pending['counters']=[]
-                if countered:
-                    self._note(f'{pending["card"]} is countered.')
-                    self._complete(pending['actor'],pending['card'])
-                else:
-                    self._resolve()
-            return
-        if self.phase=='rummage':
-            card=parts[1]
-            self.scrap.remove(card)
-            self.hands[str(actor)].append(card)
-            self._note(f'{actor} retrieves {card}.')
-            self._complete(actor,self.pending['card'])
-            return
-        if self.phase=='discard':
-            discarded=parts[1].split(',') if parts[1] else []
-            for card in discarded:
-                self.hands[str(actor)].remove(card)
-                self.scrap.append(card)
-            self._note(f'{actor} discards {", ".join(discarded)}.')
-            self._complete(self.pending['actor'],self.pending['card'])
-            return
+        if self.phase=='counter':return self._counter_action(actor,parts)
+        if self.phase=='rummage':return self._rummage_action(actor,parts)
+        if self.phase=='discard':return self._discard_action(actor,parts)
+        if mode in ('draw','pass'):return self._draw_or_pass(actor,mode)
+        self._play_card(actor,parts)
+
+    def _draw_or_pass(self, actor, mode):
         if mode=='draw':
             self.hands[str(actor)].append(self.deck.pop())
             self._note(f'{actor} draws one card.')
@@ -187,6 +207,8 @@ class Cuttle:
             else:
                 self.turn=self.other(actor)
             return
+    def _play_card(self, actor, parts):
+        mode=parts[0]
         card=parts[1]
         self.hands[str(actor)].remove(card)
         self.forced=None
@@ -233,12 +255,8 @@ class Cuttle:
     def _resolve(self):
         actor,card,target=self.pending['actor'],self.pending['card'],self.pending['target']
         r=rank(card)
-        if r==1:
-            for point in self.points:
-                self.scrap.extend([point['card']]+point['jacks'])
-            self.points=[]
-        elif r==2:
-            self._remove_permanent(target)
+        if r in (1,2):
+            self._resolve_removal(r,target)
         elif r==3:
             if self.scrap:
                 self.phase,self.turn='rummage',actor
@@ -256,24 +274,36 @@ class Cuttle:
             for target in targets:
                 self._remove_permanent(target)
         elif r==7:
-            self.scrap.append(card)
-            self.pending=None
-            if self.deck:
-                self.forced=self.deck.pop()
-                self.hands[str(actor)].append(self.forced)
-                self.phase,self.turn='forced',actor
-                self._note(f'{actor} must immediately play drawn {self.forced}.')
-                if self._card_actions(actor,[self.forced]):
-                    return
-                self.hands[str(actor)].remove(self.forced)
-                self.scrap.append(self.forced)
-                self._note(f'{self.forced} has no legal play and is scrapped.')
-            self._complete(actor)
+            self._resolve_seven(actor,card)
             return
         elif r==9:
             self._remove_permanent(target,returning=True)
         self._note(f'{card} resolves.')
         self._complete(actor,card)
+
+    def _resolve_removal(self, r, target):
+        if r==1:
+            for point in self.points:
+                self.scrap.extend([point['card']]+point['jacks'])
+            self.points=[]
+        else:
+            self._remove_permanent(target)
+
+    def _resolve_seven(self, actor, card):
+        self.scrap.append(card)
+        self.pending=None
+        if self.deck:
+            self.forced=self.deck.pop()
+            self.hands[str(actor)].append(self.forced)
+            self.phase,self.turn='forced',actor
+            self._note(f'{actor} must immediately play drawn {self.forced}.')
+            if self._card_actions(actor,[self.forced]):
+                return
+            self.hands[str(actor)].remove(self.forced)
+            self.scrap.append(self.forced)
+            self._note(f'{self.forced} has no legal play and is scrapped.')
+        self._complete(actor)
+        return
 
     def _complete(self, actor, card=None):
         if card:
@@ -303,25 +333,30 @@ class Cuttle:
         if not actions:
             raise ValueError('No legal action')
         actor=self.turn
-        def merit(option):
-            parts=option['id'].split(':'); mode=parts[0]
-            if mode=='counter': return 90
-            if mode=='allow': return 0
-            if mode=='discard': return -sum(rank(c) if rank(c)<=10 else 8 for c in parts[1].split(','))
-            if mode=='take': return rank(parts[1]) if rank(parts[1])<=10 else 8
-            if mode=='points': return 1000 if self.score(actor)+rank(parts[1])>=self.threshold(actor) else 40+rank(parts[1])
-            if mode=='jack':
-                point=next(p for p in self.points if p['card']==parts[2])
-                return 60+rank(point['card']) if point['owner']!=actor else -20
-            if mode=='permanent': return {13:55,12:30,8:20}[rank(parts[1])]
-            if mode=='scuttle': return 35+rank(parts[2])
-            if mode=='draw': return 10
-            if mode=='effect':
-                r=rank(parts[1])
-                return {1: 45 if self.score(self.other(actor))>self.score(actor) else -5,
-                        2:25,3:25,4:15,5:35,6:5,7:20,9:5}[r]
-            return -100
-        return max(actions,key=merit)['id']
+        return max(actions,key=lambda option:self._bot_merit(actor,option))['id']
+
+    def _bot_merit(self, actor, option):
+        parts=option['id'].split(':'); mode=parts[0]
+        if mode=='counter': return 90
+        if mode=='allow': return 0
+        if mode=='discard': return -sum(rank(c) if rank(c)<=10 else 8 for c in parts[1].split(','))
+        if mode=='take': return rank(parts[1]) if rank(parts[1])<=10 else 8
+        return self._bot_play_merit(actor,parts)
+
+    def _bot_play_merit(self, actor, parts):
+        mode=parts[0]
+        if mode=='points': return 1000 if self.score(actor)+rank(parts[1])>=self.threshold(actor) else 40+rank(parts[1])
+        if mode=='jack':
+            point=next(p for p in self.points if p['card']==parts[2])
+            return 60+rank(point['card']) if point['owner']!=actor else -20
+        if mode=='permanent': return {13:55,12:30,8:20}[rank(parts[1])]
+        if mode=='scuttle': return 35+rank(parts[2])
+        if mode=='draw': return 10
+        if mode=='effect':
+            r=rank(parts[1])
+            return {1: 45 if self.score(self.other(actor))>self.score(actor) else -5,
+                    2:25,3:25,4:15,5:35,6:5,7:20,9:5}[r]
+        return -100
 
     def concede(self, player_id):
         if player_id not in self.players or self.finished:

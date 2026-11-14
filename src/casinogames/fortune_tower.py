@@ -110,6 +110,12 @@ class FortuneTower:
             "replacement": replacement, "remaining_hazards": remaining,
             "previous_offer": previous_offer,
         }
+        self._settle_row(row, width, remaining)
+        self.last_event["offer"] = self.offer
+        self.last_event["multiplier"] = self.multiplier
+        return deepcopy(self.last_event)
+
+    def _settle_row(self, row, width, remaining):
         if remaining:
             self.offer = 0
             self._finish("bust")
@@ -121,9 +127,6 @@ class FortuneTower:
             self.offer = (self.stake // 15) * value * self.multiplier
             if width == self.MAX_ROW:
                 self._finish("jackpot" if jackpot else "complete")
-        self.last_event["offer"] = self.offer
-        self.last_event["multiplier"] = self.multiplier
-        return deepcopy(self.last_event)
 
     def _finish(self, outcome):
         self.result = {

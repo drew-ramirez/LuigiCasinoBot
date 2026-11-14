@@ -136,11 +136,15 @@ class Blackjack:
                 if hand_total(hand["cards"])[0] == 21:
                     hand["done"] = True
         if self.active_hand == len(self.hands):
-            # A player bust needs no further dealer draws, including all-bust splits.
-            if any(hand_total(hand["cards"])[0] <= 21 for hand in self.hands):
-                while hand_total(self.dealer)[0] < 17:
-                    self.dealer.append(self._draw())
-            self._settle()
+            self._finish_dealer_turn()
+
+    def _finish_dealer_turn(self):
+        # A player bust needs no further dealer draws, including all-bust splits.
+        if any(hand_total(hand["cards"])[0] <= 21 for hand in self.hands):
+            while hand_total(self.dealer)[0] < 17:
+                self.dealer.append(self._draw())
+        self._settle()
+
 
     def _settle(self):
         dealer_total = hand_total(self.dealer)[0]
@@ -199,21 +203,27 @@ class Blackjack:
         obj = cls.__new__(cls)
         for key in ("bet", "shoe", "hands", "dealer", "active_hand", "split", "result", "revision"):
             setattr(obj, key, deepcopy(data[key]))
-        if type(obj.bet) is not int or obj.bet <= 0 or obj.bet % 2:
+        obj._validate_saved_state()
+        return obj
+
+    def _validate_saved_state(self):
+        if type(self.bet) is not int or self.bet <= 0 or self.bet % 2:
             raise ValueError("Invalid saved wager")
-        if type(obj.revision) is not int or obj.revision < 0 or type(obj.split) is not bool:
+        if type(self.revision) is not int or self.revision < 0 or type(self.split) is not bool:
             raise ValueError("Invalid saved state")
-        if len(obj.hands) != (2 if obj.split else 1) or len(obj.dealer) < 2:
+        if len(self.hands) != (2 if self.split else 1) or len(self.dealer) < 2:
             raise ValueError("Invalid saved hands")
-        for card in obj.shoe + obj.dealer:
+        self._validate_saved_cards()
+        if type(self.active_hand) is not int or not 0 <= self.active_hand <= len(self.hands):
+            raise ValueError("Invalid saved turn")
+        if self.result is None and (self.active_hand == len(self.hands) or self.hands[self.active_hand]["done"]):
+            raise ValueError("Invalid active hand")
+
+    def _validate_saved_cards(self):
+        for card in self.shoe + self.dealer:
             card_rank(card)
-        for hand in obj.hands:
-            if not hand["cards"] or hand["bet"] not in (obj.bet, obj.bet * 2) or type(hand["done"]) is not bool:
+        for hand in self.hands:
+            if not hand["cards"] or hand["bet"] not in (self.bet, self.bet * 2) or type(hand["done"]) is not bool:
                 raise ValueError("Invalid saved hand")
             for card in hand["cards"]:
                 card_rank(card)
-        if type(obj.active_hand) is not int or not 0 <= obj.active_hand <= len(obj.hands):
-            raise ValueError("Invalid saved turn")
-        if obj.result is None and (obj.active_hand == len(obj.hands) or obj.hands[obj.active_hand]["done"]):
-            raise ValueError("Invalid active hand")
-        return obj

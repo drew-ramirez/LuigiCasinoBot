@@ -87,18 +87,7 @@ class Platoon:
     def legal_actions(self, player_id):
         if self.finished or player_id!=self.turn: return []
         key=str(player_id)
-        if self.phase=='formation':
-            actions=[]
-            for i,card in enumerate(self.hands[key]):
-                for pile in range(5):
-                    if self.assignments[key][i]!=pile:
-                        actions.append({'id':f'assign:{i}:{pile}','label':f'Card {i+1} {card} → formation {chr(65+pile)}',
-                                        'group':f'Card {i+1}'})
-                if self.assignments[key][i] is not None:
-                    actions.append({'id':f'undo:{i}','label':f'Unassign card {i+1} {card}','group':f'Card {i+1}'})
-            if None not in self.assignments[key] and all(valid_pile(p) for p in self.piles(player_id)):
-                actions.append({'id':'lock','label':'Lock all five formations','group':'Ready'})
-            return actions
+        if self.phase=='formation':return self._formation_actions(player_id)
         if self.phase=='prediction':
             return [{'id':f'predict:{seat}:{pile}','label':f'Predict seat {seat+1}, formation {chr(65+pile)} wins',
                      'group':'Prediction'} for seat in range(2) for pile in range(5)]
@@ -107,6 +96,20 @@ class Platoon:
                  'group':f'Attack with {chr(65+a)}'}
                 for a in range(5) if a not in self.spent[key]
                 for b in range(5) if b not in self.spent[str(other)]]
+
+    def _formation_actions(self, player_id):
+        key=str(player_id)
+        actions=[]
+        for i,card in enumerate(self.hands[key]):
+            for pile in range(5):
+                if self.assignments[key][i]!=pile:
+                    actions.append({'id':f'assign:{i}:{pile}','label':f'Card {i+1} {card} → formation {chr(65+pile)}',
+                                    'group':f'Card {i+1}'})
+            if self.assignments[key][i] is not None:
+                actions.append({'id':f'undo:{i}','label':f'Unassign card {i+1} {card}','group':f'Card {i+1}'})
+        if None not in self.assignments[key] and all(valid_pile(p) for p in self.piles(player_id)):
+            actions.append({'id':'lock','label':'Lock all five formations','group':'Ready'})
+        return actions
 
     def act(self, player_id, action_id):
         if action_id not in {a['id'] for a in self.legal_actions(player_id)}:
@@ -134,6 +137,10 @@ class Platoon:
             if len(self.predictions)==1: self.turn=self.players[1]
             else: self._opening_draw()
             return
+        self._battle(player,action)
+
+    def _battle(self, player, action):
+        key=str(player)
         _,own,target=action.split(':');own,target=int(own),int(target)
         other=self.players[1-self.players.index(player)]
         a,b=self.piles(player)[own],self.piles(other)[target]
@@ -166,22 +173,28 @@ class Platoon:
                 self.phase='battle';self.log=[f'Opening draw {pair[0]} vs {pair[1]}; player {self.turn} attacks first.'];return
         raise ValueError('Opening draw could not resolve from this saved deck')
 
+    @staticmethod
+    def _can_add_to_pile(pile, card):
+        ranks=[rank(c) for c in pile]+[rank(card)]
+        return not (('K' in ranks and 'A' in ranks) or ranks.count('X')>1)
+
     def _bot_partition(self, player):
         cards=self.hands[str(player)];piles=[[] for _ in range(5)];assignment=[0]*10
-        def solve(i):
-            if i==10: return all(valid_pile(p) for p in piles)
-            if sum(not p for p in piles)>10-i: return False
-            for j,pile in enumerate(piles):
-                ranks=[rank(c) for c in pile]+[rank(cards[i])]
-                if 'K' in ranks and 'A' in ranks or ranks.count('X')>1: continue
-                empty=not pile
-                pile.append(cards[i]);assignment[i]=j
-                if solve(i+1): return True
-                pile.pop()
-                if empty: break
-            return False
-        if not solve(0): raise ValueError('No legal formation allocation')
+        if not self._assign_formations(cards,piles,assignment,0):
+            raise ValueError('No legal formation allocation')
         return assignment
+
+    def _assign_formations(self, cards, piles, assignment, i):
+        if i==10:return all(valid_pile(p) for p in piles)
+        if sum(not p for p in piles)>10-i:return False
+        for j,pile in enumerate(piles):
+            if not self._can_add_to_pile(pile,cards[i]):continue
+            empty=not pile
+            pile.append(cards[i]);assignment[i]=j
+            if self._assign_formations(cards,piles,assignment,i+1):return True
+            pile.pop()
+            if empty:break
+        return False
 
     def bot_action(self):
         if self.finished: return None

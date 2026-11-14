@@ -44,6 +44,19 @@ class ThrillingCards:
             raise ValueError('Invalid opening seat')
         self.unit = unit
         self.opener = opener
+        self.cards = self._deal_cards(cards,rng)
+        self.commitments = {p: unit for p in self.players}
+        self.folded = set()
+        self.pending = set(self.players)
+        self.target = unit
+        self.raises = 0
+        self.opened = False
+        self.turn = self.players[opener]
+        self.result = None
+        self.revision = 0
+        self._events = []
+
+    def _deal_cards(self, cards, rng):
         if cards is None:
             cards = (rng or random.SystemRandom()).sample(DECK, len(self.players))
         if isinstance(cards, dict):
@@ -55,17 +68,7 @@ class ThrillingCards:
             raise ValueError('Deal one unique card per player')
         for card in cards:
             card_strength(card)
-        self.cards = dict(zip(self.players, cards))
-        self.commitments = {p: unit for p in self.players}
-        self.folded = set()
-        self.pending = set(self.players)
-        self.target = unit
-        self.raises = 0
-        self.opened = False
-        self.turn = self.players[opener]
-        self.result = None
-        self.revision = 0
-        self._events = []
+        return dict(zip(self.players, cards))
 
     @property
     def pot(self):
@@ -289,6 +292,17 @@ class ThrillingMatch:
                 'hands': [hand.to_dict() for hand in self.hands],
                 'current': current.to_dict() if current is not None else None}
 
+    def _restore_completed_hands(self, histories):
+        for saved in histories:
+            hand = ThrillingCards.from_dict(saved)
+            if (hand.result is None or hand.unit != self.unit or
+                    not set(hand.players).issubset(self.players)):
+                raise ValueError('Invalid completed hand')
+            if any(self.chips[p] < 15 * self.unit for p in hand.players):
+                raise ValueError('Insufficient chips for saved hand')
+            self.hand = hand
+            self.settle_hand()
+
     @classmethod
     def from_dict(cls, data):
         if data.get('version') != 1:
@@ -297,15 +311,7 @@ class ThrillingMatch:
         histories = data.get('hands', [])
         if not isinstance(histories, list) or len(histories) > cls.MAX_HANDS:
             raise ValueError('Invalid saved hand count')
-        for saved in histories:
-            hand = ThrillingCards.from_dict(saved)
-            if (hand.result is None or hand.unit != match.unit or
-                    not set(hand.players).issubset(match.players)):
-                raise ValueError('Invalid completed hand')
-            if any(match.chips[p] < 15 * match.unit for p in hand.players):
-                raise ValueError('Insufficient chips for saved hand')
-            match.hand = hand
-            match.settle_hand()
+        match._restore_completed_hands(histories)
         departed = set(data.get('departed', []))
         if not departed.issubset(match.players):
             raise ValueError('Invalid departed player')

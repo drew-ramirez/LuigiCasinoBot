@@ -56,28 +56,36 @@ class Pazaak:
         if self.finished or player_id!=self.turn:
             return []
         key=str(player_id)
-        if self.phase=='side_deck':
-            deck=self.side_decks[key]
-            actions=[{'id':'ready','label':'Confirm ten-card side deck','group':'Ready'}]
-            for i,card in enumerate(deck):
-                for replacement in CATALOG:
-                    if replacement!=card and deck.count(replacement)<2:
-                        actions.append({'id':f'replace:{i}:{replacement}', 'label':f'Slot {i+1}: {card} → {replacement}',
-                                        'group':f'Side deck slot {i+1}'})
-            return actions
+        if self.phase=='side_deck':return self._deck_actions(key)
         if self.phase=='set_end':
             return [{'id':'next','label':'Start next set','group':'Set result'}]
         actions=[{'id':'end','label':'End turn' if self.total(player_id)<=20 else 'End turn: accept bust','group':'Turn'}]
         if self.total(player_id)<=20:
             actions.append({'id':'stand','label':f'Stand on {self.total(player_id)}','group':'Turn'})
-        if not self.used_side and len(self.boards[key])<9:
-            for i,card in enumerate(self.hands[key]):
-                if card is None: continue
-                signs=('+','-') if card[0]=='±' else (card[0],)
-                for sign in signs:
-                    value=int(card[1:])*(1 if sign=='+' else -1)
-                    actions.append({'id':f'side:{i}:{sign}','label':f'Play {sign}{card[1:]} → total {self.total(player_id)+value}',
-                                    'group':'Play modifier'})
+        actions.extend(self._side_actions(player_id))
+        return actions
+
+    def _side_actions(self, player_id):
+        key=str(player_id)
+        actions=[]
+        if self.used_side or len(self.boards[key])>=9:return actions
+        for i,card in enumerate(self.hands[key]):
+            if card is None: continue
+            signs=('+','-') if card[0]=='±' else (card[0],)
+            for sign in signs:
+                value=int(card[1:])*(1 if sign=='+' else -1)
+                actions.append({'id':f'side:{i}:{sign}','label':f'Play {sign}{card[1:]} → total {self.total(player_id)+value}',
+                                'group':'Play modifier'})
+        return actions
+
+    def _deck_actions(self, key):
+        deck=self.side_decks[key]
+        actions=[{'id':'ready','label':'Confirm ten-card side deck','group':'Ready'}]
+        for i,card in enumerate(deck):
+            for replacement in CATALOG:
+                if replacement!=card and deck.count(replacement)<2:
+                    actions.append({'id':f'replace:{i}:{replacement}', 'label':f'Slot {i+1}: {card} → {replacement}',
+                                    'group':f'Side deck slot {i+1}'})
         return actions
 
     def act(self, player_id, action_id):
@@ -92,6 +100,37 @@ class Pazaak:
         return self.view(player_id)
 
     def _act(self, player, action):
+        key=str(player)
+        if action.startswith('replace:') or action=='ready':return self._configure(player,action)
+        if action=='next':
+            self._new_set();return
+        if action.startswith('side:'):return self._play_side(player,action)
+        total=self.total(player)
+        if total>20:
+            self._finish_set(self.other(player),'bust');return
+        if action=='stand' or total==20:
+            self.standing[key]=True
+        opponent=self.other(player)
+        if self.standing[key] and self.standing[str(opponent)]:
+            other_total=self.total(opponent)
+            self._finish_set(player if total>other_total else opponent if total<other_total else None,'comparison')
+            return
+        self.turn=opponent if not self.standing[str(opponent)] else player
+        self._draw_turn()
+
+    def _play_side(self, player, action):
+        key=str(player)
+        _,i,sign=action.split(':');i=int(i)
+        card=self.hands[key][i]
+        value=int(card[1:])*(1 if sign=='+' else -1)
+        self.hands[key][i]=None
+        self.boards[key].append(value);self.used_side=True
+        self.log=[f'Player {player} played {value:+}; total {self.total(player)}.']
+        if len(self.boards[key])==9 and self.total(player)<=20:
+            self._finish_set(player,'nine-card safe win')
+        return
+
+    def _configure(self, player, action):
         key=str(player)
         if action.startswith('replace:'):
             _,i,card=action.split(':')
@@ -108,30 +147,6 @@ class Pazaak:
                     self.hands[str(p)]=deck[:4]
                 self._new_set()
             return
-        if action=='next':
-            self._new_set();return
-        if action.startswith('side:'):
-            _,i,sign=action.split(':');i=int(i)
-            card=self.hands[key][i]
-            value=int(card[1:])*(1 if sign=='+' else -1)
-            self.hands[key][i]=None
-            self.boards[key].append(value);self.used_side=True
-            self.log=[f'Player {player} played {value:+}; total {self.total(player)}.']
-            if len(self.boards[key])==9 and self.total(player)<=20:
-                self._finish_set(player,'nine-card safe win')
-            return
-        total=self.total(player)
-        if total>20:
-            self._finish_set(self.other(player),'bust');return
-        if action=='stand' or total==20:
-            self.standing[key]=True
-        opponent=self.other(player)
-        if self.standing[key] and self.standing[str(opponent)]:
-            other_total=self.total(opponent)
-            self._finish_set(player if total>other_total else opponent if total<other_total else None,'comparison')
-            return
-        self.turn=opponent if not self.standing[str(opponent)] else player
-        self._draw_turn()
 
     def other(self, player):
         return self.players[1-self.players.index(player)]

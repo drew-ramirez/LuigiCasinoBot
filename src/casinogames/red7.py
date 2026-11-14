@@ -52,17 +52,22 @@ def qualifying(palette, rule):
         return sorted([max((c for c in palette if c[0] == code), key=card_key)
                        for code in CODES if any(c[0] == code for c in palette)], key=card_key)
     else:
-        best_by_rank = {n: max((c for c in palette if int(c[1]) == n), key=card_key)
-                        for n in range(1, 8) if any(int(c[1]) == n for c in palette)}
-        groups, run = [], []
-        for n in range(1, 8):
-            if n in best_by_rank:
-                run.append(best_by_rank[n])
-            elif run:
-                groups.append(run); run = []
-        if run:
-            groups.append(run)
+        groups = _runs(palette)
     return sorted(max(groups, key=strength), key=card_key)
+
+
+def _runs(palette):
+    best_by_rank = {n: max((c for c in palette if int(c[1]) == n), key=card_key)
+                    for n in range(1, 8) if any(int(c[1]) == n for c in palette)}
+    groups, run = [], []
+    for n in range(1, 8):
+        if n in best_by_rank:
+            run.append(best_by_rank[n])
+        elif run:
+            groups.append(run); run = []
+    if run:
+        groups.append(run)
+    return groups
 
 
 def palette_score(palette, rule):
