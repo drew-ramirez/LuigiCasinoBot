@@ -8,7 +8,7 @@ from copy import deepcopy
 import re
 import time
 
-from cosmetics.catalog import CATALOG, OFFERS, DEFAULTS, Appearance, appearance, equipped_ids, validate_catalog
+from cosmetics.catalog import CATALOG, OFFERS, Appearance, appearance, equipped_ids, owned_ids, public_profile, validate_catalog
 
 REQUEST=re.compile(r'^[A-Za-z0-9_-]{1,80}$')
 
@@ -47,13 +47,12 @@ class CosmeticsStore:
     def _snapshot(self,record):
         state=self._state(record)
         public_record={**record,'cosmetics':state}
-        owned=sorted(set(state['owned'])|set(DEFAULTS.values()))
+        owned=sorted(owned_ids(state))
         return {'user_id':record['user_id'],'balance':record.get('balance',0),'revision':state['revision'],
                 'owned':owned,'equipped':equipped_ids(public_record,self.items),
                 'appearance':appearance(public_record,self.items),
                 'animations_enabled':(record.get('animations_enabled') is None or bool(record['animations_enabled'])),
-                'profile':{'name':str(record.get('username','Player')),'balance':record.get('balance',0),
-                           'games_played':record.get('games_played',0),'career_stars':record.get('career_stars_total',0)}}
+                'profile':public_profile(record)}
 
     def get(self,user_id,username='Unknown'):
         return self._snapshot(self._record(user_id,username))
@@ -90,7 +89,7 @@ class CosmeticsStore:
             offer=self.offers.get(offer_id)
             if offer is None:raise ValueError('This pack is no longer available')
             if quote_id!=offer.quote_id:raise ValueError('This pack changed; review its current contents and price')
-            owned=set(state['owned'])|set(DEFAULTS.values())
+            owned=owned_ids(state)
             if set(offer.item_ids)<=owned:return {'status':'already_owned','snapshot':self._snapshot(record)}
             if set(offer.item_ids)&owned:raise ValueError('Some pack items are already owned; no coins were spent')
             if record.get('balance',0)<offer.price:raise ValueError('Insufficient casino coins')
@@ -110,7 +109,7 @@ class CosmeticsStore:
         record=self._record(user_id,username)
         state=self._state(record,writing=True)
         if revision!=state['revision']:return self._snapshot(record),False
-        if item_id not in set(state['owned'])|set(DEFAULTS.values()):raise ValueError('You do not own this cosmetic')
+        if item_id not in owned_ids(state):raise ValueError('You do not own this cosmetic')
         if equipped_ids(record,self.items)[item.slot]==item_id:return self._snapshot(record),True
         state['equipped'][item.slot]=item_id;state['revision']+=1
         updated=self.collection.find_one_and_update(self._query(record,self._state(record)),

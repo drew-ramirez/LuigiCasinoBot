@@ -6,7 +6,7 @@ from casinogames.card_scene import waiting_animation
 # Description: Pair-a-Gone command and entry point
 ###########################################################
 
-from typing import Any, Callable, Optional
+from typing import Any
 
 import discord
 from discord.ext import commands
@@ -40,23 +40,6 @@ class PairAGoneCog(BaseGameCog):
                 getattr(game, "stars", None),
             ),
         }
-
-    @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
-        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
-            board = view._board_file()
-            content, embed = view._header_payload(status)
-            if embed is not None:
-                embed.set_image(url=f"attachment://{board.filename}")
-                if colour is not None:
-                    embed.colour = colour
-            return {
-                "content": content,
-                "embed": embed,
-                "attachments": [board],
-            }
-
-        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -159,7 +142,7 @@ class PairAGoneCog(BaseGameCog):
                 message=message,
                 view=view,
                 timeout_metadata=self._pairagone_timeout_metadata,
-                cleanup_renderer=self._make_cleanup_renderer(view),
+                cleanup_renderer=view.cleanup_payload,
             )
 
         layout_mode = (

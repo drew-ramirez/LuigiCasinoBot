@@ -16,25 +16,11 @@ from config import CasinoConfigManager
 from config.settings import fallback_allowed_channels
 
 
+from casinogames.registry import GAMES
+
 GAME_COMMAND_CHOICES = [
-    app_commands.Choice(name="Memory Match", value="memorymatch"),
-    app_commands.Choice(name="Pair-a-Gone", value="pairagone"),
-    app_commands.Choice(name="Lucky Stars", value="luckystars"),
-    app_commands.Choice(name="Picture Poker", value="picturepoker"),
-    app_commands.Choice(name="Mushroom Roulette", value="roulette"),
-    app_commands.Choice(name="Super Mario Slot", value="slots"),
-    app_commands.Choice(name="Memory Master", value="memory_master"),
-    app_commands.Choice(name="Pair-a-Gone and On", value="pairagone_endless"),
-    app_commands.Choice(name="Blackjack", value="blackjack"),
-    app_commands.Choice(name="Fortune Tower (practice)", value="fortune_tower"),
-    app_commands.Choice(name="Thrilling Cards (practice)", value="thrilling_cards"),
-    app_commands.Choice(name="Triple Triad (practice)", value="triple_triad"),
-    app_commands.Choice(name="Red7 (practice)", value="red7"),
-    app_commands.Choice(name="Scopa (practice)", value="scopa"),
-    app_commands.Choice(name="Cuttle (practice)", value="cuttle"),
-    app_commands.Choice(name="Platoon (practice)", value="platoon"),
-    app_commands.Choice(name="Pazaak (practice)", value="pazaak"),
-    app_commands.Choice(name="Casino War (practice)", value="casino_war"),
+    app_commands.Choice(name=game.command_label, value=key)
+    for key, game in GAMES.items()
 ]
 
 

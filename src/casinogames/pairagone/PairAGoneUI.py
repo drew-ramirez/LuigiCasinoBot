@@ -30,6 +30,19 @@ backs = load_memory_backs()
 class PairControls(discord.ui.View):
     GAME_KEY = PairAGone.GAME_KEY
 
+    def cleanup_payload(self, status, colour=None):
+        board = self._board_file()
+        content, embed = self._header_payload(status)
+        if embed is not None:
+            embed.set_image(url=f"attachment://{board.filename}")
+            if colour is not None:
+                embed.colour = colour
+        return {
+            "content": content,
+            "embed": embed,
+            "attachments": [board],
+        }
+
     def __init__(
         self,
         game: PairAGone,

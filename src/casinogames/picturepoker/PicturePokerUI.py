@@ -106,6 +106,32 @@ def format_round_summary(result, delta_symbol=""):
 # Picture Poker View
 ###########################################################
 class PicturePokerView(discord.ui.View):
+    def cleanup_payload(self, status, colour=None):
+        stats = {
+            "active_bet": self.game.bet,
+            "stars_current": getattr(self.game, "stars", 0),
+            "dealer_action": status,
+        }
+        board_bytes = render_board(self.game, reveal=True)
+        if hasattr(board_bytes, "seek"):
+            try:
+                board_bytes.seek(0)
+            except Exception:
+                pass
+        board_file = discord.File(board_bytes, "poker.png")
+        content, embed = self._header_payload(
+            self.player,
+            stats,
+            attachment_filename=board_file.filename,
+        )
+        if colour is not None and embed is not None:
+            embed.colour = colour
+        return {
+            "content": content,
+            "embed": embed,
+            "attachments": [board_file],
+        }
+
     def __init__(
         self,
         game: PicturePoker,

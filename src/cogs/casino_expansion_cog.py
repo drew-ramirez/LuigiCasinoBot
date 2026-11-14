@@ -1,7 +1,6 @@
 """Discord adapters for saved solo challenges, Tower practice and funded Blackjack."""
 import asyncio
 import logging
-import os
 
 import discord
 from discord.ext import commands
@@ -222,7 +221,7 @@ class SoloView(discord.ui.View):
 class CasinoExpansionCog(commands.Cog):
     def __init__(self, bot, *, store=None, blackjack=None):
         self.bot = bot
-        self.store = store or SessionStore(os.getenv('CASINO_SESSION_DB', 'data/casino_sessions.sqlite3'))
+        self.store = store or SessionStore()
         self.blackjack = blackjack or BlackjackTable()
         self.views = {}
         self.locks = {}

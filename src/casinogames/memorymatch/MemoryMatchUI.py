@@ -30,6 +30,24 @@ class MemoryMatchControls(discord.ui.View):
     #persistent view for Memory Match with per-card callbacks
     GAME_KEY = MemoryMatch.GAME_KEY
 
+    def cleanup_payload(self, status, colour=None):
+        if getattr(view, "animations_enabled", False):
+            content = self._status_text(status)
+            files = [self._board_file()]
+            return {
+                "content": content,
+                "embed": None,
+                "attachments": files,
+            }
+        embed, files = self._status_payload(status)
+        if colour is not None:
+            embed.colour = colour
+        return {
+            "content": None,
+            "embed": embed,
+            "attachments": files,
+        }
+
     def __init__(
         self,
         game: MemoryMatch,

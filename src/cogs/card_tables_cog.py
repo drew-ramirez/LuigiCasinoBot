@@ -2,7 +2,6 @@
 import asyncio
 from collections import OrderedDict
 import logging
-import os
 import time
 from types import SimpleNamespace
 
@@ -14,19 +13,9 @@ from casinogames.duel_session import DuelService
 from utils.visibility import resolve_command_visibility
 
 log = logging.getLogger(__name__)
-TITLES = {'triple_triad':'Triple Triad', 'red7':'Red7', 'scopa':'Scopa', 'cuttle':'Cuttle',
-          'platoon':'Platoon', 'pazaak':'Pazaak', 'casino_war':'Casino War'}
+from casinogames.registry import DUEL_GAMES, duel_engines
 
-
-def engines():
-    from casinogames.triple_triad import TripleTriad
-    from casinogames.red7 import Red7
-    from casinogames.scopa import Scopa
-    from casinogames.cuttle import Cuttle
-    from casinogames.platoon import Platoon
-    from casinogames.pazaak import Pazaak
-    from casinogames.casino_war import CasinoWar
-    return dict(zip(TITLES, [TripleTriad, Red7, Scopa, Cuttle, Platoon, Pazaak, CasinoWar]))
+TITLES = {key: game.title for key, game in DUEL_GAMES.items()}
 
 
 def seat(public, player):
@@ -194,7 +183,7 @@ class CardTablesCog(commands.Cog):
     def __init__(self,bot,*,store=None,registry=None,cosmetics=None):
         self.bot=bot
         self.cosmetics=cosmetics
-        self.service=DuelService(store or SessionStore(os.getenv('CASINO_SESSION_DB','data/casino_sessions.sqlite3')),registry or engines())
+        self.service=DuelService(store or SessionStore(),registry or duel_engines())
         self.locks={};self.messages={};self.private_messages={};self.tasks={};self.deadlines={}
         self.timeout_seconds=480
 

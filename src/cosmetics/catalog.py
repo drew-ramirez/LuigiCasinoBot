@@ -1,11 +1,10 @@
 """Server-owned cosmetic IDs and fixed bundles; no user-supplied asset paths."""
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, replace
 from hashlib import sha256
 import json
 import re
 from types import MappingProxyType
 
-SLOTS=('deck','dealer','felt','profile_frame','profile_effect')
 ID_PATTERN=re.compile(r'^[a-z][a-z0-9_]{0,63}$')
 
 
@@ -16,6 +15,9 @@ class Appearance:
     felt: str = 'classic'
     profile_frame: str = 'none'
     profile_effect: str = 'none'
+
+
+SLOTS = tuple(field.name for field in fields(Appearance))
 
 
 @dataclass(frozen=True)
@@ -65,7 +67,8 @@ CATALOG=MappingProxyType({item.id:item for item in (
     Item('frame_silver','Silver Profile Frame','profile_frame','silver'),
     Item('effect_sparkle','Profile Sparkles','profile_effect','sparkle'),
 )})
-DEFAULTS=MappingProxyType(dict(zip(SLOTS,('deck_mario','dealer_luigi','felt_classic','frame_none','effect_none'))))
+DEFAULTS=MappingProxyType({'deck':'deck_mario', 'dealer':'dealer_luigi', 'felt':'felt_classic',
+                           'profile_frame':'frame_none', 'profile_effect':'effect_none'})
 OFFERS=MappingProxyType({'starter_style':Offer('starter_style','Starter Style Pack',
     ('felt_midnight','felt_rose','frame_silver','effect_sparkle'),0)})
 
@@ -73,8 +76,11 @@ OFFERS=MappingProxyType({'starter_style':Offer('starter_style','Starter Style Pa
 def validate_catalog(items,offers):
     for key,item in items.items():
         if key!=item.id:raise ValueError('Catalog key must match item ID')
+    if set(DEFAULTS) != set(SLOTS):
+        raise ValueError('Every appearance slot needs a default')
+    classic = Appearance()
     for slot,item_id in DEFAULTS.items():
-        if item_id not in items or items[item_id].slot!=slot:
+        if item_id not in items or items[item_id].slot!=slot or items[item_id].asset_key != getattr(classic, slot):
             raise ValueError('Every slot needs its classic default')
     for key,offer in offers.items():
         if key!=offer.id or any(i not in items for i in offer.item_ids):
@@ -83,12 +89,39 @@ def validate_catalog(items,offers):
             raise ValueError('Default cosmetics must remain free and automatically owned')
 
 
+def public_profile(record, name=None):
+    """Project only the fields used by the public profile artwork."""
+    return {'name': str(record.get('username', 'Player')) if name is None else name,
+            'balance': record.get('balance', 0), 'games_played': record.get('games_played', 0),
+            'career_stars': record.get('career_stars_total', 0)}
+
+
+def owned_ids(state):
+    owned = state.get('owned', [])
+    return set(i for i in owned if isinstance(i, str)) | set(DEFAULTS.values()) if isinstance(owned, list) else set(DEFAULTS.values())
+
+
+def preview_appearance(snapshot, mode, selected, items, offers):
+    look = snapshot['appearance']
+    if not selected:
+        return look
+    if mode == 'wardrobe':
+        item = items.get(selected)
+        if item is None or selected not in snapshot['owned']:
+            raise ValueError('That owned item is no longer available.')
+        chosen = [item]
+    else:
+        offer = offers.get(selected)
+        if offer is None:
+            raise ValueError('That offer is no longer available.')
+        chosen = [items[item_id] for item_id in offer.item_ids]
+    return replace(look, **{item.slot: item.asset_key for item in chosen})
+
+
 def equipped_ids(record,items=CATALOG):
     state=record.get('cosmetics') or {}
     if not isinstance(state,dict) or state.get('schema_version',1)!=1:state={}
-    owned=state.get('owned',[])
-    owned=set(i for i in owned if isinstance(i,str)) if isinstance(owned,list) else set()
-    owned.update(DEFAULTS.values())
+    owned=owned_ids(state)
     equipped=state.get('equipped',{})
     if not isinstance(equipped,dict):equipped={}
     result=dict(DEFAULTS)

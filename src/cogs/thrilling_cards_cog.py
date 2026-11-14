@@ -6,7 +6,6 @@ hand instead of dealing again. Restarted tables wait for explicit resume.
 """
 import asyncio
 import logging
-import os
 import time
 import uuid
 from types import SimpleNamespace
@@ -120,7 +119,7 @@ class ThrillingView(discord.ui.View):
 class ThrillingCardsCog(commands.Cog):
     def __init__(self, bot, *, store=None):
         self.bot = bot
-        self.store = store or SessionStore(os.getenv('CASINO_SESSION_DB', 'data/casino_sessions.sqlite3'))
+        self.store = store or SessionStore()
         self.boot_id = uuid.uuid4().hex
         self.locks, self.messages, self.deadlines, self.tasks = {}, {}, {}, {}
         self.lobby_seconds, self.turn_seconds = 120, 90

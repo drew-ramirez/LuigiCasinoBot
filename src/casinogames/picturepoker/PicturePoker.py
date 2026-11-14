@@ -58,6 +58,12 @@ class PicturePoker:
         "five_kind": 16,
     }
 
+    @property
+    def scene_payout_rows(self):
+        rows = [('five_kind', 5, 0), ('four_kind', 4, 0), ('full_house', 3, 2),
+                ('three_kind', 3, 0), ('two_pair', 2, 2), ('one_pair', 2, 0)]
+        return [(self.MULTIPLIER[rank], stars, mushrooms) for rank, stars, mushrooms in rows]
+
     def __init__(self, starting_coins: int = 0, starting_stars: int = 0):
         # starting_coins kept for backwards compatibility
         # real balance lives in EconomyManager

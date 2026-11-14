@@ -39,6 +39,10 @@ class MemoryMatch(BaseGame):
         ),
     ]
 
+    @property
+    def scene_attempts(self):
+        return self.remaining_attempts
+
     def __init__(
         self,
         player_id: int,

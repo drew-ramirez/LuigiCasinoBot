@@ -43,7 +43,7 @@ class Offer:
 
 class Store:
     def __init__(self,catalog,offers):
-        self.catalog,self.offers=catalog,offers
+        self.items,self.offers=catalog,offers
         self.data={'user_id':42,'balance':100,'revision':0,'owned':['felt_classic'],'equipped':{'felt':'felt_classic'},
                    'appearance':Appearance(),'animations_enabled':False,
                    'profile':{'name':'Player','balance':100,'games_played':7,'career_stars':3}}
@@ -76,7 +76,7 @@ class Store:
         self.equips.append((item_id,revision))
         if revision != self.data['revision']:return deepcopy(self.data),False
         if item_id not in self.data['owned']:raise ValueError('Item is not owned.')
-        item=self.catalog[item_id]
+        item=self.items[item_id]
         self.data['equipped'][item.slot]=item.id
         self.data['appearance']=replace(self.data['appearance'],**{item.slot:item.asset_key})
         self.data['revision']+=1
@@ -91,7 +91,7 @@ def environment(monkeypatch, *, price=25, extra=0):
         catalog[f'felt_{i}']=Item(f'felt_{i}',f'Felt {i}','felt',f'color{i}')
         offers[f'offer_{i}']=Offer(f'offer_{i}',f'Offer {i}',(f'felt_{i}',),0)
     store=Store(catalog,offers)
-    cog=CosmeticsCog(SimpleNamespace(),store=store,catalog=catalog,offers=offers)
+    cog=CosmeticsCog(SimpleNamespace(),store=store)
     renders=[]
     def render(public,appearance,**options):
         renders.append((deepcopy(public),appearance,options))
@@ -178,7 +178,7 @@ def test_stale_equip_refreshes_without_overwriting_and_reopen_uses_saved_choice(
         assert 'stale' in inter.edit_original_response.call_args.kwargs['content']
         fresh=current(inter);await cog.handle(inter,fresh,'equip')
         assert store.data['appearance'].felt=='rose'
-        rebuilt=CosmeticsCog(SimpleNamespace(),store=store,catalog=cog.catalog,offers=cog.offers)
+        rebuilt=CosmeticsCog(SimpleNamespace(),store=store)
         reopened=interaction();await rebuilt.open(reopened,'wardrobe')
         assert current(reopened).snapshot['equipped']['felt']=='felt_rose'
         assert store.data['balance']==100
@@ -288,7 +288,7 @@ def test_actual_catalog_store_and_renderer_claim_then_equip_survive_new_cog():
             return deepcopy(self.doc)
     async def run():
         collection=Collection()
-        cog=CosmeticsCog(SimpleNamespace(),store=CosmeticsStore(collection),catalog=CATALOG,offers=OFFERS)
+        cog=CosmeticsCog(SimpleNamespace(),store=CosmeticsStore(collection))
         def interaction():
             return SimpleNamespace(user=SimpleNamespace(id=42,display_name='Player'),guild_id=77,
                 response=SimpleNamespace(defer=AsyncMock(),send_message=AsyncMock()),followup=SimpleNamespace(send=AsyncMock()),
@@ -304,7 +304,7 @@ def test_actual_catalog_store_and_renderer_claim_then_equip_survive_new_cog():
         await cog.handle(inter,current(inter),'select',selection='felt_midnight')
         await cog.handle(inter,current(inter),'equip')
         assert collection.writes==2
-        reopened=CosmeticsCog(SimpleNamespace(),store=CosmeticsStore(collection),catalog=CATALOG,offers=OFFERS)
+        reopened=CosmeticsCog(SimpleNamespace(),store=CosmeticsStore(collection))
         new_inter=interaction();await reopened.open(new_inter,'wardrobe')
         assert current(new_inter).snapshot['appearance'].felt=='midnight'
         assert collection.writes==2 and collection.doc['balance']==100

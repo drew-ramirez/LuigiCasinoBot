@@ -6,7 +6,7 @@ from casinogames.card_scene import waiting_animation
 # Description: Cog for Luigi's Casino - Picture Poker Game
 ###########################################################
 
-from typing import Any, Callable, Optional
+from typing import Any
 
 import discord
 from discord.ext import commands
@@ -46,36 +46,6 @@ class PicturePokerCog(BaseGameCog):
             "dealer_rank": dealer_rank,
             "round": getattr(game, "round", None),
         }
-
-    @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
-        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
-            stats = {
-                "active_bet": view.game.bet,
-                "stars_current": getattr(view.game, "stars", 0),
-                "dealer_action": status,
-            }
-            board_bytes = render_board(view.game, reveal=True)
-            if hasattr(board_bytes, "seek"):
-                try:
-                    board_bytes.seek(0)
-                except Exception:
-                    pass
-            board_file = discord.File(board_bytes, "poker.png")
-            content, embed = view._header_payload(
-                view.player,
-                stats,
-                attachment_filename=board_file.filename,
-            )
-            if colour is not None and embed is not None:
-                embed.colour = colour
-            return {
-                "content": content,
-                "embed": embed,
-                "attachments": [board_file],
-            }
-
-        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -196,7 +166,7 @@ class PicturePokerCog(BaseGameCog):
                 message=message,
                 view=view,
                 timeout_metadata=self._picturepoker_timeout_metadata,
-                cleanup_renderer=self._make_cleanup_renderer(view),
+                cleanup_renderer=view.cleanup_payload,
             )
 
         layout_mode = (

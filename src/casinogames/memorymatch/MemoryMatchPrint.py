@@ -1,7 +1,15 @@
 """Memory Match: animated dealer above a native DS card grid."""
 from casinogames.card_scene import (
-    felt, grid_rect, put_card, scene, png, flip_frames, result_of,
+    felt, grid_rect, put_card, scene, png, flip_frames,
 )
+
+
+def _result(game):
+    if game.is_board_cleared():
+        return 'win'
+    if game.remaining_attempts <= 0:
+        return 'lose'
+    return None
 
 
 def _board(game, overrides=None):
@@ -17,7 +25,7 @@ def _board(game, overrides=None):
 
 
 def render_board_image(game, overrides=None):
-    return png(scene(game,_board(game,overrides),outcome=result_of(game)))
+    return png(scene(game,_board(game,overrides),outcome=_result(game)))
 
 
 def make_board_flip_gif(game,pos,symbol,duration=90):

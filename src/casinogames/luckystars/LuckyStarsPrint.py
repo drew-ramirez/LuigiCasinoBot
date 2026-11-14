@@ -1,9 +1,16 @@
 """Lucky Stars: centered choice followed by dealer/player card separation."""
 from PIL import Image, ImageDraw
 from casinogames.assetloader import load_lucky_assets
-from casinogames.card_scene import felt, card, scene, png, gif, result_of, text, SMALL
+from casinogames.card_scene import felt, card, scene, png, gif, text, SMALL
 
 assets=load_lucky_assets()
+
+
+def _result(game):
+    if game.finished:
+        values = (game.left_card, game.right_card)
+        return 'win' if values[game.picked] > values[1-game.picked] else 'lose'
+    return None
 
 
 def make_card_with_stars(star_count, game=None):
@@ -34,7 +41,7 @@ def _board(game,reveal=False,progress=1,flip_width=1,face=True):
 
 
 def render_lucky_board(game,reveal=False):
-    return png(scene(game,_board(game,reveal),outcome=result_of(game) if reveal else None))
+    return png(scene(game,_board(game,reveal),outcome=_result(game) if reveal else None))
 
 
 def make_slide_animation(game,duration=120,tail_hold_ms=2500):

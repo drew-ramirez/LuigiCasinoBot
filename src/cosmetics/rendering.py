@@ -26,13 +26,3 @@ def run_with_appearance(appearance: Appearance, operation: Callable[..., _Result
         return operation(*args, **kwargs)
     finally:
         _CURRENT.reset(token)
-
-
-def deck_pack() -> str:
-    """Reserved asset hook: only the existing Mario deck is shipped."""
-    return 'mario'
-
-
-def dealer_pack() -> str:
-    """Reserved asset hook: only the existing Luigi dealer is shipped."""
-    return 'luigi'

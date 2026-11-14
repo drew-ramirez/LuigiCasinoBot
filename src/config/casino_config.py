@@ -15,29 +15,9 @@ import discord
 
 from economy.EconomyManager import db
 
-# Keys for casino games where we always keep responses private unless a specific
-# public channel is mapped. (FOR ANY NEW GAMES): Update this set so visibility
-# logic stays aligned with the command registery from discord
-DEFAULT_GAME_COMMAND_KEYS: set[str] = {
-    "memorymatch",
-    "pairagone",
-    "luckystars",
-    "picturepoker",
-    "roulette",
-    "slots",
-    "memory_master",
-    "pairagone_endless",
-    "blackjack",
-    "fortune_tower",
-    "thrilling_cards",
-    "triple_triad",
-    "red7",
-    "scopa",
-    "cuttle",
-    "platoon",
-    "pazaak",
-    "casino_war",
-}
+from casinogames.registry import GAMES
+
+DEFAULT_GAME_COMMAND_KEYS = frozenset(GAMES)
 
 
 @dataclass

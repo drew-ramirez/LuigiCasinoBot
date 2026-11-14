@@ -13,7 +13,9 @@ from casinogames.casino_art import background
 from casinogames.expansion_render import _fit, _scene, TINY, GOLD
 from casinogames.mario_cards import face as mario_face
 
-KINDS = {'triple_triad', 'red7', 'scopa', 'cuttle', 'pazaak', 'platoon', 'casino_war'}
+from casinogames.registry import DUEL_GAMES
+
+KINDS = frozenset(DUEL_GAMES)
 SEATS = ('#6fbdff', '#ff9a85')
 
 

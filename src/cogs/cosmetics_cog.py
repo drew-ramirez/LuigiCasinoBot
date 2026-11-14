@@ -1,6 +1,5 @@
 """Private cosmetic previews, explicit purchases and persistent wardrobe choices."""
 import asyncio
-from dataclasses import replace
 import logging
 import uuid
 
@@ -81,36 +80,16 @@ class CosmeticsView(discord.ui.View):
 
 
 class CosmeticsCog(commands.Cog):
-    def __init__(self, bot, *, store=None, catalog=None, offers=None):
+    def __init__(self, bot, *, store=None):
         self.bot=bot
         if store is None:
             from cosmetics.store import CosmeticsStore
             store=CosmeticsStore()
-        if catalog is None or offers is None:
-            from cosmetics.catalog import CATALOG, OFFERS
-            if catalog is None: catalog=CATALOG
-            if offers is None: offers=OFFERS
-        self.store, self.catalog, self.offers=store, catalog, offers
+        self.store, self.catalog, self.offers=store, store.items, store.offers
         self.locks={}
 
     def lock(self, owner):
         return self.locks.setdefault(owner, asyncio.Lock())
-
-    def preview_appearance(self, snapshot, mode, selected):
-        appearance=snapshot['appearance']
-        if not selected:
-            return appearance
-        if mode == 'wardrobe':
-            item=self.catalog.get(selected)
-            if item is None or selected not in snapshot['owned']:
-                raise ValueError('That owned item is no longer available.')
-            items=[item]
-        else:
-            offer=self.offers.get(selected)
-            if offer is None:
-                raise ValueError('That offer is no longer available.')
-            items=[self.catalog[item] for item in offer.item_ids]
-        return replace(appearance, **{item.slot:item.asset_key for item in items})
 
     async def payload(self, snapshot, owner, guild, username, mode, *, page=0, selected=None, request_id=None, notice=None):
         view=CosmeticsView(self, owner, guild, snapshot, mode, page=page, selected=selected, request_id=request_id)
@@ -139,9 +118,9 @@ class CosmeticsCog(commands.Cog):
         attachments=[]
         try:
             from cosmetics.profile import render_profile
-            appearance=self.preview_appearance(snapshot, mode, selected)
-            profile=snapshot.get('profile', {})
-            public={'name':profile.get('name',username), 'balance':snapshot['balance'], 'games_played':profile.get('games_played',0), 'career_stars':profile.get('career_stars',0)}
+            from cosmetics.catalog import preview_appearance
+            appearance=preview_appearance(snapshot, mode, selected, self.catalog, self.offers)
+            public=snapshot['profile']
             data=await asyncio.to_thread(render_profile, public, appearance, animate=bool(snapshot.get('animations_enabled',False)))
             attachments=[discord.File(data, filename='cosmetics.gif' if data.getvalue().startswith(b'GIF') else 'cosmetics.png')]
         except Exception:

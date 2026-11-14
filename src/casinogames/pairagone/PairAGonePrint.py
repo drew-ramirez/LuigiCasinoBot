@@ -1,9 +1,17 @@
 """Pair-A-Gone: tight card grid, deck counter, selection and one-shot deals."""
 from PIL import ImageDraw
 from casinogames.card_scene import (
-    felt, grid_rect, put_card, card, scene, png, gif, flip_frames, result_of,
+    felt, grid_rect, put_card, card, scene, png, gif, flip_frames,
     bottom_from, number,
 )
+
+
+def _result(game):
+    if game.is_board_cleared():
+        return 'win'
+    if not game.has_possible_moves():
+        return 'lose'
+    return None
 
 
 def _board(game, blanks=()):
@@ -21,7 +29,7 @@ def _board(game, blanks=()):
 
 
 def render_pair_board(game):
-    return png(scene(game,_board(game),outcome=result_of(game)))
+    return png(scene(game,_board(game),outcome=_result(game)))
 
 
 def render_pair_board_with_blanks(game,blanks):

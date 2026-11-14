@@ -15,7 +15,7 @@ import pytest
 from casinogames.casino_art import background, sprite
 from cosmetics.catalog import Appearance
 from cosmetics.profile import render_profile
-from cosmetics.rendering import current_appearance, run_with_appearance, deck_pack, dealer_pack
+from cosmetics.rendering import current_appearance, run_with_appearance
 
 PUBLIC = {'name':'Luigi Fan', 'balance':12345, 'games_played':123, 'career_stars':45}
 
@@ -69,12 +69,6 @@ def test_two_simultaneous_render_threads_keep_their_own_theme():
         a,b=first.result(),second.result()
     assert a[0].felt=='midnight' and b[0].felt=='rose' and a[1]!=b[1]
     assert current_appearance()==Appearance()
-
-
-def test_reserved_deck_and_dealer_hooks_do_not_advertise_unshipped_packs():
-    assert deck_pack()=='mario' and dealer_pack()=='luigi'
-    assert run_with_appearance(Appearance(deck='unshipped',dealer='unshipped'),deck_pack)=='mario'
-    assert run_with_appearance(Appearance(deck='unshipped',dealer='unshipped'),dealer_pack)=='luigi'
 
 
 @pytest.mark.parametrize('theme',['classic','midnight','rose'])

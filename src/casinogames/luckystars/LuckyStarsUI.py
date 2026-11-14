@@ -25,6 +25,22 @@ backs = load_memory_backs()
 
 
 class LuckyStarsView(discord.ui.View):
+    def cleanup_payload(self, status, colour=None):
+        if getattr(view, "animations_enabled", False):
+            return {
+                "content": self._header_text(status),
+                "embed": None,
+                "attachments": [self._board_file(reveal=True)],
+            }
+        embed, files = self._embed_payload(status, reveal=True)
+        if colour is not None:
+            embed.colour = colour
+        return {
+            "content": None,
+            "embed": embed,
+            "attachments": files,
+        }
+
     def __init__(
         self,
         game: LuckyStars,

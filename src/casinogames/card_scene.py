@@ -55,26 +55,6 @@ def felt(game):
     return board
 
 
-def result_of(game):
-    key = game.GAME_KEY
-    if key == 'picturepoker':
-        return (getattr(game, 'result', None) or {}).get('outcome')
-    if key == 'memorymatch':
-        if game.is_board_cleared():
-            return 'win'
-        if game.remaining_attempts <= 0:
-            return 'lose'
-    if key == 'pairagone':
-        if game.is_board_cleared():
-            return 'win'
-        if not game.has_possible_moves():
-            return 'lose'
-    if key == 'luckystars' and game.finished:
-        values = (game.left_card, game.right_card)
-        return 'win' if values[game.picked] > values[1-game.picked] else 'lose'
-    return None
-
-
 def dealer(game, tick=0, *, outcome=None, dealing=False):
     if dealing:
         atlas = sprite('dealer_cards_motion')
@@ -83,19 +63,16 @@ def dealer(game, tick=0, *, outcome=None, dealing=False):
     else:
         top = dealer_frame(tick if outcome == 'win' and tick<22 else 24 + tick % 26)
     d = ImageDraw.Draw(top)
-    if game.GAME_KEY == 'picturepoker':
-        # Compact illustrated payout ladder, using this bot's actual paytable.
-        from casinogames.picturepoker.PicturePoker import PicturePoker
-        rows = [('five_kind',5,0),('four_kind',4,0),('full_house',3,2),
-                ('three_kind',3,0),('two_pair',2,2),('one_pair',2,0)]
-        for row,(rank,stars,mushrooms) in enumerate(rows):
-            y = 3 + row*14
-            for i,sym in enumerate(['star']*stars + ['mushroom']*mushrooms):
-                top.alpha_composite(card(sym,(7,11)),(3+i*7,y))
-            text(d,(42,y),PicturePoker.MULTIPLIER[rank],SMALL)
-    if game.GAME_KEY == 'memorymatch':
+    rows = getattr(game, 'scene_payout_rows', ())
+    for row, (multiplier, stars, mushrooms) in enumerate(rows):
+        y = 3 + row*14
+        for i, sym in enumerate(['star']*stars + ['mushroom']*mushrooms):
+            top.alpha_composite(card(sym,(7,11)),(3+i*7,y))
+        text(d,(42,y),multiplier,SMALL)
+    attempts = getattr(game, 'scene_attempts', None)
+    if attempts is not None:
         text(d,(5,155),'TRIES',SMALL)
-        count = max(0, game.remaining_attempts)
+        count = max(0, attempts)
         for i in range(min(count,8)):
             top.alpha_composite(sprite('coin'),(5+i*15,173))
         if count > 8:

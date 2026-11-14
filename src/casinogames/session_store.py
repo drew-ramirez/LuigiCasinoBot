@@ -6,6 +6,7 @@ render the committed result; stale controls can never draw again or score twice.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import time
 import uuid
@@ -15,7 +16,8 @@ from typing import Callable
 
 
 class SessionStore:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path | None = None):
+        path = path if path is not None else os.getenv("CASINO_SESSION_DB", "data/casino_sessions.sqlite3")
         self.path = str(path)
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as db:

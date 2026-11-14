@@ -172,14 +172,13 @@ class UserCog(commands.Cog):
         )
 
         # Keep the existing profile details; attach an equipped cosmetic card.
-        from cosmetics.catalog import Appearance, appearance
+        from cosmetics.catalog import Appearance, appearance, public_profile
         look = appearance(record)
         files = []
         if look != Appearance():
             try:
                 from cosmetics.profile import render_profile
-                public = {'name': interaction.user.display_name, 'balance': balance,
-                          'games_played': games_played, 'career_stars': career_stars}
+                public = public_profile(record, interaction.user.display_name)
                 data = await asyncio.to_thread(render_profile, public, look,
                                                animate=(record.get('animations_enabled') is None or bool(record['animations_enabled'])))
                 filename = 'profile.gif' if data.getvalue().startswith(b'GIF') else 'profile.png'

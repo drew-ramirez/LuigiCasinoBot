@@ -6,7 +6,7 @@ from casinogames.card_scene import waiting_animation
 # Description: Luigi's Casino Memory Match command logic
 ###########################################################
 
-from typing import Any, Callable, Optional
+from typing import Any
 
 import discord
 from discord.ext import commands
@@ -34,28 +34,6 @@ class MemoryMatchCog(BaseGameCog):
                 getattr(game, "stars", None),
             ),
         }
-
-    @staticmethod
-    def _make_cleanup_renderer(view) -> Callable[[str, Optional[discord.Colour]], dict[str, Any]]:
-        def renderer(status: str, colour: Optional[discord.Colour] = None) -> dict[str, Any]:
-            if getattr(view, "animations_enabled", False):
-                content = view._status_text(status)
-                files = [view._board_file()]
-                return {
-                    "content": content,
-                    "embed": None,
-                    "attachments": files,
-                }
-            embed, files = view._status_payload(status)
-            if colour is not None:
-                embed.colour = colour
-            return {
-                "content": None,
-                "embed": embed,
-                "attachments": files,
-            }
-
-        return renderer
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -155,7 +133,7 @@ class MemoryMatchCog(BaseGameCog):
                 message=message,
                 view=view,
                 timeout_metadata=self._memorymatch_timeout_metadata,
-                cleanup_renderer=self._make_cleanup_renderer(view),
+                cleanup_renderer=view.cleanup_payload,
             )
 
         layout_mode = (
