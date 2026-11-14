@@ -1,6 +1,5 @@
 """Practice card tables with consenting opponents and private, confirmed moves."""
 import asyncio
-from collections import OrderedDict
 import logging
 import time
 from types import SimpleNamespace
@@ -8,12 +7,11 @@ from types import SimpleNamespace
 import discord
 from discord.ext import commands
 
-from casinogames.session_store import SessionStore
 from casinogames.duel_session import DuelService
 from utils.visibility import resolve_command_visibility
 
 log = logging.getLogger(__name__)
-from casinogames.registry import DUEL_GAMES, duel_engines
+from casinogames.registry import DUEL_GAMES
 
 TITLES = {key: game.title for key, game in DUEL_GAMES.items()}
 
@@ -34,6 +32,30 @@ def card_label(card):
     return str(card)
 
 
+def _formation_lines(public):
+    lines=[]
+    for player,formations in public.get('formations',{}).items():
+        lines.append(seat(public,int(player))+' formations:')
+        for i,pile in enumerate(formations):
+            spent=' / spent' if pile.get('spent') else ''
+            lines.append(f"{i+1}: {card_label(pile.get('cards',[]))} ({pile.get('count',0)} cards{spent})")
+    return lines
+
+
+def _table_lines(public):
+    kind=public['kind']
+    if kind=='triple_triad':
+        return [f"{chr(65+i//3)}{i%3+1}: "+
+                (f"{seat(public,item['owner'])} {card_label(item['card'])}" if item else 'empty')
+                for i,item in enumerate(public.get('table',[]))]
+    if kind=='platoon':
+        return _formation_lines(public)
+    if kind=='pazaak':
+        return [f"{seat(public,int(player))}: {card_label(board)}; total {public.get('totals',{}).get(player,0)}"
+                for player,board in public.get('boards',{}).items()]
+    return ['Table: '+card_label(public.get('table',[]))]
+
+
 def readable(public):
     """Text is derived from the same permitted view as the image, never storage."""
     kind=public['kind']
@@ -44,19 +66,7 @@ def readable(public):
         lines.append(f"Turn: {seat(public, public['turn'])}")
     if public.get('rule_name'):
         lines.append(f"Rule: {public.get('rule', '')} — {public['rule_name']}")
-    if kind == 'triple_triad':
-        for i, item in enumerate(public.get('table', [])):
-            lines.append(f"{chr(65+i//3)}{i%3+1}: " + (f"{seat(public,item['owner'])} {card_label(item['card'])}" if item else 'empty'))
-    elif kind == 'platoon':
-        for player, formations in public.get('formations', {}).items():
-            lines.append(seat(public,int(player)) + ' formations:')
-            for i, pile in enumerate(formations):
-                lines.append(f"{i+1}: {card_label(pile.get('cards',[]))} ({pile.get('count',0)} cards{' / spent' if pile.get('spent') else ''})")
-    elif kind == 'pazaak':
-        for player, board in public.get('boards', {}).items():
-            lines.append(f"{seat(public,int(player))}: {card_label(board)}; total {public.get('totals',{}).get(player,0)}")
-    else:
-        lines.append('Table: ' + card_label(public.get('table', [])))
+    lines.extend(_table_lines(public))
     for player, hand in public.get('hands', {}).items():
         lines.append(f"{seat(public,int(player))} hand: {card_label(hand)}")
     for key in ('scores','points','permanents','predictions','committed','gross','net','last_set','ledger','qualifying'):
@@ -88,58 +98,77 @@ class CardTableView(discord.ui.View):
         super().__init__(timeout=None)
         self.cog,self.saved,self.viewer=cog,saved,viewer
         self.group,self.page,self.group_page,self.choice=group,page,group_page,choice
-        state=saved['state']
         if viewer is None:
-            if saved['status']!='finished':
-                if state['phase']=='invited':
-                    self.button('Accept invitation','accept',0)
-                    self.button('Decline / cancel','decline',0)
-                else:
-                    self.button('My hand / play','private',0)
-            self.button('Refresh table','refresh',1)
-            self.button('Rules','rules',1)
-            return
-        if state['phase']=='invited' and saved['status']!='finished':
-            if viewer != int(saved['owner']):self.button('Accept invitation','accept',0)
-            self.button('Cancel invitation','decline',0)
-        elif saved['status']=='paused':
-            self.button('Resume saved match','resume',0)
-        elif saved['status']=='active':
-            actions=cog.service.actions(saved,viewer)
-            groups=list(OrderedDict.fromkeys(a.get('group','Moves') for a in actions))
-            if choice:
-                selected=next((a for a in actions if a['id']==choice),None)
-                if selected:
-                    self.button('Confirm move','confirm',2,style=discord.ButtonStyle.success)
-                    self.button('Back to moves','menu',2)
+            self._public_controls()
+        else:
+            self._private_controls()
+
+    def _public_controls(self):
+        if self.saved['status']!='finished':
+            if self.saved['state']['phase']=='invited':
+                self.button('Accept invitation','accept',0)
+                self.button('Decline / cancel','decline',0)
             else:
-                if groups:
-                    start=group_page*25
-                    options=[discord.SelectOption(label=g[:100],value=str(i)) for i,g in enumerate(groups[start:start+25],start)]
-                    menu=discord.ui.Select(placeholder='Choose a card or move type',options=options,row=0)
-                    async def select_group(inter):
-                        await self.navigate(inter, group=groups[int(inter.data['values'][0])], page=0)
-                    menu.callback=select_group;self.add_item(menu)
-                    if len(groups)>25:
-                        if group_page:self.button('Previous cards','groups_prev',3)
-                        if start+25<len(groups):self.button('More cards','groups_next',3)
-                chosen=group if group in groups else groups[0] if len(groups)==1 else None
-                if chosen:
-                    subset=[a for a in actions if a.get('group','Moves')==chosen]
-                    page=min(page,max(0,(len(subset)-1)//25));self.page=page;self.group=chosen
-                    options=[discord.SelectOption(label=a['label'][:100],value=str(i),description=a.get('description','')[:100] or None)
-                             for i,a in enumerate(subset[page*25:page*25+25],page*25)]
-                    menu=discord.ui.Select(placeholder='Choose move, then confirm',options=options,row=1)
-                    async def select_move(inter):
-                        await self.navigate(inter, choice=subset[int(inter.data['values'][0])]['id'])
-                    menu.callback=select_move;self.add_item(menu)
-                    if page:self.button('Previous moves','page_prev',3)
-                    if (page+1)*25<len(subset):self.button('More moves','page_next',3)
-            self.button('Pause','pause',4)
-            self.button('Concede','concede_prompt',4)
+                self.button('My hand / play','private',0)
+        self.button('Refresh table','refresh',1)
+        self.button('Rules','rules',1)
+
+    def _private_controls(self):
+        if self.saved['state']['phase']=='invited' and self.saved['status']!='finished':
+            if self.viewer != int(self.saved['owner']):
+                self.button('Accept invitation','accept',0)
+            self.button('Cancel invitation','decline',0)
+        elif self.saved['status']=='paused':
+            self.button('Resume saved match','resume',0)
+        elif self.saved['status']=='active':
+            self._active_controls()
         self.button('Refresh','private',4)
         self.button('Rules','rules',4)
         self.button('Details','details',4)
+
+    def _active_controls(self):
+        actions=self.cog.service.actions(self.saved,self.viewer)
+        if self.choice:
+            if any(a['id']==self.choice for a in actions):
+                self.button('Confirm move','confirm',2,style=discord.ButtonStyle.success)
+                self.button('Back to moves','menu',2)
+        else:
+            groups=list(dict.fromkeys(a.get('group','Moves') for a in actions))
+            if groups:
+                self._group_controls(groups)
+            chosen=self.group if self.group in groups else groups[0] if len(groups)==1 else None
+            if chosen:
+                self.group=chosen
+                self._move_controls([a for a in actions if a.get('group','Moves')==chosen])
+        self.button('Pause','pause',4)
+        self.button('Concede','concede_prompt',4)
+
+    def _group_controls(self,groups):
+        start=self.group_page*25
+        options=[discord.SelectOption(label=g[:100],value=str(i))
+                 for i,g in enumerate(groups[start:start+25],start)]
+        menu=discord.ui.Select(placeholder='Choose a card or move type',options=options,row=0)
+        async def select_group(inter):
+            await self.navigate(inter,group=groups[int(inter.data['values'][0])],page=0)
+        menu.callback=select_group
+        self.add_item(menu)
+        if len(groups)>25:
+            if self.group_page:self.button('Previous cards','groups_prev',3)
+            if start+25<len(groups):self.button('More cards','groups_next',3)
+
+    def _move_controls(self,actions):
+        self.page=min(self.page,max(0,(len(actions)-1)//25))
+        start=self.page*25
+        options=[discord.SelectOption(label=a['label'][:100],value=str(i),
+                    description=a.get('description','')[:100] or None)
+                 for i,a in enumerate(actions[start:start+25],start)]
+        menu=discord.ui.Select(placeholder='Choose move, then confirm',options=options,row=1)
+        async def select_move(inter):
+            await self.navigate(inter,choice=actions[int(inter.data['values'][0])]['id'])
+        menu.callback=select_move
+        self.add_item(menu)
+        if self.page:self.button('Previous moves','page_prev',3)
+        if start+25<len(actions):self.button('More moves','page_next',3)
 
     def button(self,label,action,row,style=discord.ButtonStyle.secondary):
         button=discord.ui.Button(label=label,row=row,style=style)
@@ -183,7 +212,7 @@ class CardTablesCog(commands.Cog):
     def __init__(self,bot,*,store=None,registry=None,cosmetics=None):
         self.bot=bot
         self.cosmetics=cosmetics
-        self.service=DuelService(store or SessionStore(),registry or duel_engines())
+        self.service=DuelService(store,registry)
         self.locks={};self.messages={};self.private_messages={};self.tasks={};self.deadlines={}
         self.timeout_seconds=480
 
@@ -321,88 +350,93 @@ class CardTablesCog(commands.Cog):
         try:
             async with self.lock(table_id):
                 saved=await asyncio.to_thread(self.service.get,table_id,inter.guild_id or 0)
-                if action=='rules':
-                    text=self.service.engines[saved['kind']].RULES+'\nEight-minute inactivity pauses practice play. Reopen the command to resume. No community coins.'
-                    for page in text_pages(text):await inter.followup.send(page,ephemeral=True)
-                    return
-                if action=='refresh' and inter.user.id not in saved['state']['players']:
-                    await self.public_message(saved)
-                    await inter.followup.send('Public table refreshed.',ephemeral=True)
-                    return
-                if inter.user.id not in saved['state']['players']:
-                    raise PermissionError('Only the two seated players can use these controls.')
-                if action=='details':
-                    for page in text_pages(readable(self.service.projection(saved,inter.user.id))):
-                        await inter.followup.send(page,ephemeral=True)
-                    return
-                if action=='concede_prompt':
-                    view=discord.ui.View(timeout=120)
-                    button=discord.ui.Button(label='Confirm concession',style=discord.ButtonStyle.danger)
-                    async def confirm(i):
-                        if i.user.id!=inter.user.id:
-                            await i.response.send_message('This confirmation belongs to another player.',ephemeral=True);return
-                        await self.handle(i,saved,'concede',viewer=i.user.id)
-                    button.callback=confirm;view.add_item(button)
-                    await inter.followup.send('Concede this practice match? This ends it for both players.',view=view,ephemeral=True)
-                    return
-                if action in ('private','refresh'):
-                    if action=='refresh':saved=await self.public_message(saved)
-                    await self.private_message(inter,saved,original=viewer is not None)
+                if await self._inspect_action(inter,saved,action,viewer):
                     return
                 actual='play' if action=='confirm' else action
                 saved,applied=await asyncio.to_thread(self.service.change,table_id,old['revision'],inter.user.id,actual,guild=inter.guild_id or 0,choice=choice)
                 if not applied:
                     await inter.followup.send('That control is stale. Showing the saved current table.',ephemeral=True)
-                try:
-                    saved=await self.public_message(saved,transition=applied)
-                    await self.private_message(inter,saved,original=viewer is not None,transition=applied)
-                    self.arm(saved)
-                except Exception:
-                    if saved['status']=='active':
-                        await asyncio.to_thread(self.service.change,table_id,saved['revision'],inter.user.id,'pause',guild=inter.guild_id or 0)
-                    raise
+                await self._publish_change(inter,saved,original=viewer is not None,transition=applied)
         except (ValueError,PermissionError,discord.HTTPException) as exc:
             await inter.followup.send(str(exc),ephemeral=True)
         except Exception:
             log.exception('Practice table preserved after failure')
             await inter.followup.send('The saved match is preserved. Reopen its command with the table ID to recover.',ephemeral=True)
 
+    async def _inspect_action(self,inter,saved,action,viewer):
+        if action=='rules':
+            text=self.service.engines[saved['kind']].RULES+'\nEight-minute inactivity pauses practice play. Reopen the command to resume. No community coins.'
+            for page in text_pages(text):await inter.followup.send(page,ephemeral=True)
+            return True
+        if action=='refresh' and inter.user.id not in saved['state']['players']:
+            await self.public_message(saved)
+            await inter.followup.send('Public table refreshed.',ephemeral=True)
+            return True
+        if inter.user.id not in saved['state']['players']:
+            raise PermissionError('Only the two seated players can use these controls.')
+        if action=='details':
+            for page in text_pages(readable(self.service.projection(saved,inter.user.id))):
+                await inter.followup.send(page,ephemeral=True)
+        elif action=='concede_prompt':
+            await self._confirm_concession(inter,saved)
+        elif action in ('private','refresh'):
+            if action=='refresh':saved=await self.public_message(saved)
+            await self.private_message(inter,saved,original=viewer is not None)
+        else:
+            return False
+        return True
+
+    async def _confirm_concession(self,inter,saved):
+        view=discord.ui.View(timeout=120)
+        button=discord.ui.Button(label='Confirm concession',style=discord.ButtonStyle.danger)
+        async def confirm(i):
+            if i.user.id!=inter.user.id:
+                await i.response.send_message('This confirmation belongs to another player.',ephemeral=True)
+                return
+            await self.handle(i,saved,'concede',viewer=i.user.id)
+        button.callback=confirm
+        view.add_item(button)
+        await inter.followup.send('Concede this practice match? This ends it for both players.',view=view,ephemeral=True)
+
+    async def _publish_change(self,inter,saved,*,original,transition=False,channel=None):
+        try:
+            saved=await self.public_message(saved,channel=channel,transition=transition)
+            await self.private_message(inter,saved,original=original,transition=transition)
+            self.arm(saved)
+        except Exception:
+            if saved['status']=='active':
+                await asyncio.to_thread(self.service.change,saved['id'],saved['revision'],inter.user.id,
+                                        'pause',guild=inter.guild_id or 0)
+            raise
+
+    async def _open_table(self,inter,kind,opponent,table):
+        guild=inter.guild_id or 0
+        actor=inter.user.id
+        if table:
+            saved=await asyncio.to_thread(self.service.get,table,guild,actor=actor)
+            if saved['kind']!=kind:
+                raise ValueError('Use this saved table\'s original game command.')
+            return saved
+        existing=await asyncio.to_thread(self.service.store.active,guild,actor,kind)
+        if opponent and existing is None and not await self.visible(guild,inter.channel_id,kind):
+            raise ValueError('Human invitations need a configured public casino channel.')
+        return await asyncio.to_thread(self.service.start,guild,actor,kind,opponent.id if opponent else 0)
+
     async def start(self,inter,kind,opponent=None,table=None,animations=None):
         await inter.response.defer(ephemeral=True,thinking=True)
         try:
             guild=inter.guild_id or 0;actor=inter.user.id
             if opponent and (opponent.bot or opponent.id==actor):raise ValueError('Choose another human opponent, or omit opponent for Luigi.')
-            if table:
-                saved=await asyncio.to_thread(self.service.get,table,guild,actor=actor)
-                if saved['kind']!=kind:raise ValueError('Use this saved table\'s original game command.')
-            else:
-                existing=await asyncio.to_thread(self.service.store.active,guild,actor,kind)
-                if opponent and existing is None and not await self.visible(guild,inter.channel_id,kind):
-                    raise ValueError('Human invitations need a configured public casino channel.')
-                saved=await asyncio.to_thread(self.service.start,guild,actor,kind,opponent.id if opponent else 0)
+            saved=await self._open_table(inter,kind,opponent,table)
             async with self.lock(saved['id']):
                 saved=await asyncio.to_thread(self.service.get,saved['id'],guild,actor=actor)
                 if saved['status']=='paused':
                     saved,_=await asyncio.to_thread(self.service.change,saved['id'],saved['revision'],actor,'resume',guild=guild)
-                def metadata(s):
-                    s['state'].setdefault('public',bool(s['state']['players'][1]) or visible)
-                    if s['state']['channel_id'] is None:s['state']['channel_id']=inter.channel_id
-                    s['state']['animations']=bool(animations_on)
                 animations_on=await self.animated(actor) if animations is None else animations
                 visible=await self.visible(guild,inter.channel_id,kind)
-                if saved['status']!='finished':
-                    saved,_=await asyncio.to_thread(self.service.store.apply,saved['id'],saved['revision'],actor,metadata,
-                        authorize=lambda s,a:int(a) in s['state']['players'])
-                else:
-                    metadata(saved)  # Final instant deals still honor display preferences.
-                try:
-                    saved=await self.public_message(saved,channel=inter.channel)
-                    await self.private_message(inter,saved,original=True)
-                    self.arm(saved)
-                except Exception:
-                    if saved['status']=='active':
-                        await asyncio.to_thread(self.service.change,saved['id'],saved['revision'],actor,'pause',guild=guild)
-                    raise
+                saved=await asyncio.to_thread(self.service.configure_display,saved,actor,
+                    channel_id=inter.channel_id,public=visible,animations=animations_on)
+                await self._publish_change(inter,saved,original=True,channel=inter.channel)
         except (ValueError,PermissionError,discord.HTTPException) as exc:
             await inter.edit_original_response(content=str(exc),view=None)
         except Exception:

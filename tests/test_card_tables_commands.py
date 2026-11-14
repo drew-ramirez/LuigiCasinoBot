@@ -2,6 +2,7 @@
 import asyncio
 import json
 from copy import deepcopy
+from casinogames.registry import duel_engines
 from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -158,7 +159,7 @@ def test_restart_resume_preserves_deck_and_old_timeout_cannot_pause_new_revision
         try:
             saved=cog.service.start(77,42,'cuttle',seed=17)
             paused,_=cog.service.change(saved['id'],saved['revision'],42,'pause',guild=77)
-            cog.service=module.DuelService(SessionStore(tmp_path/'tables.db'),module.duel_engines())
+            cog.service=module.DuelService(SessionStore(tmp_path/'tables.db'),duel_engines())
             await cog.start(interaction(),'cuttle',table=saved['id'],animations=False)
             resumed=cog.service.store.get(saved['id'])
             assert resumed['status']=='active' and resumed['state']['game']==paused['state']['game']

@@ -5,8 +5,11 @@ from copy import deepcopy
 class DuelService:
     BOT_LIMIT = 128
 
-    def __init__(self, store, engines):
-        self.store, self.engines = store, engines
+    def __init__(self, store=None, engines=None):
+        from casinogames.registry import duel_engines
+        from casinogames.session_store import SessionStore
+        self.store = store if store is not None else SessionStore()
+        self.engines = engines if engines is not None else duel_engines()
 
     def engine(self, snapshot):
         data = snapshot['state']['game']
@@ -71,47 +74,81 @@ class DuelService:
     def change(self, table_id, revision, actor, action, *, guild, choice=None):
         self.get(table_id, guild, actor=actor)
         def update(saved):
-            state = saved['state']
-            if action == 'accept':
-                if state['phase'] != 'invited' or actor == int(saved['owner']):
-                    raise ValueError('Only the invited opponent can accept this lobby.')
-                state['ready'].append(actor)
-                self._deal(saved)
-                return
-            if action in ('decline', 'cancel'):
-                if state['phase'] != 'invited':
-                    raise ValueError('This table has already been dealt.')
-                self._finish(saved, 'cancelled')
-                return
-            if action == 'pause':
-                saved['status'] = 'paused'
-                return
-            if action == 'resume':
-                saved['status'] = 'active'
-                game = self.engine(saved)
-                if game:
-                    state['trace'] = [game.to_dict()]
-                    self._bots(saved, game)
-                    self._save_game(saved, game)
-                return
-            if action == 'concede':
-                if state['game'] is None:
-                    self._finish(saved, 'cancelled')
-                else:
-                    winner = next(p for p in state['players'] if p != actor)
-                    state['result'] = {'winner': winner, 'reason': 'conceded', 'conceded': actor}
-                    self._finish(saved, 'conceded')
-                return
-            if action != 'play' or saved['status'] != 'active' or state['phase'] != 'playing':
-                raise ValueError('Resume this table before playing.')
-            game = self.engine(saved)
-            state['trace'] = [game.to_dict()]
-            game.act(actor, choice)
-            state['trace'].append(game.to_dict())
+            self._change(saved, actor, action, choice)
+        return self.store.apply(table_id, revision, actor, update,
+                                authorize=self._seated)
+
+    @staticmethod
+    def _seated(saved, actor):
+        return int(actor) in saved['state']['players'] and int(actor) != 0
+
+    def _change(self, saved, actor, action, choice):
+        if action == 'accept':
+            self._accept(saved, actor)
+        elif action in ('decline', 'cancel'):
+            if saved['state']['phase'] != 'invited':
+                raise ValueError('This table has already been dealt.')
+            self._finish(saved, 'cancelled')
+        elif action == 'pause':
+            saved['status'] = 'paused'
+        elif action == 'resume':
+            self._resume(saved)
+        elif action == 'concede':
+            self._concede(saved, actor)
+        else:
+            self._play(saved, actor, action, choice)
+
+    def _accept(self, saved, actor):
+        state = saved['state']
+        if state['phase'] != 'invited' or actor == int(saved['owner']):
+            raise ValueError('Only the invited opponent can accept this lobby.')
+        state['ready'].append(actor)
+        self._deal(saved)
+
+    def _resume(self, saved):
+        saved['status'] = 'active'
+        game = self.engine(saved)
+        if game:
+            saved['state']['trace'] = [game.to_dict()]
             self._bots(saved, game)
             self._save_game(saved, game)
-        return self.store.apply(table_id, revision, actor, update,
-                                authorize=lambda s, a: int(a) in s['state']['players'] and int(a) != 0)
+
+    def _concede(self, saved, actor):
+        state = saved['state']
+        if state['game'] is None:
+            self._finish(saved, 'cancelled')
+            return
+        winner = next(p for p in state['players'] if p != actor)
+        state['result'] = {'winner': winner, 'reason': 'conceded', 'conceded': actor}
+        self._finish(saved, 'conceded')
+
+    def _play(self, saved, actor, action, choice):
+        if action != 'play' or saved['status'] != 'active' or saved['state']['phase'] != 'playing':
+            raise ValueError('Resume this table before playing.')
+        game = self.engine(saved)
+        saved['state']['trace'] = [game.to_dict()]
+        game.act(actor, choice)
+        saved['state']['trace'].append(game.to_dict())
+        self._bots(saved, game)
+        self._save_game(saved, game)
+
+    def configure_display(self, saved, actor, *, channel_id, public, animations):
+        """Persist table preferences without changing an existing public home.
+
+        Instantly finished deals need the same presentation metadata, but must
+        not create another persisted revision or score record.
+        """
+        def update(current):
+            state = current['state']
+            state.setdefault('public', bool(state['players'][1]) or public)
+            if state['channel_id'] is None:
+                state['channel_id'] = channel_id
+            state['animations'] = bool(animations)
+        if saved['status'] == 'finished':
+            update(saved)
+            return saved
+        return self.store.apply(saved['id'], saved['revision'], actor, update,
+                                authorize=self._seated)[0]
 
     def projection(self, saved, viewer=None):
         game = self.engine(saved)
