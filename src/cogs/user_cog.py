@@ -1,4 +1,4 @@
-﻿###########################################################
+###########################################################
 # File: user_cog.py
 #
 # Description: Generic player-facing commands for Luigi's Casino
@@ -44,6 +44,39 @@ async def safe_send(
             await interaction.response.send_message(ephemeral=ephemeral, **kwargs)
     except Exception as e:
         print(f"[ERROR] safe_send failed: {e}")
+
+
+class _GuildLeaderboard:
+    def __init__(self, guild):
+        self.guild = guild
+        self.members = {}
+
+    async def _member(self, user_id):
+        member = self.members.get(user_id) or self.guild.get_member(user_id)
+        if member is None:
+            try:
+                member = await self.guild.fetch_member(user_id)
+            except (discord.NotFound, discord.HTTPException, discord.Forbidden):
+                return None
+        self.members[user_id] = member
+        return member
+
+    async def entries(self, metric, formatter):
+        entries = []
+        cursor = EconomyManager.COLLECTION.find().sort(metric, -1).limit(200)
+        for record in cursor:
+            if len(entries) >= 10:
+                break
+            user_id = record.get("user_id")
+            if not isinstance(user_id, int):
+                continue
+            member = await self._member(user_id)
+            if member is None:
+                continue
+            entries.append({"name": member.display_name,
+                            "value": formatter(record.get(metric, 0) or 0),
+                            "avatar": member.display_avatar.url})
+        return entries
 
 
 class UserCog(commands.Cog):
@@ -450,54 +483,14 @@ class UserCog(commands.Cog):
         await interaction.response.defer(ephemeral=visibility.ephemeral)
         MetricsManager.record_command_event(interaction, "casino_server_leaderboard")
 
-        collection = EconomyManager.COLLECTION
-
-        member_cache: dict[int, discord.Member] = {}
-
-        async def resolve_member(uid: int) -> discord.Member | None:
-            cached = member_cache.get(uid)
-            if cached is not None:
-                return cached
-            member = guild.get_member(uid)
-            if member is not None:
-                member_cache[uid] = member
-                return member
-            try:
-                member = await guild.fetch_member(uid)
-            except (discord.NotFound, discord.HTTPException, discord.Forbidden):
-                return None
-            member_cache[uid] = member
-            return member
-
-        async def build_entries(metric: str, formatter) -> list[dict]:
-            entries: list[dict] = []
-            cursor = collection.find().sort(metric, -1).limit(200)
-            for record in cursor:
-                if len(entries) >= 10:
-                    break
-                uid = record.get("user_id")
-                if not isinstance(uid, int):
-                    continue
-                member = await resolve_member(uid)
-                if member is None:
-                    continue
-                value = record.get(metric, 0) or 0
-                entries.append(
-                    {
-                        "name": member.display_name,
-                        "value": formatter(value),
-                        "avatar": member.display_avatar.url,
-                    }
-                )
-            return entries
-
-        balance_entries = await build_entries(
+        leaderboard = _GuildLeaderboard(interaction.guild)
+        balance_entries = await leaderboard.entries(
             "balance", lambda v: f"{v:,} coins"
         )
-        games_entries = await build_entries(
+        games_entries = await leaderboard.entries(
             "games_played", lambda v: f"{v:,}"
         )
-        cashout_entries = await build_entries(
+        cashout_entries = await leaderboard.entries(
             "biggest_cashout", lambda v: f"{v:,}"
         )
 

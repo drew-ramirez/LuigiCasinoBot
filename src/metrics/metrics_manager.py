@@ -242,6 +242,16 @@ class MetricsManager:
             immediate=immediate,
         )
 
+    @staticmethod
+    def _elapsed_seconds(started, completed):
+        if not isinstance(started, datetime):
+            return None
+        if started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        if completed.tzinfo is None:
+            completed = completed.replace(tzinfo=timezone.utc)
+        return max(0.0, (completed - started).total_seconds())
+
     @classmethod
     def record_game_timeout(
         cls,
@@ -278,22 +288,9 @@ class MetricsManager:
                 "timeout_logged_at": stamped,
             }
 
-            started_at = session_doc.get("timestamp")
-            if isinstance(started_at, datetime):
-                normalized_started = started_at
-                if normalized_started.tzinfo is None:
-                    normalized_started = normalized_started.replace(
-                        tzinfo=timezone.utc
-                    )
-                normalized_stamped = stamped
-                if normalized_stamped.tzinfo is None:
-                    normalized_stamped = normalized_stamped.replace(
-                        tzinfo=timezone.utc
-                    )
-                update["duration_seconds"] = max(
-                    0.0,
-                    (normalized_stamped - normalized_started).total_seconds(),
-                )
+            elapsed = cls._elapsed_seconds(session_doc.get("timestamp"), stamped)
+            if elapsed is not None:
+                update["duration_seconds"] = elapsed
 
             if metadata:
                 update.update(metadata)

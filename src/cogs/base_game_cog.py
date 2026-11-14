@@ -295,19 +295,12 @@ class BaseGameCog(commands.Cog):
             )
             setattr(game, "metrics_logged", True)
 
-        await self._notify_abandoned_session(entry, user_id)
-        print(f"[{self.log_label}] Abandoned game replaced for {user_id}")
-
-    async def _notify_abandoned_session(
-        self,
-        entry: dict[str, Any],
-        user_id: int,
-    ) -> None:
         await self._finalize_session_message(
             entry,
             "New session detected, thanks for playing!",
             colour=discord.Colour.orange(),
         )
+        print(f"[{self.log_label}] Abandoned game replaced for {user_id}")
 
     @staticmethod
     def _stop_view(view: Optional[discord.ui.View]) -> None:

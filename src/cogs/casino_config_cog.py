@@ -81,6 +81,33 @@ def _format_channel_mention(guild: discord.Guild, channel_id: int) -> str:
     return f"<#{channel_id}>"
 
 
+def _floor_channels(guild, allowed):
+    visible = [_format_channel_mention(guild, cid) for cid in sorted(allowed)
+               if guild.get_channel(cid) is not None]
+    if visible:
+        return "\n".join(visible)
+    if allowed:
+        return "Use `/casino floor add` to assign channels in this server."
+    return "None (commands run privately outside mapped channels)"
+
+
+def _game_channels(guild, channel_map):
+    lines = []
+    for key, channel_id in sorted(channel_map.items()):
+        channel = guild.get_channel(channel_id)
+        if channel is not None:
+            lines.append(f"`{key}` \N{RIGHTWARDS ARROW} {channel.mention}")
+    return "\n".join(lines) or "Not configured"
+
+
+def _manager_roles(guild, role_ids):
+    visible = [guild.get_role(rid).mention for rid in sorted(role_ids)
+               if guild.get_role(rid) is not None]
+    if visible:
+        return "\n".join(visible)
+    return "Roles configured elsewhere (deleted or missing)." if role_ids else "None"
+
+
 class CasinoConfigCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -91,7 +118,7 @@ class CasinoConfigCog(commands.Cog):
         guild_only=True,
         default_permissions=discord.Permissions(manage_guild=True),
     )
-    
+
 
     async def _build_config_embed(
         self, interaction: discord.Interaction
@@ -109,60 +136,16 @@ class CasinoConfigCog(commands.Cog):
             color=discord.Color.gold(),
         )
 
-        allowed = config.allowed_channels
-        visible_allowed = [
-            _format_channel_mention(guild, cid)
-            for cid in sorted(allowed)
-            if guild.get_channel(cid) is not None
-        ]
-        if visible_allowed:
-            allowed_value = "\n".join(visible_allowed)
-        elif allowed:
-            allowed_value = (
-                "Use `/casino floor add` to assign channels in this server."
-            )
-        else:
-            allowed_value = "None (commands run privately outside mapped channels)"
-
         embed.add_field(
             name="Casino Floor Channels (general/non-game visibility)",
-            value=allowed_value,
+            value=_floor_channels(guild, config.allowed_channels), inline=False,
+        )
+        embed.add_field(
+            name="Game Channel Map", value=_game_channels(guild, config.channel_map),
             inline=False,
         )
-
-        if config.channel_map:
-            lines = []
-            for key, channel_id in sorted(config.channel_map.items()):
-                channel = guild.get_channel(channel_id)
-                if channel is None:
-                    continue
-                lines.append(f"`{key}` → {channel.mention}")
-            channel_value = "\n".join(lines) if lines else "Not configured"
-        else:
-            channel_value = "Not configured"
-
         embed.add_field(
-            name="Game Channel Map",
-            value=channel_value,
-            inline=False,
-        )
-
-        manager_roles = config.manager_role_ids
-        visible_roles = [
-            guild.get_role(rid).mention
-            for rid in sorted(manager_roles)
-            if guild.get_role(rid) is not None
-        ]
-        if visible_roles:
-            manager_value = "\n".join(visible_roles)
-        elif manager_roles:
-            manager_value = "Roles configured elsewhere (deleted or missing)."
-        else:
-            manager_value = "None"
-
-        embed.add_field(
-            name="Casino Manager Roles",
-            value=manager_value,
+            name="Casino Manager Roles", value=_manager_roles(guild, config.manager_role_ids),
             inline=False,
         )
 
@@ -180,14 +163,7 @@ class CasinoConfigCog(commands.Cog):
             value=category_value,
             inline=False,
         )
-        
-        # rest of config kinda does this job
-        # maybe keep for later iterations
-        #embed.add_field(
-        #    name="Visibility Mode",
-        #    value=config.visibility_mode.capitalize(),
-        #    inline=True,
-        #)
+
         embed.add_field(
             name="Admin Commands",
             value="\n".join(
@@ -416,4 +392,3 @@ class CasinoConfigCog(commands.Cog):
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(CasinoConfigCog(bot))
-

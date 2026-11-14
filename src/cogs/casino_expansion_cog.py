@@ -297,35 +297,40 @@ class CasinoExpansionCog(commands.Cog):
             if saved and saved['game']['result'] is None:
                 await self.publish(interaction, saved, animations)
                 return
-            # A displayed result is not permission to spend again; Deal is explicit.
-            menu = discord.ui.View(timeout=120)
-            deal = discord.ui.Button(label=f'Deal — stake {wager}', style=discord.ButtonStyle.primary)
-            menu.add_item(deal)
-            lock = self.locks[(owner, 'blackjack')]
-            accepted = False
-            async def confirm(inter):
-                nonlocal accepted
-                if inter.user.id != owner:
-                    await inter.response.send_message('This wager belongs to another player.', ephemeral=True)
-                    return
-                await inter.response.defer()
-                async with lock:
-                    if accepted:
-                        current = await asyncio.to_thread(self.blackjack.get, owner)
-                    else:
-                        try:
-                            current = await asyncio.to_thread(self.blackjack.start, owner, wager, inter.user.name,
-                                                              expected_round_id=saved['id'] if saved else None,
-                                                              expected_revision=saved['revision'] if saved else None)
-                        except ValueError as exc:
-                            await inter.followup.send(str(exc), ephemeral=True)
-                            return
-                        accepted = True
-                    await self.publish(inter, current, animations)
-                    menu.stop()
-            deal.callback = confirm
-            await interaction.edit_original_response(content='**Blackjack — confirm wager**\n' + RULES['blackjack'] +
-                                                      f'\nStake {wager}; splitting/doubling can commit up to {4*wager}. Extra stakes are checked at each decision.', view=menu)
+            await self._confirm_wager(interaction,wager,animations,saved)
+
+    async def _confirm_wager(self,interaction,wager,animations,saved):
+        owner=interaction.user.id
+        # A displayed result is not permission to spend again; Deal is explicit.
+        menu = discord.ui.View(timeout=120)
+        deal = discord.ui.Button(label=f'Deal — stake {wager}', style=discord.ButtonStyle.primary)
+        menu.add_item(deal)
+        lock = self.locks[(owner, 'blackjack')]
+        accepted = False
+        async def confirm(inter):
+            nonlocal accepted
+            if inter.user.id != owner:
+                await inter.response.send_message('This wager belongs to another player.', ephemeral=True)
+                return
+            await inter.response.defer()
+            async with lock:
+                if accepted:
+                    current = await asyncio.to_thread(self.blackjack.get, owner)
+                else:
+                    try:
+                        current = await asyncio.to_thread(self.blackjack.start, owner, wager, inter.user.name,
+                                                          expected_round_id=saved['id'] if saved else None,
+                                                          expected_revision=saved['revision'] if saved else None)
+                    except ValueError as exc:
+                        await inter.followup.send(str(exc), ephemeral=True)
+                        return
+                    accepted = True
+                await self.publish(inter, current, animations)
+                menu.stop()
+        deal.callback = confirm
+        await interaction.edit_original_response(content='**Blackjack — confirm wager**\n' + RULES['blackjack'] +
+                                                  f'\nStake {wager}; splitting/doubling can commit up to {4*wager}. Extra stakes are checked at each decision.', view=menu)
+
 
 
 async def setup(bot):

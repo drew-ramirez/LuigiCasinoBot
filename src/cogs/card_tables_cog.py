@@ -285,13 +285,7 @@ class CardTablesCog(commands.Cog):
         table_id=saved['id'];state=saved['state']
         if not await self.visible(saved['guild'],state['channel_id'],saved['kind']):
             raise PermissionError('This channel is no longer configured for public tables.')
-        message=self.messages.get(table_id)
-        if message is None and state.get('message_id'):
-            destination=self.bot.get_channel(state['channel_id']) or await self.bot.fetch_channel(state['channel_id'])
-            if getattr(getattr(destination,'guild',None),'id',None)!=int(saved['guild']):
-                raise PermissionError('The saved table channel belongs to another server.')
-            try:message=await destination.fetch_message(state['message_id'])
-            except discord.NotFound:message=None
+        message=await self._saved_public_message(saved)
         animate=state.get('animations',False)
         payload=await self.payload(saved,animate=animate,transition=transition)
         if message is None:
@@ -306,6 +300,18 @@ class CardTablesCog(commands.Cog):
             await self._send(message.edit,payload)
         self.messages[table_id]=message
         return saved
+
+    async def _saved_public_message(self,saved):
+        table_id=saved['id']
+        state=saved['state']
+        message=self.messages.get(table_id)
+        if message is None and state.get('message_id'):
+            destination=self.bot.get_channel(state['channel_id']) or await self.bot.fetch_channel(state['channel_id'])
+            if getattr(getattr(destination,'guild',None),'id',None)!=int(saved['guild']):
+                raise PermissionError('The saved table channel belongs to another server.')
+            try:message=await destination.fetch_message(state['message_id'])
+            except discord.NotFound:message=None
+        return message
 
     async def private_message(self,inter,saved,*,original=False,transition=False):
         payload=await self.payload(saved,inter.user.id,animate=saved['state'].get('animations',False),transition=transition)
@@ -336,13 +342,19 @@ class CardTablesCog(commands.Cog):
                 saved,applied=await asyncio.to_thread(self.service.change,table_id,revision,int(saved['owner']),action,guild=saved['guild'])
                 if applied:
                     await self.public_message(saved)
-                    for (tid,viewer),message in list(self.private_messages.items()):
-                        if tid==table_id and message:
-                            try:await self._send(message.edit,await self.payload(saved,viewer))
-                            except discord.HTTPException:pass
+                    await self._refresh_private(saved)
                 self.deadlines.pop(table_id,None)
         except asyncio.CancelledError:pass
         except Exception:log.exception('Practice timeout saved; display unavailable')
+
+    async def _refresh_private(self,saved):
+        for (table_id,viewer),message in list(self.private_messages.items()):
+            if table_id!=saved['id'] or not message:
+                continue
+            try:
+                await self._send(message.edit,await self.payload(saved,viewer))
+            except discord.HTTPException:
+                pass
 
     async def handle(self,inter,old,action,*,viewer=None,choice=None):
         await inter.response.defer(ephemeral=True,thinking=True) if viewer is None else await inter.response.defer()

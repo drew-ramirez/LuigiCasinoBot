@@ -136,20 +136,7 @@ class MachineView(discord.ui.View):
                 self.game.stop(index)
                 self.children[index].disabled = True
             if self.game.result is not None:
-                # No await between settlement and marking the round completed.
-                payout = self.game.result['payout']
-                if payout:
-                    EconomyManager.payout(self.player.id, payout, self.player.name)
-                self.game.metrics_logged = True
-                try:
-                    MetricsManager.record_game_result(getattr(self.game, 'metrics_session_id', None),
-                        result='win' if payout else 'loss', payout=payout, net=payout-self.game.bet,
-                        metadata={'selection': getattr(self.game, 'selection', None),
-                                  'placements': getattr(self.game, 'placements', None),
-                                  'chips': getattr(self.game, 'chips', None),
-                                  'reels': getattr(self.game, 'reels', None), **self.game.result})
-                finally:
-                    await self.cog.cleanup_game(self.player.id)
+                await self._settle()
                 payload = await self.payload(animate=self.animated)
                 if isinstance(self.game,Roulette) and self.animated:
                     payload.update(content='The wheel is spinning…',view=None)
@@ -162,6 +149,23 @@ class MachineView(discord.ui.View):
                 await inter.edit_original_response(**payload)
             else:
                 await inter.edit_original_response(**await self.payload(animate=self.animated))
+
+    async def _settle(self):
+        # No await between settlement and marking the round completed.
+        payout = self.game.result['payout']
+        if payout:
+            EconomyManager.payout(self.player.id, payout, self.player.name)
+        self.game.metrics_logged = True
+        try:
+            MetricsManager.record_game_result(getattr(self.game, 'metrics_session_id', None),
+                result='win' if payout else 'loss', payout=payout, net=payout-self.game.bet,
+                metadata={'selection': getattr(self.game, 'selection', None),
+                          'placements': getattr(self.game, 'placements', None),
+                          'chips': getattr(self.game, 'chips', None),
+                          'reels': getattr(self.game, 'reels', None), **self.game.result})
+        finally:
+            await self.cog.cleanup_game(self.player.id)
+
 
 class ReplayView(discord.ui.View):
     def __init__(self, cog, user_id):

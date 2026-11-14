@@ -66,9 +66,6 @@ async def casino_channel_only(interaction: discord.Interaction) -> bool:
     )
 
     if decision.config.all_public_channels:
-        if decision.config.all_public_channels.intersection(related_ids):
-            return True
-        # allow execution but leave messaging to command logic
         return True
 
     # legacy fallback: if no config stored but env channels provided
@@ -83,7 +80,7 @@ async def casino_channel_only(interaction: discord.Interaction) -> bool:
             mention = ch.mention if ch else f"<#{cid}>"
             allowed_mentions.append(mention)
         channel_mention = ", ".join(allowed_mentions)
-        
+
         # respond immediately to avoid expiration
         try:
             if not interaction.response.is_done():
