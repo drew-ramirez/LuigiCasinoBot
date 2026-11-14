@@ -15,55 +15,61 @@ def display_name(inter):
 
 
 class CosmeticsView(discord.ui.View):
-    def __init__(self, cog, owner, guild, snapshot, mode, *, page=0, selected=None, request_id=None):
+    def __init__(self, cog, guild, snapshot, mode, *, page=0, selected=None, request_id=None):
         super().__init__(timeout=480)
-        self.cog, self.owner, self.guild = cog, owner, guild
+        self.cog, self.owner, self.guild = cog, snapshot['user_id'], guild
         self.snapshot, self.mode = snapshot, mode
         self.selected = selected
         self.request_id = request_id or uuid.uuid4().hex
         self.quote_id = None
-        if mode == 'wardrobe':
-            entries = [item for item in cog.catalog.values() if item.id in snapshot['owned']]
-        else:
-            entries = list(cog.offers.values())
+        entries = cog.domain.entries(snapshot, mode)
         self.page = min(max(0, page), max(0, (len(entries)-1)//PAGE_SIZE))
         self.entries = entries[self.page*PAGE_SIZE:(self.page+1)*PAGE_SIZE]
-        if self.entries:
-            options=[]
-            for entry in self.entries:
-                if mode == 'wardrobe':
-                    equipped = snapshot['equipped'].get(entry.slot) == entry.id
-                    description = entry.slot.replace('_', ' ') + (' · equipped' if equipped else ' · owned')
-                else:
-                    description = ('Free' if entry.price == 0 else f'{entry.price:,} coins') + ' · preview before confirming'
-                options.append(discord.SelectOption(label=entry.name[:100], value=entry.id,
-                                                     description=description[:100], default=entry.id == selected))
-            select=discord.ui.Select(placeholder='Preview an owned item' if mode == 'wardrobe' else 'Preview an offer', options=options, row=0)
-            async def choose(inter):
-                value=inter.data['values'][0]
-                if value not in {entry.id for entry in self.entries}:
-                    return await inter.response.send_message('That choice is no longer available. Reopen the menu.', ephemeral=True)
-                await self.cog.handle(inter, self, 'select', selection=value)
-            select.callback=choose
-            self.add_item(select)
-        if selected:
-            if mode == 'wardrobe':
-                item=cog.catalog.get(selected)
-                if item and selected in snapshot['owned'] and snapshot['equipped'].get(item.slot) != selected:
-                    self.button('Equip selected item', 'equip', 1, discord.ButtonStyle.success)
-            else:
-                offer=cog.offers.get(selected)
-                if offer:
-                    self.quote_id=offer.quote_id
-                    if not all(item in snapshot['owned'] for item in offer.item_ids):
-                        label='Confirm free claim' if offer.price == 0 else f'Confirm purchase · {offer.price:,} coins'
-                        self.button(label, 'purchase', 1, discord.ButtonStyle.success)
+        self._add_selection()
+        self._add_confirmation()
         if self.page:
             self.button('Previous', 'previous', 2)
         if (self.page+1)*PAGE_SIZE < len(entries):
             self.button('Next', 'next', 2)
         self.button('Shop' if mode == 'wardrobe' else 'Wardrobe', 'switch', 3)
         self.button('Refresh', 'refresh', 3)
+
+    def _option(self, entry):
+        if self.mode == 'wardrobe':
+            equipped = self.snapshot['equipped'].get(entry.slot) == entry.id
+            description = entry.slot.replace('_', ' ') + (' · equipped' if equipped else ' · owned')
+        else:
+            description = ('Free' if entry.price == 0 else f'{entry.price:,} coins') + ' · preview before confirming'
+        return discord.SelectOption(label=entry.name[:100], value=entry.id,
+                                    description=description[:100], default=entry.id == self.selected)
+
+    def _add_selection(self):
+        if not self.entries:
+            return
+        select=discord.ui.Select(placeholder='Preview an owned item' if self.mode == 'wardrobe' else 'Preview an offer',
+                                 options=[self._option(entry) for entry in self.entries], row=0)
+        async def choose(inter):
+            value=inter.data['values'][0]
+            if value not in {entry.id for entry in self.entries}:
+                return await inter.response.send_message('That choice is no longer available. Reopen the menu.', ephemeral=True)
+            await self.cog.handle(inter, self, 'select', selection=value)
+        select.callback=choose
+        self.add_item(select)
+
+    def _add_confirmation(self):
+        if not self.selected:
+            return
+        if self.mode == 'wardrobe':
+            item=self.cog.catalog.get(self.selected)
+            if item and self.selected in self.snapshot['owned'] and self.snapshot['equipped'].get(item.slot) != self.selected:
+                self.button('Equip selected item', 'equip', 1, discord.ButtonStyle.success)
+            return
+        offer=self.cog.offers.get(self.selected)
+        if offer:
+            self.quote_id=offer.quote_id
+            if not self.cog.domain.offer_owned(self.snapshot, offer):
+                label='Confirm free claim' if offer.price == 0 else f'Confirm purchase · {offer.price:,} coins'
+                self.button(label, 'purchase', 1, discord.ButtonStyle.success)
 
     def button(self, label, action, row, style=discord.ButtonStyle.secondary):
         button=discord.ui.Button(label=label[:80], row=row, style=style)
@@ -85,46 +91,54 @@ class CosmeticsCog(commands.Cog):
         if store is None:
             from cosmetics.store import CosmeticsStore
             store=CosmeticsStore()
-        self.store, self.catalog, self.offers=store, store.items, store.offers
+        self.store, self.domain=store, store.catalog
+        self.catalog, self.offers=self.domain.items, self.domain.offers
         self.locks={}
 
     def lock(self, owner):
         return self.locks.setdefault(owner, asyncio.Lock())
 
-    async def payload(self, snapshot, owner, guild, username, mode, *, page=0, selected=None, request_id=None, notice=None):
-        view=CosmeticsView(self, owner, guild, snapshot, mode, page=page, selected=selected, request_id=request_id)
-        lines=['**Casino Wardrobe**' if mode == 'wardrobe' else '**Casino Shop**', f"Balance: {snapshot['balance']:,} coins"]
-        if notice: lines.append(notice)
-        if mode == 'wardrobe':
-            lines.append('Preview owned cosmetics, then equip your choice. Cosmetics do not change game outcomes.')
-            lines.append('Table styles currently apply to Triple Triad, Red7, Scopa, Cuttle, Platoon, Pazaak and Casino War.')
-            lines.extend(f"• {self.catalog[item].name} ({slot.replace('_', ' ')})" for slot,item in snapshot['equipped'].items() if item in self.catalog)
-            if selected:
-                lines.append('**Preview: '+discord.utils.escape_markdown(self.catalog[selected].name)+'**')
-                if snapshot['equipped'].get(self.catalog[selected].slot) == selected:
-                    lines.append('Already equipped.')
-        else:
-            lines.append('Select an offer to preview its contents. Only confirmation can make a purchase.')
-            if selected:
-                offer=self.offers[selected]
-                lines.extend(['**'+discord.utils.escape_markdown(offer.name)+'**', 'Price: '+('Free · 0 coins' if offer.price == 0 else f'{offer.price:,} coins'),
-                              'Includes: '+', '.join(self.catalog[item].name for item in offer.item_ids)])
-                if len({self.catalog[item].slot for item in offer.item_ids}) < len(offer.item_ids):
-                    lines.append('Preview shows one option per slot. The Wardrobe lets you preview and equip each included item.')
-                if all(item in snapshot['owned'] for item in offer.item_ids):lines.append('You already own everything in this offer.')
-            else:
-                lines.extend(f"• {offer.name}: {'Free' if offer.price == 0 else str(offer.price)+' coins'}" for offer in view.entries)
-        lines.append(f'Page {view.page+1} · previews do not equip or spend coins.')
-        attachments=[]
+    def _wardrobe_lines(self, snapshot, selected):
+        lines=['Preview owned cosmetics, then equip your choice. Cosmetics do not change game outcomes.',
+               'Table styles currently apply to Triple Triad, Red7, Scopa, Cuttle, Platoon, Pazaak and Casino War.']
+        lines.extend(f"• {self.catalog[item].name} ({slot.replace('_', ' ')})" for slot,item in snapshot['equipped'].items() if item in self.catalog)
+        if selected:
+            item=self.catalog[selected]
+            lines.append('**Preview: '+discord.utils.escape_markdown(item.name)+'**')
+            if snapshot['equipped'].get(item.slot) == selected:
+                lines.append('Already equipped.')
+        return lines
+
+    def _shop_lines(self, snapshot, selected, entries):
+        lines=['Select an offer to preview its contents. Only confirmation can make a purchase.']
+        if not selected:
+            lines.extend(f"• {offer.name}: {'Free' if offer.price == 0 else str(offer.price)+' coins'}" for offer in entries)
+            return lines
+        offer=self.offers[selected]
+        lines.extend(['**'+discord.utils.escape_markdown(offer.name)+'**', 'Price: '+('Free · 0 coins' if offer.price == 0 else f'{offer.price:,} coins'),
+                      'Includes: '+', '.join(self.catalog[item].name for item in offer.item_ids)])
+        if len({self.catalog[item].slot for item in offer.item_ids}) < len(offer.item_ids):
+            lines.append('Preview shows one option per slot. The Wardrobe lets you preview and equip each included item.')
+        if self.domain.offer_owned(snapshot, offer):lines.append('You already own everything in this offer.')
+        return lines
+
+    async def _preview_attachment(self, snapshot, mode, selected):
         try:
             from cosmetics.profile import render_profile
-            from cosmetics.catalog import preview_appearance
-            appearance=preview_appearance(snapshot, mode, selected, self.catalog, self.offers)
-            public=snapshot['profile']
-            data=await asyncio.to_thread(render_profile, public, appearance, animate=bool(snapshot.get('animations_enabled',False)))
-            attachments=[discord.File(data, filename='cosmetics.gif' if data.getvalue().startswith(b'GIF') else 'cosmetics.png')]
+            appearance=self.domain.preview(snapshot, mode, selected)
+            data=await asyncio.to_thread(render_profile, snapshot['profile'], appearance, animate=bool(snapshot.get('animations_enabled',False)))
+            return [discord.File(data, filename='cosmetics.gif' if data.getvalue().startswith(b'GIF') else 'cosmetics.png')]
         except Exception:
             log.warning('Cosmetic preview unavailable; keeping saved text and controls', exc_info=True)
+            return []
+
+    async def payload(self, snapshot, guild, mode, *, page=0, selected=None, request_id=None, notice=None):
+        view=CosmeticsView(self, guild, snapshot, mode, page=page, selected=selected, request_id=request_id)
+        lines=['**Casino Wardrobe**' if mode == 'wardrobe' else '**Casino Shop**', f"Balance: {snapshot['balance']:,} coins"]
+        if notice: lines.append(notice)
+        lines.extend(self._wardrobe_lines(snapshot, selected) if mode == 'wardrobe' else self._shop_lines(snapshot, selected, view.entries))
+        lines.append(f'Page {view.page+1} · previews do not equip or spend coins.')
+        attachments=await self._preview_attachment(snapshot, mode, selected)
         return {'content':'\n'.join(lines)[:1950], 'attachments':attachments, 'view':view,
                 'allowed_mentions':discord.AllowedMentions.none()}
 
@@ -136,44 +150,49 @@ class CosmeticsCog(commands.Cog):
                 raise
             return await inter.edit_original_response(**{**payload, 'attachments':[]})
 
+    async def _purchase(self, view, username):
+        if view.mode != 'shop' or view.selected not in self.offers or view.quote_id is None:
+            raise ValueError('Choose and preview an offer before confirming.')
+        result=await asyncio.to_thread(self.store.purchase, view.owner, view.selected, view.quote_id, view.request_id, username)
+        notice={'purchased':'Purchase saved. Your new items are in the Wardrobe.', 'replayed':'This confirmation was already saved. No second charge.', 'already_owned':'You already own this offer. No coins spent.'}.get(result['status'], 'Your wardrobe is up to date.')
+        return result['snapshot'], notice
+
+    async def _equip(self, view, username):
+        if view.mode != 'wardrobe' or view.selected not in self.catalog:
+            raise ValueError('Preview an owned item before equipping.')
+        snapshot, applied=await asyncio.to_thread(self.store.equip, view.owner, view.selected, view.snapshot['revision'], username)
+        notice='Equipped. Your profile and supported card tables use this selection.' if applied else 'That menu was stale. Showing your current saved wardrobe.'
+        return snapshot, notice
+
+    def _navigation(self, view, snapshot, action, selection):
+        mode, page, selected=view.mode, view.page, None
+        if action == 'select':
+            selected=selection
+            if not self.domain.selectable(snapshot, mode, selected):raise ValueError('That choice is no longer available.')
+        elif action in ('next','previous'):
+            page=max(0, page+(1 if action == 'next' else -1))
+        elif action == 'switch':
+            mode='shop' if mode == 'wardrobe' else 'wardrobe';page=0
+        elif action != 'refresh':
+            raise ValueError('Unknown wardrobe action.')
+        return mode, page, selected, uuid.uuid4().hex
+
     async def handle(self, inter, view, action, *, selection=None):
         if not await view.interaction_check(inter):return
         await inter.response.defer(ephemeral=True)
         username=display_name(inter)
         try:
             async with self.lock(view.owner):
-                mode, page, selected=view.mode, view.page, view.selected
+                mode, page, selected, request_id=view.mode, view.page, view.selected, view.request_id
                 notice=None
-                request_id=view.request_id
                 if action == 'purchase':
-                    if mode != 'shop' or selected not in self.offers or view.quote_id is None:
-                        raise ValueError('Choose and preview an offer before confirming.')
-                    result=await asyncio.to_thread(self.store.purchase, view.owner, selected, view.quote_id, request_id, username)
-                    snapshot=result['snapshot']
-                    notice={'purchased':'Purchase saved. Your new items are in the Wardrobe.', 'replayed':'This confirmation was already saved. No second charge.', 'already_owned':'You already own this offer. No coins spent.'}.get(result['status'], 'Your wardrobe is up to date.')
+                    snapshot,notice=await self._purchase(view, username)
                 elif action == 'equip':
-                    if mode != 'wardrobe' or selected not in self.catalog:
-                        raise ValueError('Preview an owned item before equipping.')
-                    snapshot, applied=await asyncio.to_thread(self.store.equip, view.owner, selected, view.snapshot['revision'], username)
-                    notice='Equipped. Your profile and supported card tables use this selection.' if applied else 'That menu was stale. Showing your current saved wardrobe.'
+                    snapshot,notice=await self._equip(view, username)
                 else:
                     snapshot=await asyncio.to_thread(self.store.get, view.owner, username)
-                    if action == 'select':
-                        selected=selection
-                        request_id=uuid.uuid4().hex
-                        valid=selected in snapshot['owned'] and selected in self.catalog if mode == 'wardrobe' else selected in self.offers
-                        if not valid:raise ValueError('That choice is no longer available.')
-                    elif action in ('next','previous'):
-                        page=max(0, page+(1 if action == 'next' else -1));selected=None
-                        request_id=uuid.uuid4().hex
-                    elif action == 'switch':
-                        mode='shop' if mode == 'wardrobe' else 'wardrobe';page=0;selected=None
-                        request_id=uuid.uuid4().hex
-                    elif action == 'refresh':
-                        selected=None
-                        request_id=uuid.uuid4().hex
-                    else:raise ValueError('Unknown wardrobe action.')
-                payload=await self.payload(snapshot, view.owner, view.guild, username, mode, page=page, selected=selected, request_id=request_id, notice=notice)
+                    mode,page,selected,request_id=self._navigation(view, snapshot, action, selection)
+                payload=await self.payload(snapshot, view.guild, mode, page=page, selected=selected, request_id=request_id, notice=notice)
                 await self.deliver(inter, payload)
         except (ValueError,PermissionError) as exc:
             await inter.followup.send(str(exc), ephemeral=True)
@@ -186,7 +205,7 @@ class CosmeticsCog(commands.Cog):
         try:
             username=display_name(inter)
             snapshot=await asyncio.to_thread(self.store.get, inter.user.id, username)
-            await self.deliver(inter, await self.payload(snapshot, inter.user.id, inter.guild_id or 0, username, mode))
+            await self.deliver(inter, await self.payload(snapshot, inter.guild_id or 0, mode))
         except Exception:
             log.exception('Cosmetics menu unavailable')
             await inter.edit_original_response(content='The wardrobe is temporarily unavailable. Your saved choices are unchanged.', view=None, attachments=[])

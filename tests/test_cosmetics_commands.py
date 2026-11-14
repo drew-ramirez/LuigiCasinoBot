@@ -43,7 +43,9 @@ class Offer:
 
 class Store:
     def __init__(self,catalog,offers):
-        self.items,self.offers=catalog,offers
+        from cosmetics.catalog import CosmeticCatalog
+        self.catalog=CosmeticCatalog(catalog,offers)
+        self.items,self.offers=self.catalog.items,self.catalog.offers
         self.data={'user_id':42,'balance':100,'revision':0,'owned':['felt_classic'],'equipped':{'felt':'felt_classic'},
                    'appearance':Appearance(),'animations_enabled':False,
                    'profile':{'name':'Player','balance':100,'games_played':7,'career_stars':3}}
@@ -148,7 +150,7 @@ def test_paid_offer_preview_then_duplicate_confirmation_charges_exactly_once(mon
 def test_free_claim_is_explicit_and_preserves_balance(monkeypatch):
     async def run():
         cog,store,interaction,_=environment(monkeypatch,price=0)
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'shop',selected='starter_style')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
         await button(view,'Confirm free claim').callback(interaction())
         assert store.data['balance']==100 and 'felt_rose' in store.data['owned']
     asyncio.run(run())
@@ -158,7 +160,7 @@ def test_free_claim_is_explicit_and_preserves_balance(monkeypatch):
 def test_wrong_user_or_guild_cannot_purchase_or_read_saved_state(monkeypatch,uid,guild):
     async def run():
         cog,store,interaction,_=environment(monkeypatch)
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'shop',selected='starter_style')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
         initial_gets=store.gets
         inter=interaction(uid,guild)
         await button(view,'Confirm purchase · 25 coins').callback(inter)
@@ -171,7 +173,7 @@ def test_stale_equip_refreshes_without_overwriting_and_reopen_uses_saved_choice(
     async def run():
         cog,store,interaction,_=environment(monkeypatch)
         store.data['owned'].append('felt_rose')
-        stale=CosmeticsView(cog,42,77,store.get(42,'Player'),'wardrobe',selected='felt_rose')
+        stale=CosmeticsView(cog,77,store.get(42,'Player'),'wardrobe',selected='felt_rose')
         store.data['revision']+=1
         inter=interaction();await cog.handle(inter,stale,'equip')
         assert store.data['appearance'].felt=='classic'
@@ -188,7 +190,7 @@ def test_stale_equip_refreshes_without_overwriting_and_reopen_uses_saved_choice(
 def test_changed_price_cannot_use_old_confirmation_quote(monkeypatch):
     async def run():
         cog,store,interaction,_=environment(monkeypatch)
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'shop',selected='starter_style')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
         cog.offers['starter_style']=replace(cog.offers['starter_style'],price=40)
         inter=interaction();await cog.handle(inter,view,'purchase')
         assert store.data['balance']==100 and len(store.requests)==0
@@ -220,7 +222,7 @@ def test_renderer_failure_keeps_saved_purchase_and_text_controls(monkeypatch):
         cog,store,interaction,_=environment(monkeypatch)
         def broken(*a,**k):raise RuntimeError('bad image')
         monkeypatch.setitem(sys.modules,'cosmetics.profile',SimpleNamespace(render_profile=broken))
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'shop',selected='starter_style')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
         inter=interaction();await cog.handle(inter,view,'purchase')
         assert store.data['balance']==75
         payload=inter.edit_original_response.call_args.kwargs
@@ -231,7 +233,7 @@ def test_renderer_failure_keeps_saved_purchase_and_text_controls(monkeypatch):
 def test_upload_failure_retries_same_text_and_permanent_failure_cannot_recharge(monkeypatch):
     async def run():
         cog,store,interaction,_=environment(monkeypatch)
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'shop',selected='starter_style')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
         inter=interaction()
         response=SimpleNamespace(status=400,reason='Bad Request')
         inter.edit_original_response.side_effect=[discord.HTTPException(response,'bad upload'),None]
@@ -251,7 +253,7 @@ def test_upload_failure_retries_same_text_and_permanent_failure_cannot_recharge(
 def test_unowned_item_and_forged_select_are_rejected_without_mutation(monkeypatch):
     async def run():
         cog,store,interaction,_=environment(monkeypatch)
-        view=CosmeticsView(cog,42,77,store.get(42,'Player'),'wardrobe')
+        view=CosmeticsView(cog,77,store.get(42,'Player'),'wardrobe')
         inter=interaction();await cog.handle(inter,view,'select',selection='felt_rose')
         assert inter.followup.send.called and not store.equips
         inter=interaction();inter.data={'values':['not-a-real-id']}

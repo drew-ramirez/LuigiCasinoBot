@@ -101,21 +101,38 @@ def owned_ids(state):
     return set(i for i in owned if isinstance(i, str)) | set(DEFAULTS.values()) if isinstance(owned, list) else set(DEFAULTS.values())
 
 
-def preview_appearance(snapshot, mode, selected, items, offers):
-    look = snapshot['appearance']
-    if not selected:
-        return look
-    if mode == 'wardrobe':
-        item = items.get(selected)
-        if item is None or selected not in snapshot['owned']:
-            raise ValueError('That owned item is no longer available.')
-        chosen = [item]
-    else:
-        offer = offers.get(selected)
-        if offer is None:
-            raise ValueError('That offer is no longer available.')
-        chosen = [items[item_id] for item_id in offer.item_ids]
-    return replace(look, **{item.slot: item.asset_key for item in chosen})
+class CosmeticCatalog:
+    """Catalog-backed selection and preview rules shared by storage and menus."""
+    def __init__(self, items, offers):
+        self.items, self.offers = dict(items), dict(offers)
+
+    def entries(self, snapshot, mode):
+        if mode == 'wardrobe':
+            return [item for item in self.items.values() if item.id in snapshot['owned']]
+        return list(self.offers.values())
+
+    def selectable(self, snapshot, mode, selected):
+        if mode == 'wardrobe':
+            return selected in self.items and selected in snapshot['owned']
+        return selected in self.offers
+
+    def offer_owned(self, snapshot, offer):
+        return all(item in snapshot['owned'] for item in offer.item_ids)
+
+    def preview(self, snapshot, mode, selected):
+        look = snapshot['appearance']
+        if not selected:
+            return look
+        if mode == 'wardrobe':
+            if not self.selectable(snapshot, mode, selected):
+                raise ValueError('That owned item is no longer available.')
+            chosen = [self.items[selected]]
+        else:
+            offer = self.offers.get(selected)
+            if offer is None:
+                raise ValueError('That offer is no longer available.')
+            chosen = [self.items[item_id] for item_id in offer.item_ids]
+        return replace(look, **{item.slot: item.asset_key for item in chosen})
 
 
 def equipped_ids(record,items=CATALOG):

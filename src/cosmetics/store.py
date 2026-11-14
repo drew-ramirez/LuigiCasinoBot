@@ -8,7 +8,7 @@ from copy import deepcopy
 import re
 import time
 
-from cosmetics.catalog import CATALOG, OFFERS, Appearance, appearance, equipped_ids, owned_ids, public_profile, validate_catalog
+from cosmetics.catalog import CATALOG, OFFERS, Appearance, CosmeticCatalog, appearance, equipped_ids, owned_ids, public_profile, validate_catalog
 
 REQUEST=re.compile(r'^[A-Za-z0-9_-]{1,80}$')
 
@@ -21,7 +21,8 @@ class CosmeticsStore:
             ensure_user=ensure_user or EconomyManager.ensure_user
         validate_catalog(items,offers)
         self.collection,self.ensure_user=collection,ensure_user
-        self.items,self.offers=dict(items),dict(offers)
+        self.catalog=CosmeticCatalog(items,offers)
+        self.items,self.offers=self.catalog.items,self.catalog.offers
 
     def _record(self,user_id,username='Unknown'):
         if type(user_id) is not int or user_id<=0:raise ValueError('A valid player is required')
@@ -73,6 +74,30 @@ class CosmeticsStore:
             query['cosmetics.schema_version']=1
         return query
 
+    def _purchase_offer(self, record, state, offer_id, quote_id, request_id):
+        receipt=state['receipts'].get(request_id)
+        if receipt:
+            if receipt.get('offer_id')!=offer_id or receipt.get('quote_id')!=quote_id:
+                raise ValueError('This confirmation already belongs to another purchase')
+            return 'replayed', None
+        offer=self.offers.get(offer_id)
+        if offer is None:raise ValueError('This pack is no longer available')
+        if quote_id!=offer.quote_id:raise ValueError('This pack changed; review its current contents and price')
+        owned=owned_ids(state)
+        if set(offer.item_ids)<=owned:return 'already_owned', None
+        if set(offer.item_ids)&owned:raise ValueError('Some pack items are already owned; no coins were spent')
+        if record.get('balance',0)<offer.price:raise ValueError('Insufficient casino coins')
+        return None, offer
+
+    def _commit_purchase(self, record, state, offer, quote_id, request_id):
+        query=self._query(record,state,offer.price)
+        state['owned']=sorted(set(state['owned'])|set(offer.item_ids))
+        state['revision']+=1
+        state['receipts'][request_id]={'offer_id':offer.id,'quote_id':quote_id,'price':offer.price,
+            'item_ids':list(offer.item_ids),'purchased_at':int(time.time())}
+        return self.collection.find_one_and_update(query,
+            {'$set':{'cosmetics':state},'$inc':{'balance':-offer.price,'cosmetics_spent':offer.price}},return_document=True)
+
     def purchase(self,user_id,offer_id,quote_id,request_id,username='Unknown'):
         if not isinstance(offer_id,str) or not isinstance(quote_id,str):
             raise ValueError('Invalid pack confirmation')
@@ -81,24 +106,9 @@ class CosmeticsStore:
         for _ in range(8):
             record=self._record(user_id,username)
             state=self._state(record,writing=True)
-            receipt=state['receipts'].get(request_id)
-            if receipt:
-                if receipt.get('offer_id')!=offer_id or receipt.get('quote_id')!=quote_id:
-                    raise ValueError('This confirmation already belongs to another purchase')
-                return {'status':'replayed','snapshot':self._snapshot(record)}
-            offer=self.offers.get(offer_id)
-            if offer is None:raise ValueError('This pack is no longer available')
-            if quote_id!=offer.quote_id:raise ValueError('This pack changed; review its current contents and price')
-            owned=owned_ids(state)
-            if set(offer.item_ids)<=owned:return {'status':'already_owned','snapshot':self._snapshot(record)}
-            if set(offer.item_ids)&owned:raise ValueError('Some pack items are already owned; no coins were spent')
-            if record.get('balance',0)<offer.price:raise ValueError('Insufficient casino coins')
-            state['owned']=sorted(set(state['owned'])|set(offer.item_ids))
-            state['revision']+=1
-            state['receipts'][request_id]={'offer_id':offer.id,'quote_id':quote_id,'price':offer.price,
-                'item_ids':list(offer.item_ids),'purchased_at':int(time.time())}
-            updated=self.collection.find_one_and_update(self._query(record,self._state(record),offer.price),
-                {'$set':{'cosmetics':state},'$inc':{'balance':-offer.price,'cosmetics_spent':offer.price}},return_document=True)
+            status,offer=self._purchase_offer(record,state,offer_id,quote_id,request_id)
+            if status:return {'status':status,'snapshot':self._snapshot(record)}
+            updated=self._commit_purchase(record,state,offer,quote_id,request_id)
             if updated is not None:return {'status':'purchased','snapshot':self._snapshot(updated)}
         raise ValueError('Your collection changed; refresh and try again')
 
