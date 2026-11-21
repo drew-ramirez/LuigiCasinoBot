@@ -56,12 +56,6 @@ class Roulette:
             raise ValueError('Round already finished')
         self.placements.clear()
 
-    def choose(self, selection):
-        if self.result is not None or selection not in BET_GROUPS:
-            raise ValueError('Invalid or finished bet')
-        self.selection = selection
-        self.placements = [selection] * len(self.chips)
-
     def spin(self):
         if self.result is None:
             if not self.ready:

@@ -147,15 +147,6 @@ def test_paid_offer_preview_then_duplicate_confirmation_charges_exactly_once(mon
     asyncio.run(run())
 
 
-def test_free_claim_is_explicit_and_preserves_balance(monkeypatch):
-    async def run():
-        cog,store,interaction,_=environment(monkeypatch,price=0)
-        view=CosmeticsView(cog,77,store.get(42,'Player'),'shop',selected='starter_style')
-        await button(view,'Confirm free claim').callback(interaction())
-        assert store.data['balance']==100 and 'felt_rose' in store.data['owned']
-    asyncio.run(run())
-
-
 @pytest.mark.parametrize('uid,guild',[(99,77),(42,88)])
 def test_wrong_user_or_guild_cannot_purchase_or_read_saved_state(monkeypatch,uid,guild):
     async def run():
@@ -299,7 +290,7 @@ def test_actual_catalog_store_and_renderer_claim_then_equip_survive_new_cog():
         assert collection.writes==0
         await cog.handle(inter,current(inter),'select',selection='starter_style')
         assert collection.writes==0 and inter.edit_original_response.call_args.kwargs['attachments']
-        await cog.handle(inter,current(inter),'purchase')
+        await button(current(inter), 'Confirm free claim').callback(inter)
         assert collection.writes==1 and collection.doc['balance']==100
         assert set(current(inter).snapshot['owned'])==set(DEFAULTS.values())|set(OFFERS['starter_style'].item_ids)
         await cog.handle(inter,current(inter),'switch')

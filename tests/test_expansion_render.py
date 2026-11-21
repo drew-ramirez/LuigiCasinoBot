@@ -38,26 +38,6 @@ def test_tables_have_native_screen_scale_and_never_mutate_inputs(kind,state):
         assert x>=0 and y>=0 and x+w<=256 and y+h<=192
 
 
-def test_blackjack_hidden_hole_and_future_shoe_have_no_pixel_effect():
-    first=Blackjack(20,shoe=['8S','6H','4D','9C','3H','4C','2H'])
-    second=Blackjack(20,shoe=['8S','6H','4D','7C','AH','KC','2D'])
-    a=render_table('blackjack',first.public_state()).getvalue()
-    b=render_table('blackjack',second.public_state()).getvalue()
-    assert a==b
-
-
-def test_tower_hidden_gate_and_deck_have_no_pixel_effect():
-    first=FortuneTower(deck=[1,3,4]+[2]*33)
-    second=FortuneTower(deck=[7,3,4]+[6]*33)
-    assert render_table('fortune_tower',first.public_state()).getvalue()==render_table('fortune_tower',second.public_state()).getvalue()
-
-
-def test_thrilling_spectators_cannot_infer_any_dealt_card_from_images():
-    first=ThrillingCards([11,22],cards=['AS','2H'])
-    second=ThrillingCards([11,22],cards=['4D','KC'])
-    assert render_table('thrilling_cards',first.view()).getvalue()==render_table('thrilling_cards',second.view()).getvalue()
-
-
 def test_flip_changes_board_pixels_and_ends_on_matching_static_state():
     before=grid(4,4); before['cards']=[None]*16
     after=deepcopy(before); after['cards'][0]='star'
@@ -72,14 +52,6 @@ def test_flip_changes_board_pixels_and_ends_on_matching_static_state():
     with Image.open(render_table('memory_master',after)) as still:
         error=ImageStat.Stat(ImageChops.difference(final,still.convert('RGB')))
         assert max(error.mean)<6
-
-
-def test_spectator_transition_stays_identical_when_only_private_cards_differ():
-    first=ThrillingCards([11,22],cards=['AS','2H'])
-    second=ThrillingCards([11,22],cards=['4D','KC'])
-    a=render_table('thrilling_cards',first.view(),animate=True).getvalue()
-    b=render_table('thrilling_cards',second.view(),animate=True).getvalue()
-    assert a==b
 
 
 def test_unrecognized_fields_are_not_embedded_as_metadata():

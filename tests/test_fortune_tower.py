@@ -151,14 +151,6 @@ def test_public_payload_never_exposes_unused_gate_or_deck():
     assert private["deck"] != game.deck
 
 
-def test_timeout_accepts_existing_offer_exactly_once():
-    game = scripted(5, 3, 4)
-    before = game.to_dict()
-    assert game.expire()["gross"] == 14
-    assert game.expire()["gross"] == 14
-    assert game.deck == before["deck"]
-
-
 def test_failed_deal_does_not_consume_part_of_row():
     game = scripted(5, 3, 4)
     game.deck = [1]

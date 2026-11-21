@@ -41,6 +41,7 @@ def test_memory_all_difficulties_fit_and_events_preserve_state(stars):
 
 def test_hidden_memory_symbols_do_not_leak_and_matches_leave_board():
     game=MemoryMatch(25)
+    game.board[0]=('star',False,False)
     original=render_board_image(game).getvalue()
     game.board[0]=('mario',False,False)
     assert render_board_image(game).getvalue()==original

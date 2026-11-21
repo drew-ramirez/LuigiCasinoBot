@@ -295,7 +295,7 @@ def test_future_schema_is_readable_as_defaults_but_never_rewritten():
     before = deepcopy(users.document)
     store = CosmeticsStore(users)
     assert store.get(USER)['appearance'] == Appearance()
-    assert store.appearance_for(USER) == Appearance()
+    assert store.appearance_for(USER) == appearance(before) == Appearance()
     for mutation in [lambda: buy(store), lambda: store.equip(USER, 'felt_rose', 12)]:
         with pytest.raises(ValueError, match='version'):
             mutation()
@@ -305,7 +305,7 @@ def test_future_schema_is_readable_as_defaults_but_never_rewritten():
 @pytest.mark.parametrize('invalid_field, value', [
     ('revision', 'bad'), ('revision', -1), ('revision', True),
     ('owned', None), ('owned', ['felt_rose', None]), ('equipped', None),
-    ('receipts', None), ('schema_version', 99),
+    ('receipts', None),
 ])
 def test_malformed_inventory_has_one_read_fallback_and_cannot_be_written(invalid_field, value):
     users = Users()

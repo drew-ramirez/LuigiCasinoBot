@@ -52,18 +52,6 @@ def test_solo_saved_bot_reply_duplicate_and_exactly_one_record(service):
     assert service.store.get(end['id'])==end
 
 
-def test_invitation_has_no_deal_before_opponent_consent(service):
-    first=service.start(1,10,'small',20)
-    assert first['state']['game'] is None
-    with pytest.raises(ValueError):
-        service.change(first['id'],0,10,'accept',guild=1)
-    ready,_=service.change(first['id'],0,20,'accept',guild=1)
-    assert ready['state']['game']['players']==[10,20]
-    with pytest.raises(ValueError):
-        service.change(ready['id'],ready['revision'],20,'play',guild=1,choice='move')
-    assert service.store.get(first['id'])==ready
-
-
 def test_auth_pause_resume_and_concession(service):
     s=service.start(1,10,'small',20)
     for guild,actor in [(2,10),(1,30)]:

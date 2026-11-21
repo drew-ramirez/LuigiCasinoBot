@@ -140,9 +140,6 @@ class MemoryMatch:
             if not matched:
                 self.board[pos] = (sym, False, matched)
 
-    def is_game_over(self) -> bool:
-        return self.remaining_attempts <= 0 or all(m for _, _, m in self.board)
-
     def award_star(self):
         self.stars += 1
         self.session_stars += 1
@@ -153,8 +150,3 @@ class MemoryMatch:
     def is_board_cleared(self) -> bool:
         # True if all cards matched
         return all(m for _, _, m in self.board)
-
-    def next_level(self):
-        # Award star and generate a next board
-        self.award_star()
-        self.generate_board()

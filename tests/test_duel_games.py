@@ -132,6 +132,14 @@ def test_invited_humans_finish_same_game_without_automatic_bot_moves(tmp_path, k
         service.change(saved['id'], saved['revision'], OWNER, 'accept', guild=7)
     saved, applied = service.change(saved['id'], saved['revision'], 54321, 'accept', guild=7)
     assert applied
+    assert service.projection(saved)['players'] == [OWNER, 54321]
+    opener = service.engine(saved).turn
+    other = 54321 if opener == OWNER else OWNER
+    available = service.actions(saved, opener)[0]['id']
+    before = service.store.get(saved['id'])
+    with pytest.raises(ValueError):
+        service.change(saved['id'], saved['revision'], other, 'play', guild=7, choice=available)
+    assert service.store.get(saved['id']) == before
     randomizer = random.Random(99)
     for _ in range(500):
         game = service.engine(saved)

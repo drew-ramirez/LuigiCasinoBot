@@ -1,32 +1,62 @@
 import asyncio
-from itertools import product
+from itertools import permutations
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, MagicMock
 import pytest
 from PIL import Image
-from casinogames.casino_games import Roulette, Slots, BET_GROUPS
+from casinogames.casino_games import Roulette, Slots
 from casinogames.casino_render import render
 
-@pytest.mark.parametrize('selection', list(BET_GROUPS))
-def test_all_roulette_pockets(selection):
+@pytest.mark.parametrize(('selection', 'winners', 'gross'), [
+    *[(name, {pocket}, 60) for pocket, name in enumerate((
+        'red star', 'red mario', 'red luigi', 'red flower', 'red mushroom', 'red cloud',
+        'black star', 'black mario', 'black luigi', 'black flower', 'black mushroom', 'black cloud',
+    ))],
+    ('red', {0, 1, 2, 3, 4, 5}, 10),
+    ('black', {6, 7, 8, 9, 10, 11}, 10),
+    *[(f'split {a}-{b}', {a - 1, b - 1}, 30) for a, b in (
+        (1, 2), (2, 3), (4, 5), (5, 6), (7, 8), (8, 9), (10, 11), (11, 12),
+        (1, 4), (2, 5), (3, 6), (4, 7), (5, 8), (6, 9), (7, 10), (8, 11), (9, 12),
+    )],
+    *[(f'corner {a}/{b}/{c}/{d}', {a - 1, b - 1, c - 1, d - 1}, 15)
+      for a, b, c, d in (
+          (1, 2, 4, 5), (2, 3, 5, 6), (4, 5, 7, 8),
+          (5, 6, 8, 9), (7, 8, 10, 11), (8, 9, 11, 12),
+      )],
+])
+def test_roulette_payout_for_each_bet_type(selection, winners, gross):
     for pocket in range(12):
-        rng = Mock()
-        rng.randrange.return_value = pocket
-        game = Roulette(5, rng)
-        game.choose(selection)
-        expected = 5 * (12 // len(BET_GROUPS[selection])) if pocket in BET_GROUPS[selection] else 0
-        assert game.spin() == {'pocket': pocket, 'payout': expected}
-        game.spin()
-        rng.randrange.assert_called_once_with(12)
+        draws = [pocket, (pocket + 1) % 12]
+        game = Roulette(5, Mock(randrange=Mock(side_effect=draws)))
+        for _ in range(5):
+            game.place(selection)
+        result = {'pocket': pocket, 'payout': gross if pocket in winners else 0}
+        assert game.spin() == result
+        assert game.spin() == result
         with pytest.raises(ValueError):
-            game.choose('red')
+            game.place(selection)
 
-def test_slot_paytable_exhaustively():
-    for reels in product(Slots.SYMBOLS, repeat=3):
-        ordinary = [s for s in reels if s != 'superstar']
-        wild = 3-len(ordinary)
-        expected = 20 if wild == 3 else 4 if wild == 2 else Slots.PAYTABLE[ordinary[0]] if len(set(ordinary)) == 1 else 2 if wild == 1 else 0
-        assert Slots.multiplier(reels) == expected
+
+def test_slot_payouts_follow_the_published_paytable():
+    examples = [
+        (('superstar',) * 3, 20),
+        (('mushroom',) * 3, 10),
+        (('flower',) * 3, 10),
+        (('star',) * 3, 15),
+        (('feather',) * 3, 5),
+        (('egg',) * 3, 5),
+        (('star', 'superstar', 'star'), 15),
+        (('superstar', 'star', 'superstar'), 4),
+        (('superstar', 'feather', 'egg'), 2),
+        (('star', 'star', 'mushroom'), 0),
+    ]
+    for reels, multiplier in examples:
+        for order in sorted(set(permutations(reels))):
+            game = Slots(5, Mock(choice=Mock(side_effect=order)))
+            for index in range(3):
+                result = game.stop(index)
+            assert result == {'payout': 5 * multiplier}, order
+
 
 def test_stop_is_idempotent():
     rng = Mock()

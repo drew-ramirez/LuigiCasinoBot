@@ -41,7 +41,8 @@ def test_wheel_mapping_and_animation_hold_real_result():
         recovered=round(((math.degrees(angle)+900+105)%360)/30)%12
         assert WHEEL_ORDER[recovered]==pocket
     game=Roulette(5,Mock(randrange=Mock(return_value=3)))
-    game.choose('red flower')
+    for _ in game.chips:
+        game.place('red flower')
     game.spin()
     frames,durations,loop=animation_frames(game)
     assert sum(durations)==SPIN_DURATION_SECONDS*1000
@@ -106,7 +107,8 @@ def test_idle_motion_and_loss_do_not_change_outcome_or_credit():
     idle,durations,loop=animation_frames(game)
     assert loop and idle[0].tobytes()!=idle[1].tobytes()
     assert game.result is None and game.placements==[]
-    game.choose('red')
+    for _ in game.chips:
+        game.place('red')
     result=game.spin().copy()
     frames,durations,loop=animation_frames(game)
     assert result['payout']==0 and game.result==result
@@ -116,22 +118,29 @@ def test_idle_motion_and_loss_do_not_change_outcome_or_credit():
 
 @pytest.mark.parametrize('animated', [True, False])
 def test_betting_edits_honor_animation_preference(monkeypatch, animated):
-    import pymongo,dotenv
-    monkeypatch.setattr(pymongo,'MongoClient',MagicMock())
-    monkeypatch.setattr(dotenv,'load_dotenv',lambda:None)
+    import pymongo, dotenv
+    monkeypatch.setattr(pymongo, 'MongoClient', MagicMock())
+    monkeypatch.setattr(dotenv, 'load_dotenv', lambda: None)
     from cogs.casino_machines_cog import MachineView
+
     async def scenario():
-        game=Roulette(25)
-        view=MachineView(SimpleNamespace(),game,SimpleNamespace(id=42),animated)
-        view.payload=AsyncMock(return_value={})
-        inter=SimpleNamespace(response=SimpleNamespace(defer=AsyncMock()),
-            edit_original_response=AsyncMock(),data={'values':['red']})
-        await view.choose(inter)
-        view.payload.assert_awaited_with(animate=animated)
-        await view.undo(inter)
-        view.payload.assert_awaited_with(animate=animated)
-        await view.choose(inter)
-        await view.clear(inter)
-        view.payload.assert_awaited_with(animate=animated)
-        assert game.placements==[] and game.result is None
+        game = Roulette(25)
+        view = MachineView(SimpleNamespace(), game, SimpleNamespace(id=42), animated)
+        interaction = SimpleNamespace(
+            response=SimpleNamespace(defer=AsyncMock()),
+            edit_original_response=AsyncMock(),
+            data={'values': ['red']},
+        )
+        expected_format = 'GIF' if animated else 'PNG'
+        for edit in (view.choose, view.undo, view.choose, view.clear):
+            interaction.edit_original_response.reset_mock()
+            await edit(interaction)
+            interaction.edit_original_response.assert_awaited_once()
+            attachment, = interaction.edit_original_response.call_args.kwargs['attachments']
+            with Image.open(attachment.fp) as image:
+                assert image.format == expected_format
+                assert (image.n_frames > 1) is animated
+            attachment.close()
+        assert game.placements == [] and game.result is None
+
     asyncio.run(scenario())

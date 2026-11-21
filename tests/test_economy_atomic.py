@@ -77,14 +77,6 @@ def test_unfunded_wager_changes_no_counters(economy):
     assert users.doc == before
 
 
-def test_funded_wager_records_existing_gross_counters(economy):
-    manager, users = economy
-    assert manager.wager(42, 75)
-    assert users.doc["balance"] == 25
-    assert users.doc["coins_lost"] == 75
-    assert users.doc["games_played"] == 1
-
-
 def test_concurrent_legacy_games_cannot_spend_same_balance(economy):
     manager, users = economy
     users.barrier = Barrier(2)

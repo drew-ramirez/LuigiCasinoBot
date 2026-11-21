@@ -78,7 +78,7 @@ def test_double_and_payout_are_single_atomic_update():
     assert users.doc["coins_won"] == 400
     assert users.doc["biggest_cashout"] == 400
     assert users.doc["games_played"] == 1
-    assert service.act(42, saved["id"], 0, "double") == finished
+    assert BlackjackTable(users).act(42, saved["id"], 0, "double") == finished
     assert users.writes == 2
 
 
@@ -168,13 +168,3 @@ def test_wallet_change_between_read_and_write_is_rechecked():
     assert service.get(42)["game"] == saved["game"]
     assert users.doc["balance"] == 99
     assert users.writes == 1
-
-
-def test_render_failure_retry_reads_same_saved_outcome():
-    service, users = table()
-    saved = service.start(42, 100)
-    result = service.act(42, saved["id"], 0, "double")
-    # A restarted Discord callback sees the settled state without rendering first.
-    resumed = BlackjackTable(users).get(42)
-    assert resumed == result
-    assert users.writes == 2

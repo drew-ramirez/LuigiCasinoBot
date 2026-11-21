@@ -365,13 +365,17 @@ def test_known_cards_only_lists_previously_shown_positions_without_mutation(tmp_
         kind = 'memory_master'
         try:
             game = MemoryMaster(seed=25)
+            game.hints = [0, 5]
+            game.board[0], game.board[5], game.board[15] = 'star', 'flower', 'cloud'
+            game.known = {'5': 'flower', '0': 'star'}
             snap = saved(store, kind, game)
             await cog.publish(interaction(), snap, False)
             inter = interaction()
-            await current_view(cog, kind).run(inter, 'notes')
+            notes = next(child for child in current_view(cog, kind).children
+                         if getattr(child, 'label', None) == 'Known cards')
+            await notes.callback(inter)
             content = inter.response.send_message.call_args.args[0]
-            assert content.count(':') == len(game.hints)
-            assert 'assisted play' in content
+            assert content.splitlines()[-1] == 'A1: star, B2: flower'
             assert inter.response.send_message.call_args.kwargs['ephemeral'] is True
             assert store.get(snap['id']) == snap
         finally:

@@ -142,10 +142,6 @@ class FortuneTower:
             self.last_event = {"kind": "bank", "offer": self.offer}
         return deepcopy(self.result)
 
-    def expire(self):
-        """The published solo timeout policy accepts the existing offer."""
-        return self.bank()
-
     def public_state(self):
         """Only safe data for public text/images; never includes future cards."""
         return {

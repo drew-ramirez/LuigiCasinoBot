@@ -61,24 +61,13 @@ def test_hide_unmatched(game):
     assert game.board[1][1] is False
 
 
-def test_award_star_and_next_level(game):
+def test_award_star_restores_attempts_and_resets_streak(game):
     game.remaining_attempts = 1
+    game.match_streak = 2
     game.award_star()
     assert game.stars == 1
-    assert game.remaining_attempts == game.base_attempts * 2
-    previous_size = len(game.board)
-    game.next_level()
-    assert game.stars == 2
-    assert len(game.board) >= previous_size
-    assert game.revealed == []
-
-
-def test_is_game_over(game):
-    game.remaining_attempts = 0
-    assert game.is_game_over() is True
-    game.remaining_attempts = 1
-    game.board = [("mario", False, True)] * len(game.board)
-    assert game.is_game_over() is True
+    assert game.remaining_attempts == 6
+    assert game.match_streak == 0
 
 
 def test_streak_bonus_grants_attempt(game):

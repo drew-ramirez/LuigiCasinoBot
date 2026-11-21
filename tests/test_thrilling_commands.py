@@ -120,8 +120,13 @@ def test_private_render_authentication_and_public_card_mask(tmp_path, monkeypatc
             assert 'Only a dealt player' in content(other)
             assert len(calls) == 2
             view = ThrillingView(cog, snap, viewer=2)
-            assert not await view.interaction_check(inter(1))
-            assert await view.interaction_check(inter(2))
+            refresh = next(child for child in view.children if child.label == 'Refresh my table')
+            wrong_viewer = inter(1)
+            await refresh.callback(wrong_viewer)
+            assert wrong_viewer.response.send_message.call_args.kwargs['ephemeral'] is True
+            wrong_viewer.followup.send.assert_not_awaited()
+            assert len(calls) == 2
+            assert store.get(snap['id']) == snap
         finally:
             cog.cog_unload()
     asyncio.run(run())
@@ -301,20 +306,6 @@ def test_filename_follows_rendered_bytes_even_with_animation_enabled(tmp_path, m
         monkeypatch.setattr(renderer, 'render_table', lambda *a, **k: BytesIO(magic + b'image'))
         payload = await cog._payload(playing(cog, store))
         assert payload['attachments'][0].filename == filename
-        cog.cog_unload()
-    asyncio.run(run())
-
-
-def test_private_dispatch_defensively_rejects_another_user(tmp_path, monkeypatch):
-    async def run():
-        cog, store, inter, _, _, _ = environment(tmp_path, monkeypatch)
-        snap = playing(cog, store)
-        view = ThrillingView(cog, snap, viewer=1)
-        other = inter(2)
-        await view.dispatch(other, 'rules')
-        other.response.send_message.assert_awaited_once()
-        other.response.defer.assert_not_awaited()
-        assert store.get(snap['id']) == snap
         cog.cog_unload()
     asyncio.run(run())
 

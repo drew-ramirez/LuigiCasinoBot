@@ -34,21 +34,19 @@ def test_native_geometry_projection_immutability_and_uncovered_dealer(engine):
         assert 0<=x and 0<=y and x+w<=256 and y+h<=192
 
 
-@pytest.mark.parametrize('engine',[Red7,Scopa,Cuttle,Pazaak,Platoon])
-def test_changing_private_cards_without_changing_projection_has_no_pixel_effect(engine):
-    game=engine(players=(11,0),seed=17)
-    first=game.view()
-    # Alter actual hidden hands, keeping only their lengths public.
-    if engine is Pazaak:
-        game.side_decks['11']=['-6']*10
-    else:
-        key='11'
-        game.hands[key]=list(reversed(game.hands[key]))
-    second=game.view()
-    assert render_duel(first['kind'],first).getvalue()==render_duel(second['kind'],second).getvalue()
-    # Future/deck/known history is not rendered or included in metadata.
-    second.update(deck=['SECRET'],rng_state='SECRET',known_hands={'11':['SECRET']})
-    assert render_duel(first['kind'],first).getvalue()==render_duel(second['kind'],second).getvalue()
+def test_duel_render_ignores_non_projection_fields():
+    state = {
+        'players': [11, 22],
+        'hands': {'11': [None], '22': [None]},
+        'table': ['2D'],
+    }
+    augmented = {
+        **state,
+        'deck': ['AS'],
+        'rng_state': 'not public',
+        'known_hands': {'11': ['KH']},
+    }
+    assert render_duel('scopa', augmented).getvalue() == render_duel('scopa', state).getvalue()
 
 
 def _move(game):

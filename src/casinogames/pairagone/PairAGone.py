@@ -58,12 +58,6 @@ class PairAGone:
         rb, cb = self.pos_to_rc(b)
         return abs(ra - rb) <= 1 and abs(ca - cb) <= 1
 
-    def check_match(self, a: int, b: int):
-        if not self.is_match(a, b):
-            return False
-        self.remove_and_fall([a, b])
-        return True
-
     def remove_and_fall(self, positions: list[int]):
         for pos in positions:
             if 0 <= pos < len(self.board):
